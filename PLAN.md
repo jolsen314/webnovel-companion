@@ -40,11 +40,12 @@ To re-prioritize, move rows and update the `NEXT` marker. Don't silently reorder
 
 ## Current focus
 
-> **NEXT:** [WP-03 health](#wp-03--libhealthts-pure-test-first) — the remaining early pure function.
+> **NEXT:** owner's call — the early pure engines are done. Candidates: WP-05 (feed parse/discovery, well-specified
+> by the spike) or the WP-04 database conversation (still ⏸ pending DB-skills).
 
-WP-00 (harness), WP-GH/WP-CI (repo + CI), and WP-01 (diff) are done. **WP-02 (sm2) was deprioritized to M3**
-(2026-07-16) — the owner doesn't lean on the vocab layer, so SM-2 now lives with the vocabulary tier where it's
-actually consumed (WP-24). That leaves **WP-03 (health)** as the last of the early pure, test-first engines.
+WP-00 (harness), WP-GH/WP-CI (repo + CI), **WP-01 (diff)** and **WP-03 (health)** are done — both pure, test-first,
+26 unit tests, CI-enforced. **WP-02 (sm2) is deprioritized to M3** (owner doesn't lean on the vocab layer). The
+tested-core phase of M0 is complete; next is the app spine (feeds/DB/Next/push/UI) — pick up at a check-in.
 
 ---
 
@@ -73,7 +74,7 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-GH | Git + private GitHub repo, first push | M0 | `DONE` | — |
 | WP-CI | GitHub Actions: test + typecheck on push/PR | M0 | `DONE` | WP-GH |
 | ⭐ WP-01 | `lib/feeds/diff.ts` (pure, test-first) | M0 | `DONE` | WP-00 |
-| ⭐ WP-03 | `lib/health.ts` (pure, test-first) | M0 | `WIP` | WP-00 |
+| ⭐ WP-03 | `lib/health.ts` (pure, test-first) | M0 | `DONE` | WP-00 |
 | ⏸ WP-04 | Prisma schema + migration + db client | M0 | `TODO` | WP-00 |
 | WP-05 | Feed parse + auto-discovery (`lib/feeds/{parse,discover}.ts`) | M0 | `TODO` | WP-00 |
 | WP-06 | Next.js + Tailwind + PWA shell (manifest + service worker) | M0 | `TODO` | WP-00 |
@@ -301,6 +302,10 @@ real series needs it.
 
 ## Changelog
 
+- **2026-07-16** — **WP-03 (health) done.** Pure source-health state machine test-first: HEALTHY→DEGRADED→LIKELY_DOWN
+  with a weighted-score hysteresis accumulator (strong DNS/PARKED/TLS=3 >> HTTP_4XX=2 > soft HTTP_5XX/TIMEOUT=1),
+  thresholds DEGRADED_AT=2 / LIKELY_DOWN_AT=4 exported as tunable constants, immediate recovery on success. 9 tests
+  (26 total), CI green. Both early pure engines (diff, health) now complete; M0's tested-core phase done.
 - **2026-07-16** — **WP-02 (sm2) deprioritized to M3.** Owner doesn't lean on the vocab layer, so SM-2 moved from
   the M0 do-first pure functions down to the vocabulary tier (next to WP-24, which consumes it); dropped its ⭐.
   Removed the in-progress sm2 test. `NEXT` is now **WP-03 (health)**, the last early pure engine.
