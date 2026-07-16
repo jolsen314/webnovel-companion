@@ -73,7 +73,7 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-GH | Git + private GitHub repo, first push | M0 | `DONE` | — |
 | WP-CI | GitHub Actions: test + typecheck on push/PR | M0 | `DONE` | WP-GH |
 | ⭐ WP-01 | `lib/feeds/diff.ts` (pure, test-first) | M0 | `DONE` | WP-00 |
-| ⭐ WP-03 | `lib/health.ts` (pure, test-first) | M0 | `NEXT` | WP-00 |
+| ⭐ WP-03 | `lib/health.ts` (pure, test-first) | M0 | `WIP` | WP-00 |
 | ⏸ WP-04 | Prisma schema + migration + db client | M0 | `TODO` | WP-00 |
 | WP-05 | Feed parse + auto-discovery (`lib/feeds/{parse,discover}.ts`) | M0 | `TODO` | WP-00 |
 | WP-06 | Next.js + Tailwind + PWA shell (manifest + service worker) | M0 | `TODO` | WP-00 |
