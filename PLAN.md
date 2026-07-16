@@ -40,14 +40,11 @@ To re-prioritize, move rows and update the `NEXT` marker. Don't silently reorder
 
 ## Current focus
 
-> **NEXT:** [WP-00 Bootstrap](#wp-00--repo-bootstrap-test-harness) → then the three pure functions in parallel:
-> [WP-01 diff](#wp-01--libfeedsdiffts-pure-test-first), [WP-02 sm2](#wp-02--libsrssm2ts-pure-test-first),
-> [WP-03 health](#wp-03--libhealthts-pure-test-first).
+> **NEXT:** [WP-03 health](#wp-03--libhealthts-pure-test-first) — the remaining early pure function.
 
-The three pure, test-first functions are the queued immediate action. They need a minimal Vitest harness to run,
-so **WP-00 is a thin bootstrap** (package.json + tsconfig + vitest config + folder skeleton — *no* Next.js, no
-Prisma, no UI). Once WP-00 is green, WP-01/02/03 are independent and can be done in any order or by separate
-sessions.
+WP-00 (harness), WP-GH/WP-CI (repo + CI), and WP-01 (diff) are done. **WP-02 (sm2) was deprioritized to M3**
+(2026-07-16) — the owner doesn't lean on the vocab layer, so SM-2 now lives with the vocabulary tier where it's
+actually consumed (WP-24). That leaves **WP-03 (health)** as the last of the early pure, test-first engines.
 
 ---
 
@@ -55,8 +52,8 @@ sessions.
 
 Mirrors the README [Roadmap](README.md#roadmap) tiers, expressed as shippable milestones.
 
-- **M0 — Tested core + MVP** (Tier 0): the pure engines (diff/sm2/health) under test, then library + feed polling +
-  Web Push + manual progress, deployed as an installable PWA.
+- **M0 — Tested core + MVP** (Tier 0): the pure engines (diff/health) under test, then library + feed polling +
+  Web Push + manual progress, deployed as an installable PWA. (SM-2 moved to M3 — see below.)
 - **M1 — Sources & shelves** (Tier 1): feed auto-discovery + page-watch fallback, completed shelf, dedup/search,
   paid→free tracking, source-down detection + non-destructive re-pointing, plan-to-read completion watch.
 - **M2 — Progress automation** (Tier 2): MV3 browser extension for current-chapter capture.
@@ -76,7 +73,6 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-GH | Git + private GitHub repo, first push | M0 | `DONE` | — |
 | WP-CI | GitHub Actions: test + typecheck on push/PR | M0 | `DONE` | WP-GH |
 | ⭐ WP-01 | `lib/feeds/diff.ts` (pure, test-first) | M0 | `DONE` | WP-00 |
-| ⭐ WP-02 | `lib/srs/sm2.ts` (pure, test-first) | M0 | `NEXT` | WP-00 |
 | ⭐ WP-03 | `lib/health.ts` (pure, test-first) | M0 | `NEXT` | WP-00 |
 | ⏸ WP-04 | Prisma schema + migration + db client | M0 | `TODO` | WP-00 |
 | WP-05 | Feed parse + auto-discovery (`lib/feeds/{parse,discover}.ts`) | M0 | `TODO` | WP-00 |
@@ -98,6 +94,7 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-21 | Plan-to-read completion watch (wire WP-13 + notify) | M1 | `TODO` | WP-13, WP-07 |
 | WP-22 | MV3 browser extension (progress capture + "track this") | M2 | `TODO` | WP-08 |
 | WP-23 | Chinese mining: `tokenize/zh.ts` + `dict/cedict.ts` | M3 | `TODO` | WP-04 |
+| WP-02 | `lib/srs/sm2.ts` (pure, test-first) — SM-2 scheduler | M3 | `TODO` | WP-00 |
 | WP-24 | Vocab capture + SM-2 review UI (wire WP-02) | M3 | `TODO` | WP-02, WP-23 |
 | WP-25 | Korean sidecar (`services/korean-nlp`) + `tokenize/ko.ts` | M3 | `TODO` | WP-23, WP-24 |
 | WP-26 | Extras: TTS, offline caching, Anki export, multi-user | M4 | `TODO` | — |
@@ -174,7 +171,10 @@ from `next`, `prisma`, `fs`, network); exported types are reused by later WPs.
 
 ---
 
-### WP-02 — `lib/srs/sm2.ts` (pure, test-first)
+### WP-02 — `lib/srs/sm2.ts` (pure, test-first) — ⬇ deprioritized to M3
+
+> **Deprioritized 2026-07-16** to the vocabulary tier (M3), consumed by WP-24. Spec kept below for when we build it;
+> not part of the near-term MVP queue. Decided design: **classic SM-2** (ease updates on every review, floored at 1.3).
 
 **Goal:** the SM-2 spaced-repetition scheduler. Given a card's current SRS state and a review grade, return the next
 state (interval, ease, repetitions, due date).
@@ -301,6 +301,9 @@ real series needs it.
 
 ## Changelog
 
+- **2026-07-16** — **WP-02 (sm2) deprioritized to M3.** Owner doesn't lean on the vocab layer, so SM-2 moved from
+  the M0 do-first pure functions down to the vocabulary tier (next to WP-24, which consumes it); dropped its ⭐.
+  Removed the in-progress sm2 test. `NEXT` is now **WP-03 (health)**, the last early pure engine.
 - **2026-07-16** — **Folded spike into the plan.** Added the "Source-fetching strategy" section (fetch-strategy
   ladder + density-fallback triggers) and per-WP sub-tasks for WP-05/17/20; added **WP-RC** (dense-feed
   miss-detection + TOC reconcile fallback). Design answer to "when does a too-dense multi-novel feed fall back to a
