@@ -33,6 +33,20 @@ describe('diffChapters', () => {
     expect(result.new).toEqual([]);
   });
 
+  test('guards guid/url mixing: a stored-with-guid chapter matches a later guidless fetch of the same url', () => {
+    const stored = [{ guid: 'g1', url: 'https://site/ch/1' }];
+    const guidless = item({ url: 'https://site/ch/1' });
+
+    expect(diffChapters(stored, [guidless]).new).toEqual([]);
+  });
+
+  test('guards guid/url mixing: a stored-by-url chapter matches a later fetch that adds a guid', () => {
+    const stored = [{ url: 'https://site/ch/1' }];
+    const withGuid = item({ guid: 'g1', url: 'https://site/ch/1' });
+
+    expect(diffChapters(stored, [withGuid]).new).toEqual([]);
+  });
+
   test('canonicalizes URLs: trailing-slash and fragment variants match a stored chapter', () => {
     const stored = [{ url: 'https://site/ch/1' }];
     const slash = item({ url: 'https://site/ch/1/' });
@@ -40,6 +54,20 @@ describe('diffChapters', () => {
 
     expect(diffChapters(stored, [slash]).new).toEqual([]);
     expect(diffChapters(stored, [fragment]).new).toEqual([]);
+  });
+
+  test('canonicalizes URLs: ignores tracking params and query-string order', () => {
+    const stored = [{ url: 'https://site/ch/1?a=1&b=2' }];
+    const noisy = item({ url: 'https://site/ch/1?b=2&utm_source=rss&a=1&fbclid=xyz' });
+
+    expect(diffChapters(stored, [noisy]).new).toEqual([]);
+  });
+
+  test('preserves meaningful query params: different ?chapter= values stay distinct chapters', () => {
+    const stored = [{ url: 'https://site/read?chapter=1' }];
+    const other = item({ url: 'https://site/read?chapter=2' });
+
+    expect(diffChapters(stored, [other]).new).toEqual([other]);
   });
 
   test('no dupes within a batch: a chapter repeated in one feed appears once', () => {
@@ -78,5 +106,45 @@ describe('diffChapters', () => {
     const noNumber = item({ url: 'https://site/ch/extra', number: null });
 
     expect(diffChapters(stored, [decimal, noNumber]).new).toEqual([decimal, noNumber]);
+  });
+
+  test('empty fetch yields nothing new', () => {
+    expect(diffChapters([{ url: 'https://site/ch/1' }], []).new).toEqual([]);
+  });
+
+  test('tolerates unparseable URLs via a string fallback', () => {
+    const stored = [{ url: 'not a real url' }];
+    const same = item({ url: 'not a real url' });
+    const different = item({ url: 'also not a url' });
+
+    expect(diffChapters(stored, [same]).new).toEqual([]);
+    expect(diffChapters(stored, [different]).new).toEqual([different]);
+  });
+
+  test('contract: new chapters are returned in fetched order', () => {
+    const c3 = item({ url: 'https://site/ch/3' });
+    const c1 = item({ url: 'https://site/ch/1' });
+    const c2 = item({ url: 'https://site/ch/2' });
+
+    expect(diffChapters([], [c3, c1, c2]).new).toEqual([c3, c1, c2]);
+  });
+
+  // Split chapters: translators sometimes break one chapter into released parts.
+  // Conventions vary (decimals like 12.1/12.2, or a shared title with a
+  // parenthetical part number), so identity must key on url/guid — never on
+  // chapter number or title — so distinct parts stay distinct.
+  test('split chapters (decimals): each part is a distinct new chapter, and a stored part is not re-reported', () => {
+    const p1 = item({ url: 'https://site/ch/12-1', number: 12.1, title: 'Chapter 12.1' });
+    const p2 = item({ url: 'https://site/ch/12-2', number: 12.2, title: 'Chapter 12.2' });
+
+    expect(diffChapters([], [p1, p2]).new).toEqual([p1, p2]);
+    expect(diffChapters([{ url: 'https://site/ch/12-1' }], [p1, p2]).new).toEqual([p2]);
+  });
+
+  test('split chapters (parenthetical parts): same title, different urls stay distinct', () => {
+    const a = item({ url: 'https://site/ch/12-part-1', title: 'Chapter 12 (Part 1)' });
+    const b = item({ url: 'https://site/ch/12-part-2', title: 'Chapter 12 (Part 2)' });
+
+    expect(diffChapters([], [a, b]).new).toEqual([a, b]);
   });
 });

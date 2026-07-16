@@ -2,18 +2,21 @@
  * New-chapter diffing: given the chapters already stored for a series and the
  * items just fetched from its feed (or a page-watch), return the genuinely new ones.
  *
- * Pure and order-independent. Identity is a stable key (guid, else canonical url),
- * never title or position — so reordered and edited feeds don't produce false positives.
+ * Pure and order-independent. Identity is matched on guid AND canonical url
+ * independently (either one matching = already seen), never title or position —
+ * so reordered/edited feeds and guid-presence changes don't produce false positives.
  */
 
 export interface FeedItem {
-  /** Stable feed id, if the feed provides one. Preferred identity. */
+  /** Stable feed id (RSS <guid> / Atom <id>), if the source provides one. */
   guid?: string;
-  /** Chapter URL. Identity fallback when no guid. */
+  /** Chapter URL. Also an identity key (canonicalized). */
   url: string;
   title: string;
   number?: number | null;
   publishedAt?: Date | null;
+  // Extension point: paid→free tracking (README roadmap) will add an access
+  // state here (e.g. `access?: 'FREE' | 'LOCKED'`). Add the field; don't reshape.
 }
 
 /** The minimum needed to recognize an already-seen chapter. */
@@ -23,37 +26,65 @@ export interface KnownChapter {
 }
 
 export interface DiffResult {
+  /** Chapters present in the fetch but not yet stored, in fetched order. */
   new: FeedItem[];
+  // Extension point: keep this an object so future diff dimensions attach as new
+  // fields without breaking callers — e.g. `becameFree` (locked→free transitions
+  // on already-seen chapters) and `disappeared` (for source-health / removal).
+}
+
+/** Query keys that never identify a chapter — analytics/referral noise. */
+const TRACKING_PARAM_PREFIXES = ['utm_'];
+const TRACKING_PARAMS = new Set(['gclid', 'fbclid', 'mc_cid', 'mc_eid', 'igshid', 'yclid', 'ref_src']);
+
+function isTrackingParam(key: string): boolean {
+  return TRACKING_PARAMS.has(key) || TRACKING_PARAM_PREFIXES.some((p) => key.startsWith(p));
 }
 
 /**
- * Canonicalize a URL for identity comparison: drop the fragment and any
- * trailing slash so cosmetic variants of the same chapter link collapse to one
- * key. Falls back to a trimmed raw string if the URL doesn't parse.
+ * Canonicalize a URL for identity comparison so cosmetic variants of the same
+ * chapter link collapse to one key. Drops the fragment and any trailing slash,
+ * strips known tracking params (utm_*, fbclid, …), and sorts the remaining
+ * (meaningful) query params so ordering doesn't matter. The hostname is
+ * lowercased and default ports removed for free by the URL parser; the path is
+ * left case-sensitive. Falls back to a trimmed raw string if the URL won't parse.
  */
 function canonicalUrl(raw: string): string {
   try {
     const u = new URL(raw);
     u.hash = '';
     u.pathname = u.pathname.replace(/\/+$/, '');
+    const kept = [...u.searchParams.entries()]
+      .filter(([key]) => !isTrackingParam(key))
+      .sort((a, b) => `${a[0]}=${a[1]}`.localeCompare(`${b[0]}=${b[1]}`));
+    u.search = '';
+    for (const [key, value] of kept) u.searchParams.append(key, value);
     return u.toString();
   } catch {
     return raw.trim().replace(/\/+$/, '');
   }
 }
 
-/** Stable identity for a chapter: its guid if present, else its canonical URL. */
-function identity(chapter: KnownChapter | FeedItem): string {
-  return chapter.guid ?? canonicalUrl(chapter.url);
-}
-
 export function diffChapters(stored: KnownChapter[], fetched: FeedItem[]): DiffResult {
-  const seen = new Set(stored.map(identity));
+  // Track guids and canonical URLs separately, and treat a chapter as seen if
+  // EITHER matches. This keeps identity stable when a feed starts/stops emitting
+  // guids, or when a feed source (guid) and a page-watch source (url-only) mix
+  // for one series — either recorded key still recognizes the chapter.
+  const seenGuids = new Set<string>();
+  const seenUrls = new Set<string>();
+  const remember = (c: KnownChapter | FeedItem): void => {
+    if (c.guid !== undefined) seenGuids.add(c.guid);
+    seenUrls.add(canonicalUrl(c.url));
+  };
+  const isSeen = (c: FeedItem): boolean =>
+    (c.guid !== undefined && seenGuids.has(c.guid)) || seenUrls.has(canonicalUrl(c.url));
+
+  for (const c of stored) remember(c);
+
   const fresh: FeedItem[] = [];
   for (const item of fetched) {
-    const key = identity(item);
-    if (seen.has(key)) continue; // already stored, or a duplicate earlier in this batch
-    seen.add(key);
+    if (isSeen(item)) continue; // already stored, or a duplicate earlier in this batch
+    remember(item);
     fresh.push(item);
   }
   return { new: fresh };
