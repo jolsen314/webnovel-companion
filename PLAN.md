@@ -74,7 +74,7 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-12 | Fold spec's unique content into README, delete spec | M0 | `DONE` | — |
 | ⭐ WP-00 | Repo bootstrap + test harness | M0 | `DONE` | — |
 | WP-GH | Git + private GitHub repo, first push | M0 | `DONE` | — |
-| WP-CI | GitHub Actions: test + typecheck on push/PR | M0 | `TODO` | WP-GH |
+| WP-CI | GitHub Actions: test + typecheck on push/PR | M0 | `DONE` | WP-GH |
 | ⭐ WP-01 | `lib/feeds/diff.ts` (pure, test-first) | M0 | `DONE` | WP-00 |
 | ⭐ WP-02 | `lib/srs/sm2.ts` (pure, test-first) | M0 | `NEXT` | WP-00 |
 | ⭐ WP-03 | `lib/health.ts` (pure, test-first) | M0 | `NEXT` | WP-00 |
@@ -234,6 +234,9 @@ shape matches the `Source` health fields in the README (`health`, `consecutiveFa
 
 ## Changelog
 
+- **2026-07-16** — **WP-CI done.** GitHub Actions workflow (`.github/workflows/ci.yml`): `npm ci` → typecheck → test
+  on push-to-main and all PRs, Node 22 + npm cache, in-progress-cancel concurrency. Verified green on the runner
+  (run `29530608868`, all steps success).
 - **2026-07-16** — **WP-GH done.** Set global git identity (GitHub noreply), initial commit `1244258` (green suite,
   no secrets), created and pushed the **private** repo `jolsen314/webnovel-companion`. Caught and removed a stray
   `tests/unit/srs/sm2.test.ts` (leftover from the interrupted WP-02 attempt — imported a not-yet-written module and
