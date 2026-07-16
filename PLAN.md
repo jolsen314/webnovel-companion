@@ -218,6 +218,33 @@ shape matches the `Source` health fields in the README (`health`, `consecutiveFa
 
 ---
 
+## Spike findings — real feed fetching (2026-07-16)
+
+Throwaway spikes (`scratchpad/feed-spike.mjs`, `feed-spike2.mjs`) probed 5 real series across concat-title-source,
+dense-feed-source, cf-wordpress-source, loadmore-source, render-clearable-source. Verdicts:
+
+- **guid varies, exactly as feared → our guid-AND-url matching is validated.** concat-title-source: guid = chapter permalink
+  (`isPermaLink=true`). WordPress (dense-feed-source, chrysanthemum): guid = opaque `?p=ID` (`isPermaLink=false`) ≠ link.
+- **Chapter links validated; utm-stripping validated.** dense-feed-source links carry `?utm_source=rss&utm_medium=…`.
+  Links also arrive **HTML-entity-encoded** (`&#038;`) → WP-05 must use a real XML parser (rss-parser) to decode
+  before canonicalizing, not regex.
+- **Split-chapter convention confirmed in the wild:** `"…Part 2 Chapter 407: Night and Light (3)"`.
+- **Conditional GET is not universal.** WordPress → clean `304`. concat-title-source (custom) → **no ETag/Last-Modified**. The
+  poller must treat conditional GET as an optimization, degrading to full refetch + diff.
+- **Feed granularity is the big finding:** discovered/available feeds are often **site-wide, multi-novel**
+  (chrysanthemum `/feed/` = ~20 novels; dense-feed-source = 4). Isolate a series by per-novel **`<category>`** (primary)
+  or **URL-path prefix** (backup). BUT shared feeds are **capped (10–30 items)**, so a slow series can fall off the
+  window → **prefer a per-series/category feed; filter the shared feed only when no per-series feed is reachable.**
+- **Locked/paid chapters are a page-watch/DOM concern.** loadmore-source marks them structurally
+  (`.chapter-status.premium`, gold) and advertises **no feed** → page-watch mandatory; free frontier = highest
+  chapter without the lock marker. Confirms README's per-site adapter model. → affects **WP-17, WP-20**.
+- **Cloudflare is a first-class obstacle.** render-clearable-source page + chrysanthemum series page hard-403'd our bot,
+  though `/feed/` sometimes still served. WP-05/WP-17 need realistic browser headers, a feed-even-when-page-blocked
+  path, and headless-browser (Playwright) escalation for stubborn sites.
+
+**Design response (proposed):** `Source` gains a **series matcher** (`WHOLE_FEED | CATEGORY | PATH_PREFIX` + value),
+set at add-time; filtering runs upstream of the (still pure) `diffChapters`. See the README data-model proposal.
+
 ## Backlog / open questions
 
 - **Auth & multi-device** — README scopes to single-user, but Web Push targets multiple subscribed devices per user.
