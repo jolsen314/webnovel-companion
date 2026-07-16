@@ -94,6 +94,7 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-18 | Completed shelf + backfill + "Move to Completed?" | M1 | `TODO` | WP-10 |
 | WP-19 | Non-destructive re-pointing + "find new source" helper | M1 | `TODO` | WP-16, WP-18 |
 | WP-20 | Paid→free frontier tracking + "now free" notification | M1 | `TODO` | WP-07, WP-17 |
+| WP-RC | Dense-feed miss-detection + TOC reconcile fallback | M1 | `TODO` | WP-05, WP-07, WP-17 |
 | WP-21 | Plan-to-read completion watch (wire WP-13 + notify) | M1 | `TODO` | WP-13, WP-07 |
 | WP-22 | MV3 browser extension (progress capture + "track this") | M2 | `TODO` | WP-08 |
 | WP-23 | Chinese mining: `tokenize/zh.ts` + `dict/cedict.ts` | M3 | `TODO` | WP-04 |
@@ -245,6 +246,45 @@ dense-feed-source, cf-wordpress-source, loadmore-source, render-clearable-source
 **Design response (proposed):** `Source` gains a **series matcher** (`WHOLE_FEED | CATEGORY | PATH_PREFIX` + value),
 set at add-time; filtering runs upstream of the (still pure) `diffChapters`. See the README data-model proposal.
 
+## Source-fetching strategy (folded from the spike)
+
+**Fetch-strategy ladder — per Source, pick the highest reachable rung at add-time:**
+1. **Per-series / category feed** — series-scoped, immune to feed density. WP category feed
+   (`/category/<slug>/feed/`) or a native per-series RSS (concat-title-source-style). **Preferred.**
+2. **Site feed + matcher** (`matchType` CATEGORY/PATH_PREFIX) — cheap, but the feed window is *capped* (10–30
+   items), so a slow series on a busy multi-novel site can be missed between polls. Only safe when the series
+   updates often relative to site volume.
+3. **Page-watch the series TOC** — series-scoped source of truth: complete chapter list + the only place lock
+   state lives. Same machinery as feedless/locked-site handling, reused.
+
+**Density fallback = rung 3 (page-watch).** When we drop to it:
+- **Add-time (primary):** multi-novel site feed + no reachable per-series feed → prefer rung 3 (or rung 2 *with*
+  reconcile) from the start.
+- **Runtime miss-detection (safety net):** trigger an immediate TOC scan on a **chapter-number gap** (stored ch50
+  → next feed sighting ch55) or **feed-window saturation** (feed's oldest item advances past the series' expected
+  cadence while the series never appears).
+- **Periodic insurance:** at-risk Sources get a full TOC reconcile on a slow cadence (~daily) regardless.
+
+Trade-off: feed = cheap/fast but lossy on dense sites; TOC = complete + carries lock state but heavier and more
+Cloudflare-exposed. A hybrid (feed as fast trigger, TOC as periodic source of truth) is possible — defer until a
+real series needs it.
+
+**Per-WP sub-tasks folded from the spike:**
+
+- **WP-05 (feed parse + discovery):** use rss-parser (decode HTML-entity URLs like `&#038;` before canonicalizing);
+  discovery detects site-wide vs per-series and probes for a category/per-series feed; extract per-item
+  `<category>` and set `matchType`/`matchValue` at add-time; realistic browser headers; tolerate Cloudflare
+  403-on-page while `/feed/` serves; treat ETag/Last-Modified as optional.
+- **WP-17 (page-watch):** TOC fetch + chapter-list extraction (series-scoped); per-site DOM adapters; lock-marker
+  parsing (e.g. `.chapter-status.premium`); Cloudflare escalation with realistic headers and a headless-browser
+  (Playwright) path for hard-blocked sites. Doubles as the rung-3 density fallback and the locked-frontier reader.
+- **WP-20 (paid→free):** read access state per chapter from the TOC adapter; free frontier = highest non-locked
+  chapter; fire "now free" on frontier advance (distinct event from "new chapter"); feeds usually omit locked
+  chapters, so lock state comes from page-watch.
+- **WP-RC (dense-feed reconcile):** miss-detection (number gap + feed-window saturation) → immediate TOC scan;
+  periodic reconcile for at-risk Sources; may add `lastReconciledAt` + a feed-window marker to `Source` (defer to
+  the WP-04 DB pause).
+
 ## Backlog / open questions
 
 - **Auth & multi-device** — README scopes to single-user, but Web Push targets multiple subscribed devices per user.
@@ -261,6 +301,10 @@ set at add-time; filtering runs upstream of the (still pure) `diffChapters`. See
 
 ## Changelog
 
+- **2026-07-16** — **Folded spike into the plan.** Added the "Source-fetching strategy" section (fetch-strategy
+  ladder + density-fallback triggers) and per-WP sub-tasks for WP-05/17/20; added **WP-RC** (dense-feed
+  miss-detection + TOC reconcile fallback). Design answer to "when does a too-dense multi-novel feed fall back to a
+  direct page scan": page-watch is rung 3, triggered at add-time, on runtime gap/saturation, and periodically.
 - **2026-07-16** — **Feed spike + Source-model change.** Ran throwaway spikes against 5 real translator sites (see
   "Spike findings"). Applied the resulting README data-model change: `SourceMatch` enum + `matchType`/`matchValue`
   on `Source` (isolate one series from a multi-novel feed), plus a Source-resolution note on multi-novel feeds and
