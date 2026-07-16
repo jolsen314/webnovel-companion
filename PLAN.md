@@ -2,8 +2,9 @@
 
 Living plan + progress tracker. The **[README](README.md) is the design doc** (what & why); this file is the
 **build doc** (in what order, split into pieces, and how far along); **[CLAUDE.md](CLAUDE.md) is the operating
-manual** (working agreements + which skill/plugin to use when). If README and this file ever conflict, the README
-wins on design, this file wins on sequencing.
+manual** (working agreements + which skill/plugin to use when); **[CONTEXT.md](CONTEXT.md) is the domain glossary**
+(canonical term definitions) and **[docs/adr/](docs/adr/)** holds architecture decision records. If README and this
+file ever conflict, the README wins on design, this file wins on sequencing.
 
 > **This is a living document.** Update status as work lands, re-order priorities when reality changes, and split
 > or add work packages (WPs) as they come into focus. Keep the [Changelog](#changelog) current — it's the memory
@@ -40,12 +41,12 @@ To re-prioritize, move rows and update the `NEXT` marker. Don't silently reorder
 
 ## Current focus
 
-> **NEXT:** owner's call — the early pure engines are done. Candidates: WP-05 (feed parse/discovery, well-specified
-> by the spike) or the WP-04 database conversation (still ⏸ pending DB-skills).
+> **NEXT:** owner's call — candidates: **WP-05** (feed parse/discovery, well-specified by the spike), **WP-06**
+> (Next.js + PWA shell), or **WP-07** (services — now unblocked: depends on WP-01/04/05).
 
-WP-00 (harness), WP-GH/WP-CI (repo + CI), **WP-01 (diff)** and **WP-03 (health)** are done — both pure, test-first,
-26 unit tests, CI-enforced. **WP-02 (sm2) is deprioritized to M3** (owner doesn't lean on the vocab layer). The
-tested-core phase of M0 is complete; next is the app spine (feeds/DB/Next/push/UI) — pick up at a check-in.
+WP-00 (harness), WP-GH/WP-CI (repo + CI), **WP-01 (diff)**, **WP-03 (health)**, and **WP-04 (Prisma schema +
+offline initial migration + `db.ts` singleton)** are done. **WP-02 (sm2) is deprioritized to M3.** The tested-core
++ data-model foundation is in place; remaining M0 is the app spine (feeds/Next/push/UI/deploy).
 
 ---
 
@@ -75,7 +76,7 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-CI | GitHub Actions: test + typecheck on push/PR | M0 | `DONE` | WP-GH |
 | ⭐ WP-01 | `lib/feeds/diff.ts` (pure, test-first) | M0 | `DONE` | WP-00 |
 | ⭐ WP-03 | `lib/health.ts` (pure, test-first) | M0 | `DONE` | WP-00 |
-| ⏸ WP-04 | Prisma schema + migration + db client | M0 | `TODO` | WP-00 |
+| WP-04 | Prisma schema + migration + db client | M0 | `DONE` | WP-00 |
 | WP-05 | Feed parse + auto-discovery (`lib/feeds/{parse,discover}.ts`) | M0 | `TODO` | WP-00 |
 | WP-06 | Next.js + Tailwind + PWA shell (manifest + service worker) | M0 | `TODO` | WP-00 |
 | WP-07 | Services: `pollAllSources()`, `addSeries()` | M0 | `TODO` | WP-01, WP-04, WP-05 |
@@ -117,16 +118,21 @@ CI is split out as **WP-CI** (GitHub Actions running `npm test` + `npm run typec
 
 ---
 
-### ⏸ WP-04 — Prisma schema + migration + db client (PAUSE FIRST)
+### WP-04 — Prisma schema + migration + db client
 
-**⏸ Pause before starting:** per owner, stop and select good database skills before writing any schema/migrations.
-Evaluate at that point — candidates to weigh: `mattpocock-skills:domain-modeling` (model vocabulary/invariants),
-`ai-toolkit:database-patterns` and `ai-toolkit:spartan:migration` (note: several ai-toolkit DB skills are
-Kotlin/Exposed- or company-rule-flavored — confirm fit for **Prisma + Postgres** before following them). Don't
-auto-proceed from WP-03/WP-GH into WP-04.
+**Pause resolved 2026-07-16.** Decisions: **plain Postgres** (README stack kept; PlanetScale declined — its Postgres
+flavor was fine but not needed). DB **host deferred to WP-11** (schema is host-agnostic: Neon/Vercel/Supabase all
+take the same schema, differ only by `DATABASE_URL`). Skills: **`mattpocock-skills:domain-modeling`** for the
+model + Prisma's own conventions; the ai-toolkit DB skills were rejected (Kotlin/Exposed + company-rule flavored,
+poor Prisma/Postgres fit).
 
-Deliverables (once unpaused): `prisma/schema.prisma` matching the README data model, an initial migration, and the
-`server/db.ts` Prisma client singleton.
+**Deliverables:** `prisma/schema.prisma` reconciling the README data model **with the spike findings** (Source
+`matchType`/`matchValue`; health `score` accumulator; Chapter access state; possibly `lastReconciledAt` for WP-RC);
+an initial migration; `server/db.ts` Prisma client singleton.
+
+**Migration note (no DB yet):** `prisma migrate dev` needs a live Postgres. Until the host exists (WP-11) we can
+`prisma generate` the client and produce the initial migration SQL via `prisma migrate diff --from-empty
+--to-schema-datamodel` (no connection needed), or spin up a local Docker Postgres. Decide when we get there.
 
 ---
 
@@ -302,6 +308,14 @@ real series needs it.
 
 ## Changelog
 
+- **2026-07-16** — **WP-04 (database) done.** DB-skills pause resolved: plain Postgres (PlanetScale declined), host
+  deferred to WP-11, `domain-modeling` skill used. Wrote `prisma/schema.prisma` (Series/Source/Chapter/
+  ReadingProgress/PushSubscription; reconciles README + spike: `matchType`/`matchValue`, `failureScore`, Chapter
+  `access` + `sourceId` provenance; VocabCard + User table deferred). Added **CONTEXT.md** (domain glossary, via the
+  domain-modeling skill) and **ADR 0001** (Source as a swappable fetch-target, separate from Series). Prisma installed
+  + client generated (`postinstall` regenerates in CI); `src/server/db.ts` singleton. Initial migration generated
+  **offline** via `migrate diff` (real FKs — plain-Postgres win) — deployable, applied at WP-11 (no DB host yet).
+  Typecheck clean, 26 tests green, schema valid.
 - **2026-07-16** — **WP-03 (health) done.** Pure source-health state machine test-first: HEALTHY→DEGRADED→LIKELY_DOWN
   with a weighted-score hysteresis accumulator (strong DNS/PARKED/TLS=3 >> HTTP_4XX=2 > soft HTTP_5XX/TIMEOUT=1),
   thresholds DEGRADED_AT=2 / LIKELY_DOWN_AT=4 exported as tunable constants, immediate recovery on success. 9 tests

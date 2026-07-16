@@ -1,0 +1,183 @@
+// Webnovel Companion — data model. See CONTEXT.md for the domain glossary and
+// README.md "Data model" for the design narrative. Plain Postgres (host chosen at WP-11).
+//
+// MVP scope: Series, Source, Chapter, ReadingProgress, PushSubscription.
+// Deferred to their tiers: VocabCard (M3 vocab), any User table (Tier 4 multi-user —
+// owned rows carry a bare `userId` column so that migration stays additive).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Enums ────────────────────────────────────────────────────────────────────
+
+enum SeriesStatus {
+  READING
+  COMPLETED
+  PAUSED
+  DROPPED
+  PLANNED
+}
+
+enum SourceType {
+  FEED
+  PAGE_WATCH
+}
+
+/// How to isolate one series' items within a (possibly site-wide, multi-novel) feed.
+enum SourceMatch {
+  WHOLE_FEED
+  CATEGORY
+  PATH_PREFIX
+}
+
+enum Language {
+  ZH
+  KO
+  JA
+  EN
+  OTHER
+}
+
+/// Advance/paid-then-free chapter access.
+enum AccessState {
+  FREE
+  LOCKED
+  UNKNOWN
+}
+
+enum SourceHealth {
+  HEALTHY
+  DEGRADED
+  LIKELY_DOWN
+}
+
+enum FailureType {
+  NONE
+  DNS
+  TIMEOUT
+  HTTP_4XX
+  HTTP_5XX
+  PARKED
+  TLS
+}
+
+/// Completeness of the translation itself (drives plan-to-read completion watch).
+enum TranslationStatus {
+  ONGOING
+  STALLED
+  COMPLETE
+  UNKNOWN
+}
+
+// ── Models ───────────────────────────────────────────────────────────────────
+
+/// A tracked work on the shelf. Survives translator/site moves; owns progress/rating/notes.
+model Series {
+  id                 String            @id @default(cuid())
+  userId             String // bare owner scoping (no User table in MVP; see CONTEXT.md)
+  title              String
+  canonicalId        String? // NovelUpdates id / normalized URL — de-dup key
+  language           Language          @default(OTHER)
+  status             SeriesStatus      @default(READING) // shelf status
+  rating             Int? // 1–5, completed shelf
+  notes              String?
+  tags               String[]
+  coverUrl           String?
+  finishedAt         DateTime?
+  targetChapterCount Int? // raw/native total (NU or manual) — plan-to-read completion watch
+  translationStatus  TranslationStatus @default(UNKNOWN)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  sources  Source[]
+  chapters Chapter[]
+  progress ReadingProgress?
+
+  @@index([userId, status])
+  @@index([userId, canonicalId])
+}
+
+/// A fetch target (feed or watched page) for a translation of a Series. One active at a time.
+model Source {
+  id       String     @id @default(cuid())
+  seriesId String
+  series   Series     @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  url      String // page the user reads on — kept visible even if down
+  host     String // domain, for host-level health aggregation
+  type     SourceType @default(FEED)
+  feedUrl  String?
+
+  // Series isolation within a (possibly site-wide, multi-novel) feed.
+  matchType  SourceMatch @default(WHOLE_FEED)
+  matchValue String? // CATEGORY → category name; PATH_PREFIX → url-path prefix
+
+  isActive Boolean @default(true) // re-pointing = add a source, flip active
+
+  // Source-health state machine (lib/health.ts). `failureScore` is the weighted accumulator.
+  health              SourceHealth @default(HEALTHY)
+  consecutiveFailures Int          @default(0)
+  failureScore        Int          @default(0)
+  lastFailureType     FailureType  @default(NONE)
+  lastCheckedAt       DateTime?
+  lastSuccessAt       DateTime?
+
+  // Polite conditional GET.
+  etag         String?
+  lastModified String?
+
+  createdAt DateTime @default(now())
+
+  chapters Chapter[] // provenance: chapters discovered via this source
+
+  @@index([seriesId])
+  @@index([host])
+}
+
+/// A discovered chapter. Identity is guid and/or canonical url (lib/feeds/diff.ts), never number/title.
+model Chapter {
+  id       String  @id @default(cuid())
+  seriesId String
+  series   Series  @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  sourceId String? // which source discovered it; null-safe across re-pointing
+  source   Source? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+
+  title        String
+  number       Float? // best-effort ordinal — NOT identity, NOT guaranteed contiguous
+  url          String
+  guid         String? // feed guid if present
+  publishedAt  DateTime?
+  discoveredAt DateTime  @default(now())
+
+  access       AccessState @default(UNKNOWN) // FREE/LOCKED on advance-chapter sites
+  becameFreeAt DateTime? // set when a locked chapter unlocks
+
+  @@unique([seriesId, url]) // soft DB guard; primary de-dup is diff (guid/canonical-url)
+  @@index([seriesId])
+  @@index([sourceId])
+}
+
+/// The user's reading position for a Series (manual in MVP). One per Series.
+model ReadingProgress {
+  id                String   @id @default(cuid())
+  userId            String
+  seriesId          String   @unique
+  series            Series   @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  lastReadChapterId String?
+  updatedAt         DateTime @updatedAt
+}
+
+/// A Web Push subscription (one per device/browser).
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+}
