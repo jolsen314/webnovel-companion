@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.next/
+coverage/
+*.log
+.env
+.env.local
+.DS_Store
+
+# Claude Code local (machine-specific) settings — keep out of git
+.claude/settings.local.json
