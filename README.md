@@ -42,7 +42,7 @@ Two independent tracks that meet at your account:
 - **Royal Road / ScribbleHub** — per-fiction RSS feeds for originals and English web serials.
 - **The gap this fills:** *list-level* "all my follows in one feed" RSS is inconsistent across sites and frequently-requested-but-missing — which is exactly the value here. Build on the reliable **per-series** feeds and provide the aggregation (one library, one notification stream) ourselves.
 
-**Source resolution** when you add a URL: try feed auto-discovery (`<link rel="alternate">` tags, then common paths like `/feed/`); if none is found, offer page-watch mode. Push works identically regardless of source type.
+**Source resolution** when you add a URL: try feed auto-discovery (`<link rel="alternate">` tags, then common paths like `/feed/`); if none is found, offer page-watch mode. Push works identically regardless of source type. In practice many feeds are **site-wide and multi-novel**, so on add we also capture how to isolate this series (`matchType`/`matchValue` — per-novel `<category>`, else a URL-path prefix), and prefer a per-series/category feed over filtering a capped site feed (a slow series can otherwise fall off the feed window). Some hosts sit behind Cloudflare and may block automated page loads while still serving `/feed/`; discovery and page-watch use realistic headers and, where needed, a headless browser.
 
 **Advance/paid chapters:** on sites that release chapters as paid first and free later, the same poll-and-diff engine tracks a second dimension — each chapter's free/locked state, usually collapsed to a single "free frontier" (the highest unlocked chapter) read off the TOC's lock markers. When the frontier advances, it fires a distinct **"now free"** notification, separate from "new chapter." Sites that gate advance chapters on Patreon/another platform need nothing extra (their public site only ever shows free chapters); same-site coin/membership gating needs a small per-site adapter in the page-watch tier; closed platforms (e.g. Webnovel.com) are best-effort/out of scope.
 
@@ -114,6 +114,7 @@ Design rule: keep the interesting logic (`lib/`) pure and Next-free so it unit-t
 ```prisma
 enum SeriesStatus { READING COMPLETED PAUSED DROPPED PLANNED }
 enum SourceType   { FEED PAGE_WATCH }
+enum SourceMatch   { WHOLE_FEED CATEGORY PATH_PREFIX }   // how to isolate one series within a multi-novel feed
 enum Language      { ZH KO JA EN OTHER }
 enum AccessState   { FREE LOCKED UNKNOWN }   // for advance/paid-then-free chapters
 enum SourceHealth  { HEALTHY DEGRADED LIKELY_DOWN }
@@ -146,6 +147,8 @@ model Source {
   host                String                      // domain, for site-level health aggregation
   type                SourceType   @default(FEED)
   feedUrl             String?
+  matchType           SourceMatch  @default(WHOLE_FEED) // a feedUrl can be site-wide/multi-novel...
+  matchValue          String?                      // ...CATEGORY → category name; PATH_PREFIX → url-path prefix
   isActive            Boolean      @default(true) // re-pointing = add a new source, flip active
   health              SourceHealth @default(HEALTHY)
   consecutiveFailures Int          @default(0)

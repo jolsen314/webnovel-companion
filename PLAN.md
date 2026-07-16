@@ -261,6 +261,10 @@ set at add-time; filtering runs upstream of the (still pure) `diffChapters`. See
 
 ## Changelog
 
+- **2026-07-16** — **Feed spike + Source-model change.** Ran throwaway spikes against 5 real translator sites (see
+  "Spike findings"). Applied the resulting README data-model change: `SourceMatch` enum + `matchType`/`matchValue`
+  on `Source` (isolate one series from a multi-novel feed), plus a Source-resolution note on multi-novel feeds and
+  Cloudflare. Spike scripts + FINDINGS.md archived to a non-git local dir (`../webnovel-tracker-spikes/`), not the repo.
 - **2026-07-16** — **diff.ts hardened (WP-01 follow-up).** From a design discussion: (1) match guid AND canonical
   url independently to guard guid/url mixing (feed↔page-watch, feeds toggling guids); (2) URL canonicalization now
   strips tracking params (utm_*/fbclid/…) and sorts query params while keeping meaningful ones distinct; (3) added
