@@ -73,7 +73,8 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 |----|--------------|-----------|--------|------------|
 | WP-12 | Fold spec's unique content into README, delete spec | M0 | `DONE` | — |
 | ⭐ WP-00 | Repo bootstrap + test harness | M0 | `DONE` | — |
-| WP-GH | Git + private GitHub repo, first push (CI later) | M0 | `WIP` | — |
+| WP-GH | Git + private GitHub repo, first push | M0 | `DONE` | — |
+| WP-CI | GitHub Actions: test + typecheck on push/PR | M0 | `TODO` | WP-GH |
 | ⭐ WP-01 | `lib/feeds/diff.ts` (pure, test-first) | M0 | `DONE` | WP-00 |
 | ⭐ WP-02 | `lib/srs/sm2.ts` (pure, test-first) | M0 | `NEXT` | WP-00 |
 | ⭐ WP-03 | `lib/health.ts` (pure, test-first) | M0 | `NEXT` | WP-00 |
@@ -108,16 +109,12 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 
 **Goal:** get commits flowing to a personal GitHub repo early so history is captured and the review/security hooks apply.
 
-**State (2026-07-16):** `git init -b main` done; `.gitignore` covers `node_modules`, `.env`, `.claude/settings.local.json`.
-`gh` CLI installed (2.96.0). **Blocked on interactive `gh auth login`** (owner runs it). Decisions locked: **private**
-repo, commits use the **GitHub noreply** email, git identity set **globally** (`--global`).
+**DONE (2026-07-16):** `git init -b main`; `.gitignore` covers `node_modules`, `.env`, `.claude/settings.local.json`.
+`gh` 2.96.0 installed; owner authed as **jolsen314** (Jayden Olsen). Global git identity set to the GitHub **noreply**
+email. Initial commit `1244258` (docs + harness + diff engine, suite green). Private repo created and pushed:
+**https://github.com/jolsen314/webnovel-companion** (`main` tracks `origin/main`).
 
-**Remaining once authed:** derive identity from `gh api user` → set global `user.name` + noreply `user.email`; initial
-commit (via the commit skill); `gh repo create webnovel-companion --private --source=. --push`.
-
-**Later:** GitHub Actions CI (run `npm test` + `npm run typecheck` on push/PR) — separate follow-up, not blocking.
-
-**Definition of Done:** repo exists private on GitHub, `main` pushed, working tree clean, no secrets/local settings committed.
+CI is split out as **WP-CI** (GitHub Actions running `npm test` + `npm run typecheck` on push/PR).
 
 ---
 
@@ -237,6 +234,10 @@ shape matches the `Source` health fields in the README (`health`, `consecutiveFa
 
 ## Changelog
 
+- **2026-07-16** — **WP-GH done.** Set global git identity (GitHub noreply), initial commit `1244258` (green suite,
+  no secrets), created and pushed the **private** repo `jolsen314/webnovel-companion`. Caught and removed a stray
+  `tests/unit/srs/sm2.test.ts` (leftover from the interrupted WP-02 attempt — imported a not-yet-written module and
+  reddened the suite) so the first commit was green. Split CI into WP-CI.
 - **2026-07-16** — **WP-GH started; WP-04 marked pause-first.** `git init -b main`, `.gitignore` hardened
   (`.claude/settings.local.json`), installed `gh` 2.96.0. Decisions: private repo, GitHub-noreply commit email,
   global git identity. Blocked on interactive `gh auth login` (owner). Flagged WP-04 (database) with ⏸ — must pause to
