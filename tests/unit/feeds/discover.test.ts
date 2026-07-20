@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'vitest';
-import { discoverFeeds, guessFeedUrls, chooseSeriesMatch } from '../../../src/lib/feeds/discover';
+import {
+  discoverFeeds,
+  guessFeedUrls,
+  chooseSeriesMatch,
+  filterBySeriesMatch,
+} from '../../../src/lib/feeds/discover';
 import type { FeedItem } from '../../../src/lib/feeds/diff';
 
 // Anonymized fixtures (reserved .example domains, generic works). The structural
@@ -76,5 +81,24 @@ describe('chooseSeriesMatch', () => {
       type: 'PATH_PREFIX',
       value: '/series/zeta/',
     });
+  });
+});
+
+describe('filterBySeriesMatch', () => {
+  const a = item('https://translator.example/sms-407/', ['Silver Moon Saga']);
+  const b = item('https://translator.example/ot-12/', ['Other Tale']);
+  const c = item('https://reader.example/series/zeta/zeta-5/');
+  const items = [a, b, c];
+
+  test('WHOLE_FEED keeps everything', () => {
+    expect(filterBySeriesMatch(items, { type: 'WHOLE_FEED' })).toEqual(items);
+  });
+
+  test('CATEGORY keeps only items carrying that category', () => {
+    expect(filterBySeriesMatch(items, { type: 'CATEGORY', value: 'Silver Moon Saga' })).toEqual([a]);
+  });
+
+  test('PATH_PREFIX keeps only items whose url path starts with the prefix', () => {
+    expect(filterBySeriesMatch(items, { type: 'PATH_PREFIX', value: '/series/zeta/' })).toEqual([c]);
   });
 });

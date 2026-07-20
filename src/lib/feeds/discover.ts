@@ -90,6 +90,28 @@ export function chooseSeriesMatch(items: FeedItem[], seriesUrl: string): SeriesM
   return { type: 'PATH_PREFIX', value: seriesPath };
 }
 
+/**
+ * Apply a stored SeriesMatch to a fetched feed's items, keeping only the ones that
+ * belong to this series. Runtime counterpart to `chooseSeriesMatch` (which decides
+ * the match at add-time).
+ */
+export function filterBySeriesMatch(items: FeedItem[], match: SeriesMatch): FeedItem[] {
+  switch (match.type) {
+    case 'WHOLE_FEED':
+      return items;
+    case 'CATEGORY':
+      return items.filter((it) => (it.categories ?? []).includes(match.value));
+    case 'PATH_PREFIX':
+      return items.filter((it) => {
+        try {
+          return new URL(it.url).pathname.startsWith(match.value);
+        } catch {
+          return false;
+        }
+      });
+  }
+}
+
 /** Common feed-URL fallbacks to try when a page advertises none (mostly WordPress). */
 export function guessFeedUrls(pageUrl: string): string[] {
   try {

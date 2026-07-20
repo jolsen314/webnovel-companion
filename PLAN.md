@@ -80,7 +80,7 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-05 | Feed parse + auto-discovery + series-match (`lib/feeds/{parse,discover}.ts`, pure) | M0 | `DONE` | WP-00 |
 | WP-FE | Feed/page fetcher (HTTP: realistic headers, conditional GET, Cloudflare-tolerant; injected fetch) | M0 | `DONE` | WP-05 |
 | WP-06 | Next.js + Tailwind + PWA shell (manifest + service worker) | M0 | `TODO` | WP-00 |
-| WP-07 | Services: `pollAllSources()`, `addSeries()` | M0 | `TODO` | WP-01, WP-04, WP-05, WP-FE |
+| WP-07 | Services: `pollAllSources()`, `addSeries()` | M0 | `DONE` | WP-01, WP-04, WP-05, WP-FE |
 | WP-08 | API routes (series CRUD, push/subscribe, cron/poll) | M0 | `TODO` | WP-06, WP-07 |
 | WP-09 | Web Push end-to-end (VAPID, sw handler, subscribe flow) | M0 | `TODO` | WP-06, WP-08 |
 | WP-10 | Library + series-detail UI (unread counts, mark progress) | M0 | `TODO` | WP-06, WP-08 |
@@ -309,6 +309,13 @@ real series needs it.
 
 ## Changelog
 
+- **2026-07-20** — **WP-07 (services) done.** Orchestration composed behind injected ports (unit-tested with fakes,
+  no DB/network): `filterBySeriesMatch` (pure runtime counterpart to `chooseSeriesMatch`); `pollSource`/`pollAllSources`
+  (fetch→health→parse→filter→diff, emits `PollEffects` incl. `crossedDown` for the down-alert); `addSeries`
+  (page → feed discovery/guess → match → resolve, page-watch fallback, add-time failure surfaced). Thin Prisma+HTTP
+  adapter (`server/services/index.ts`) exposes runnable `pollAllSources()`/`addSeries()` (typechecked; integration-
+  tested at WP-11). Single-user id via one accessor (`server/user.ts`) per the Tier-4 discipline. 14 new tests
+  (67 total), typecheck clean, CI green. The full MVP pipeline is now wired end-to-end.
 - **2026-07-20** — **WP-FE (feed/page fetcher) done.** `lib/feeds/fetch.ts` `politeFetch(url, {etag, lastModified},
   fetchImpl)` — injected fetch (unit-testable, no socket). Realistic browser headers, conditional GET (304 →
   not-modified), timeout via AbortController, and every outcome classified into a health `PollOutcome`
