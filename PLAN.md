@@ -78,7 +78,7 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | ⭐ WP-03 | `lib/health.ts` (pure, test-first) | M0 | `DONE` | WP-00 |
 | WP-04 | Prisma schema + migration + db client | M0 | `DONE` | WP-00 |
 | WP-05 | Feed parse + auto-discovery + series-match (`lib/feeds/{parse,discover}.ts`, pure) | M0 | `DONE` | WP-00 |
-| WP-FE | Feed/page fetcher (HTTP: realistic headers, conditional GET, Cloudflare-tolerant; injected fetch) | M0 | `TODO` | WP-05 |
+| WP-FE | Feed/page fetcher (HTTP: realistic headers, conditional GET, Cloudflare-tolerant; injected fetch) | M0 | `DONE` | WP-05 |
 | WP-06 | Next.js + Tailwind + PWA shell (manifest + service worker) | M0 | `TODO` | WP-00 |
 | WP-07 | Services: `pollAllSources()`, `addSeries()` | M0 | `TODO` | WP-01, WP-04, WP-05, WP-FE |
 | WP-08 | API routes (series CRUD, push/subscribe, cron/poll) | M0 | `TODO` | WP-06, WP-07 |
@@ -309,6 +309,11 @@ real series needs it.
 
 ## Changelog
 
+- **2026-07-20** — **WP-FE (feed/page fetcher) done.** `lib/feeds/fetch.ts` `politeFetch(url, {etag, lastModified},
+  fetchImpl)` — injected fetch (unit-testable, no socket). Realistic browser headers, conditional GET (304 →
+  not-modified), timeout via AbortController, and every outcome classified into a health `PollOutcome`
+  (SUCCESS/HTTP_4XX/HTTP_5XX/DNS/TLS/TIMEOUT/PARKED incl. a 200-parking-page heuristic) so it feeds `health.step`
+  directly. 9 tests (53 total), CI green. Completes the feed pipeline's I/O seam; WP-07 wires it into orchestration.
 - **2026-07-20** — **WP-05 (feed parse + discovery + match) done.** Pure, test-first, grounded in the spike fixtures:
   `parse.ts` (rss-parser wrapper → `FeedItem`, decoding entity-encoded URLs, RSS `<guid>` + Atom `<id>`, categories;
   plus best-effort `parseChapterNumber`), `discover.ts` (`discoverFeeds` from `<link alternate>`, `guessFeedUrls`
