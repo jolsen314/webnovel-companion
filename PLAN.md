@@ -79,7 +79,7 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-04 | Prisma schema + migration + db client | M0 | `DONE` | WP-00 |
 | WP-05 | Feed parse + auto-discovery + series-match (`lib/feeds/{parse,discover}.ts`, pure) | M0 | `DONE` | WP-00 |
 | WP-FE | Feed/page fetcher (HTTP: realistic headers, conditional GET, Cloudflare-tolerant; injected fetch) | M0 | `DONE` | WP-05 |
-| WP-06 | Next.js + Tailwind + PWA shell (manifest + service worker) | M0 | `TODO` | WP-00 |
+| WP-06 | Next.js + Tailwind + PWA shell (manifest + service worker) | M0 | `DONE` | WP-00 |
 | WP-07 | Services: `pollAllSources()`, `addSeries()` | M0 | `DONE` | WP-01, WP-04, WP-05, WP-FE |
 | WP-08 | API routes (series CRUD, push/subscribe, cron/poll) | M0 | `TODO` | WP-06, WP-07 |
 | WP-09 | Web Push end-to-end (VAPID, sw handler, subscribe flow) | M0 | `TODO` | WP-06, WP-08 |
@@ -309,6 +309,13 @@ real series needs it.
 
 ## Changelog
 
+- **2026-07-20** — **WP-06 (Next.js + Tailwind + PWA shell) done.** Next 16 (App Router) + React 19 + Tailwind 4
+  integrated into the repo; tsconfig reconciled to serve both the strict Node lib and the DOM/JSX app; CI now also
+  runs `next build`. **Design system** (via frontend-design skill): a "night reading" identity — warm ink, dimmed
+  paper, a single amber lamp-glow accent; Fraunces (display) + IBM Plex Sans/Mono (Plex chosen for its CJK siblings);
+  bookmark-ribbon signature. Tokens + components in `globals.css`; root layout with fonts/metadata/header; empty-state
+  home; PWA manifest + offline-shell service worker + registration. Verified visually (desktop + mobile screenshots).
+  **Deferred:** Web Push handler (WP-09); rasterized/maskable PNG icons for iOS install (WP-11) — SVG icon for now.
 - **2026-07-20** — **WP-07 (services) done.** Orchestration composed behind injected ports (unit-tested with fakes,
   no DB/network): `filterBySeriesMatch` (pure runtime counterpart to `chooseSeriesMatch`); `pollSource`/`pollAllSources`
   (fetch→health→parse→filter→diff, emits `PollEffects` incl. `crossedDown` for the down-alert); `addSeries`

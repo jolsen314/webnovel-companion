@@ -1,0 +1,13 @@
+{
+  "name": "Webnovel Companion",
+  "short_name": "Companion",
+  "description": "Track the webnovels you read across sites and get a push when a new chapter drops.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#15131a",
+  "theme_color": "#15131a",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

@@ -1,0 +1,212 @@
+@import "tailwindcss";
+
+/* ── Design tokens: "night reading" ─────────────────────────────────────────
+   Warm ink (not black), dimmed-paper text, a single amber lamp-glow accent. */
+@theme {
+  --color-ink: #15131a;
+  --color-ink-2: #100e15;
+  --color-surface: #1f1b26;
+  --color-surface-2: #2a2532;
+  --color-line: #302b3a;
+  --color-paper: #ece4d6;
+  --color-muted: #948ba2;
+  --color-glow: #e7b15c;
+  --color-glow-dim: #b9884400;
+  --color-down: #cf7a6f;
+
+  --font-display: var(--font-fraunces), Georgia, "Times New Roman", serif;
+  --font-sans: var(--font-plex-sans), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, "SF Mono", monospace;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--color-ink);
+  color: var(--color-paper);
+  font-family: var(--font-sans);
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  min-height: 100dvh;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--color-glow) 30%, transparent);
+  color: var(--color-paper);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-glow);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ── App chrome ─────────────────────────────────────────────────────────── */
+.appHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.1rem clamp(1rem, 4vw, 2.5rem);
+  border-bottom: 1px solid var(--color-line);
+  position: sticky;
+  top: 0;
+  background: color-mix(in oklab, var(--color-ink) 86%, transparent);
+  backdrop-filter: blur(8px);
+  z-index: 10;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--color-paper);
+  text-decoration: none;
+}
+.brand__mark {
+  color: var(--color-glow);
+  flex: none;
+}
+.brand__name {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 1.15rem;
+  letter-spacing: -0.01em;
+}
+.brand__name em {
+  font-style: italic;
+  color: var(--color-glow);
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+.btn {
+  --btn-bg: transparent;
+  --btn-fg: var(--color-paper);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font: inherit;
+  font-weight: 500;
+  font-size: 0.92rem;
+  line-height: 1;
+  padding: 0.62rem 1rem;
+  border-radius: 9px;
+  border: 1px solid var(--color-line);
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  cursor: pointer;
+  transition: transform 0.12s ease, background-color 0.18s ease, border-color 0.18s ease;
+}
+.btn:hover {
+  transform: translateY(-1px);
+}
+.btn--primary {
+  --btn-bg: var(--color-glow);
+  --btn-fg: #241a09;
+  border-color: transparent;
+  font-weight: 600;
+  box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-glow) 60%, transparent);
+}
+.btn--primary:hover {
+  box-shadow: 0 8px 30px -10px color-mix(in oklab, var(--color-glow) 70%, transparent);
+}
+
+/* ── Empty-state hero: the quiet shelf, lit by lamplight ────────────────── */
+.hero {
+  position: relative;
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: clamp(4rem, 16vh, 9rem) clamp(1.25rem, 5vw, 2rem) 6rem;
+  text-align: center;
+  isolation: isolate;
+}
+/* the lamp glow */
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: -20% 0 auto 0;
+  height: 60%;
+  margin: 0 auto;
+  z-index: -1;
+  background: radial-gradient(
+    60% 55% at 50% 30%,
+    color-mix(in oklab, var(--color-glow) 22%, transparent),
+    transparent 70%
+  );
+  filter: blur(10px);
+  pointer-events: none;
+}
+.hero__eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--color-glow);
+  margin-bottom: 1.4rem;
+}
+.hero__title {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(2.3rem, 7vw, 3.6rem);
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+  margin: 0 0 1.1rem;
+}
+.hero__title em {
+  font-style: italic;
+  color: var(--color-glow);
+}
+.hero__lede {
+  color: var(--color-muted);
+  font-size: clamp(1rem, 2.4vw, 1.12rem);
+  line-height: 1.6;
+  max-width: 34rem;
+  margin: 0 auto 2rem;
+}
+.hero__actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.hero__note {
+  margin-top: 2.5rem;
+  font-size: 0.82rem;
+  color: var(--color-muted);
+}
+.hero__note code {
+  font-family: var(--font-mono);
+  color: var(--color-paper);
+}
+
+/* ── Bookmark ribbon: the signature (used on unread series cards in WP-10) ── */
+.ribbon {
+  position: relative;
+  width: 10px;
+  align-self: stretch;
+  background: var(--color-glow);
+  border-radius: 2px 2px 0 0;
+  flex: none;
+}
+.ribbon::after {
+  content: "";
+  position: absolute;
+  bottom: -6px;
+  left: 0;
+  right: 0;
+  height: 8px;
+  background: var(--color-glow);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 60%, 0 100%);
+}
