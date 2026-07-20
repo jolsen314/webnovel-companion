@@ -15,6 +15,8 @@ export interface FeedItem {
   title: string;
   number?: number | null;
   publishedAt?: Date | null;
+  /** Feed `<category>` values — used to isolate a series in a multi-novel feed (see match logic). */
+  categories?: string[];
   // Extension point: paid→free tracking (README roadmap) will add an access
   // state here (e.g. `access?: 'FREE' | 'LOCKED'`). Add the field; don't reshape.
 }

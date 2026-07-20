@@ -1,0 +1,80 @@
+import { describe, expect, test } from 'vitest';
+import { discoverFeeds, guessFeedUrls, chooseSeriesMatch } from '../../../src/lib/feeds/discover';
+import type { FeedItem } from '../../../src/lib/feeds/diff';
+
+// Anonymized fixtures (reserved .example domains, generic works). The structural
+// shapes mirror the three real archetypes from the 2026-07-16 spike:
+//   - a single-novel per-series feed (no competing categories),
+//   - a multi-novel WordPress feed where a per-novel <category> matches the series slug,
+//   - a multi-novel feed where nothing matches, so we fall back to the URL path.
+function item(url: string, categories: string[] = []): FeedItem {
+  return { url, title: url, categories };
+}
+
+describe('discoverFeeds', () => {
+  test('finds rss/atom alternate links, resolves relative URLs, ignores non-feed links', () => {
+    const html = `<html><head>
+      <link rel="alternate" type="application/rss+xml" title="Series Feed" href="https://site.example/series/x/feed" />
+      <link rel="alternate" type="application/rss+xml" title="Comments" href="/comments/feed/" />
+      <link rel="stylesheet" href="/style.css">
+      <link rel="alternate" hreflang="es" href="/es/">
+      <link rel="alternate" type="application/atom+xml" href="/atom.xml">
+    </head><body></body></html>`;
+
+    const feeds = discoverFeeds(html, 'https://site.example/series/x/');
+
+    expect(feeds).toEqual([
+      { url: 'https://site.example/series/x/feed', type: 'rss', title: 'Series Feed' },
+      { url: 'https://site.example/comments/feed/', type: 'rss', title: 'Comments' },
+      { url: 'https://site.example/atom.xml', type: 'atom', title: null },
+    ]);
+  });
+
+  test('returns empty when there are no feed links', () => {
+    expect(discoverFeeds('<html><head></head></html>', 'https://site.example/')).toEqual([]);
+  });
+});
+
+describe('guessFeedUrls', () => {
+  test('offers WordPress-style fallbacks: page feed and site-root feed', () => {
+    const guesses = guessFeedUrls('https://site.example/novel/example-novel/');
+    expect(guesses).toContain('https://site.example/novel/example-novel/feed/');
+    expect(guesses).toContain('https://site.example/feed/');
+  });
+});
+
+describe('chooseSeriesMatch', () => {
+  test('single-novel feed (no distinct novel categories) → WHOLE_FEED (per-series feed)', () => {
+    const items = [
+      item('https://reader.example/series/alpha/chapter-79'),
+      item('https://reader.example/series/alpha/chapter-78'),
+    ];
+
+    expect(chooseSeriesMatch(items, 'https://reader.example/series/alpha')).toEqual({ type: 'WHOLE_FEED' });
+  });
+
+  test('multi-novel feed where a category matches the series slug → CATEGORY', () => {
+    const items = [
+      item('https://translator.example/sms-407/', ['Silver Moon Saga']),
+      item('https://translator.example/ot-12/', ['Other Tale']),
+      item('https://translator.example/ts-3/', ['Third Story']),
+    ];
+
+    expect(chooseSeriesMatch(items, 'https://translator.example/silver-moon-saga/')).toEqual({
+      type: 'CATEGORY',
+      value: 'Silver Moon Saga',
+    });
+  });
+
+  test('multi-novel feed where no category matches the slug → PATH_PREFIX', () => {
+    const items = [
+      item('https://reader.example/series/first/first-90/', ['Normal', 'First Novel']),
+      item('https://reader.example/series/second/second-439/', ['Normal', 'Second Novel']),
+    ];
+
+    expect(chooseSeriesMatch(items, 'https://reader.example/series/zeta/')).toEqual({
+      type: 'PATH_PREFIX',
+      value: '/series/zeta/',
+    });
+  });
+});

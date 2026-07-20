@@ -22,6 +22,10 @@ Belongs to a Series; remembers which Source discovered it.
 
 **Chapter number** — A *best-effort parsed ordinal* (may be decimal, missing, or absent). **Not** an identity and
 **not** a guaranteed-contiguous sequence: translators split chapters (12.1/12.2, "…(3)") and use non-numeric titles.
+A split part like "Chapter 407 … (3)" parses to its **base number (407)** — the "(3)" part is intentionally *not*
+captured. Consequence: **completion/progress-vs-target compares the *max* parsed number, never the count of chapter
+posts** — splitting a raw chapter into 3 posts adds 3 rows but they all read as 407, so post-count would overshoot
+the target while max-number stays ≈ the real position. Still fuzzy by design (show the numbers, let the user judge).
 
 **Shelf status** — The user's relationship to a Series: READING / COMPLETED / PAUSED / DROPPED / PLANNED. Say
 "shelf status," not just "status."

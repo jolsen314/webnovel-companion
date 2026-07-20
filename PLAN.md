@@ -77,9 +77,10 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | ⭐ WP-01 | `lib/feeds/diff.ts` (pure, test-first) | M0 | `DONE` | WP-00 |
 | ⭐ WP-03 | `lib/health.ts` (pure, test-first) | M0 | `DONE` | WP-00 |
 | WP-04 | Prisma schema + migration + db client | M0 | `DONE` | WP-00 |
-| WP-05 | Feed parse + auto-discovery (`lib/feeds/{parse,discover}.ts`) | M0 | `TODO` | WP-00 |
+| WP-05 | Feed parse + auto-discovery + series-match (`lib/feeds/{parse,discover}.ts`, pure) | M0 | `DONE` | WP-00 |
+| WP-FE | Feed/page fetcher (HTTP: realistic headers, conditional GET, Cloudflare-tolerant; injected fetch) | M0 | `TODO` | WP-05 |
 | WP-06 | Next.js + Tailwind + PWA shell (manifest + service worker) | M0 | `TODO` | WP-00 |
-| WP-07 | Services: `pollAllSources()`, `addSeries()` | M0 | `TODO` | WP-01, WP-04, WP-05 |
+| WP-07 | Services: `pollAllSources()`, `addSeries()` | M0 | `TODO` | WP-01, WP-04, WP-05, WP-FE |
 | WP-08 | API routes (series CRUD, push/subscribe, cron/poll) | M0 | `TODO` | WP-06, WP-07 |
 | WP-09 | Web Push end-to-end (VAPID, sw handler, subscribe flow) | M0 | `TODO` | WP-06, WP-08 |
 | WP-10 | Library + series-detail UI (unread counts, mark progress) | M0 | `TODO` | WP-06, WP-08 |
@@ -93,7 +94,7 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-19 | Non-destructive re-pointing + "find new source" helper | M1 | `TODO` | WP-16, WP-18 |
 | WP-20 | Paid→free frontier tracking + "now free" notification | M1 | `TODO` | WP-07, WP-17 |
 | WP-RC | Dense-feed miss-detection + TOC reconcile fallback | M1 | `TODO` | WP-05, WP-07, WP-17 |
-| WP-21 | Plan-to-read completion watch (wire WP-13 + notify) | M1 | `TODO` | WP-13, WP-07 |
+| WP-21 | Plan-to-read completion watch (wire WP-13 + notify) — compare **max chapter number** vs target, not post count (split-chapter safe; see CONTEXT.md) | M1 | `TODO` | WP-13, WP-07 |
 | WP-22 | MV3 browser extension (progress capture + "track this") | M2 | `TODO` | WP-08 |
 | WP-23 | Chinese mining: `tokenize/zh.ts` + `dict/cedict.ts` | M3 | `TODO` | WP-04 |
 | WP-02 | `lib/srs/sm2.ts` (pure, test-first) — SM-2 scheduler | M3 | `TODO` | WP-00 |
@@ -308,6 +309,15 @@ real series needs it.
 
 ## Changelog
 
+- **2026-07-20** — **WP-05 (feed parse + discovery + match) done.** Pure, test-first, grounded in the spike fixtures:
+  `parse.ts` (rss-parser wrapper → `FeedItem`, decoding entity-encoded URLs, RSS `<guid>` + Atom `<id>`, categories;
+  plus best-effort `parseChapterNumber`), `discover.ts` (`discoverFeeds` from `<link alternate>`, `guessFeedUrls`
+  WordPress fallbacks, and `chooseSeriesMatch` → WHOLE_FEED / CATEGORY / PATH_PREFIX). Test fixtures use anonymized
+  `.example` domains + generic works (structure mirrors the concat-title-source/dense-feed-source/chrysanthemum archetypes without
+  depending on real URLs/titles). Added `categories` to `FeedItem`. **44 tests**, typecheck clean.
+  Split the impure HTTP concerns (headers, conditional GET, Cloudflare) into **WP-FE** (fetcher), keeping the lib pure.
+  **Completion rule captured** (CONTEXT.md + WP-21 note): compare *max parsed chapter number*, never post count —
+  split chapters inflate row count but not the number.
 - **2026-07-16** — **WP-04 (database) done.** DB-skills pause resolved: plain Postgres (PlanetScale declined), host
   deferred to WP-11, `domain-modeling` skill used. Wrote `prisma/schema.prisma` (Series/Source/Chapter/
   ReadingProgress/PushSubscription; reconciles README + spike: `matchType`/`matchValue`, `failureScore`, Chapter
