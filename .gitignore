@@ -11,3 +11,8 @@ coverage/
 
 # Claude Code local (machine-specific) settings — keep out of git
 .claude/settings.local.json
+
+# Local tooling context (Neon CLI, agent-skills caches) — not app source
+.neon
+.agents/
+skills-lock.json

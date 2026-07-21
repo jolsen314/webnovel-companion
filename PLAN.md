@@ -312,6 +312,18 @@ real series needs it.
 
 ## Changelog
 
+- **2026-07-21** — **Neon prod DB connected (WP-11 DB-host step).** Ran Neon's agent-guided `neon init` against the
+  existing **webnovel-companion** project (org `Jayden`, AWS us-east-1, **Postgres 18** — matches the CI matrix). The
+  offline `20260716180156_init` migration now **`migrate deploy`-ed to Neon prod**; all 5 tables (`Series`, `Source`,
+  `Chapter`, `ReadingProgress`, `PushSubscription`) verified live via a direct `SELECT 1` + table listing. `neon env
+  pull` wired the connection strings into `.env`; **`DATABASE_URL` defaulted to the DIRECT/unpooled endpoint**
+  (single-user app + correct for Prisma migrations), pooled endpoint retained as `DATABASE_URL_POOLED`. The Neon
+  wizard also added `@neondatabase/serverless` + `@prisma/adapter-neon@7` and ran `npm audit fix --force`; **both
+  driver deps were removed as unused** (we use plain Prisma over the direct connection — no serverless adapter needed
+  at single-user scale, and adapter@7 mismatched our Prisma 6). The `--force` only patch-bumped `next` (16.2.11, the
+  real fix); the remaining **2 moderate advisories are a non-exploitable transitive Next→postcss *build-time* issue**
+  (we never process untrusted CSS) — left as-is, and **`audit fix --force` avoided going forward** (it would move Next
+  to a canary). Neon/agent tooling (`.neon`, `.agents/`, `skills-lock.json`) gitignored.
 - **2026-07-21** — **WP-AUTH (single-user gate) done.** scrypt-hashed passphrase in env (colon-separated so it
   survives dotenv-expand — caught in live testing), HMAC-signed `HttpOnly`/`Secure`/`SameSite` session cookie (Web
   Crypto, edge+node), Next edge **middleware** gating all pages/APIs (fail-closed in prod, open in unconfigured dev;
