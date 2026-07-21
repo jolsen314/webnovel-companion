@@ -84,7 +84,8 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-08 | API routes (series CRUD, push/subscribe, cron/poll) | M0 | `DONE` | WP-06, WP-07 |
 | WP-09 | Web Push end-to-end (VAPID, sw handler, subscribe flow) | M0 | `TODO` | WP-06, WP-08 |
 | WP-10 | Library + series-detail UI (unread counts, mark progress) | M0 | `TODO` | WP-06, WP-08 |
-| WP-11 | Deploy to Vercel + Cron + PWA install verification | M0 | `WIP` | WP-08, WP-09, WP-10 |
+| ⭐ WP-AUTH | Single-user password gate (scrypt hash + signed cookie + middleware) — **deploy prerequisite** | M0 | `DONE` | WP-06, WP-08 |
+| WP-11 | Deploy to Vercel + Cron + PWA install verification | M0 | `WIP` | WP-08, WP-AUTH |
 | WP-13 | `lib/completion.ts` (pure) — plan-to-read heuristic | M1 | `TODO` | WP-00 |
 | WP-14 | `lib/dedup.ts` (pure) — "already read this?" | M1 | `TODO` | WP-00 |
 | WP-15 | `lib/search.ts` (pure) — filter/query building | M1 | `TODO` | WP-00 |
@@ -100,6 +101,8 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-02 | `lib/srs/sm2.ts` (pure, test-first) — SM-2 scheduler | M3 | `TODO` | WP-00 |
 | WP-24 | Vocab capture + SM-2 review UI (wire WP-02) | M3 | `TODO` | WP-02, WP-23 |
 | WP-25 | Korean sidecar (`services/korean-nlp`) + `tokenize/ko.ts` | M3 | `TODO` | WP-23, WP-24 |
+| WP-PASSKEY | Auth upgrade: passkeys / WebAuthn (passwordless, phishing-resistant) | M4 | `TODO` | WP-AUTH |
+| WP-EXPORT | One-click data export (`/api/export` → JSON) — own-your-data insurance | M1 | `TODO` | WP-AUTH |
 | WP-26 | Extras: TTS, offline caching, Anki export, multi-user | M4 | `TODO` | — |
 
 ---
@@ -309,6 +312,20 @@ real series needs it.
 
 ## Changelog
 
+- **2026-07-21** — **WP-AUTH (single-user gate) done.** scrypt-hashed passphrase in env (colon-separated so it
+  survives dotenv-expand — caught in live testing), HMAC-signed `HttpOnly`/`Secure`/`SameSite` session cookie (Web
+  Crypto, edge+node), Next edge **middleware** gating all pages/APIs (fail-closed in prod, open in unconfigured dev;
+  allowlist for login/auth/cron/PWA). Login screen + logout on the design system; app chrome moved into an `(app)`
+  route group so `/login` is header-less. `npm run auth:hash` generates the hash. **24 new unit tests** (114 total)
+  for passphrase/session/access; the whole gate flow **driven end-to-end against the running app** (401/redirect,
+  wrong/right passphrase, cookie, logout). ADR 0002 records the model. Prereq for public deploy now met.
+- **2026-07-21** — **Deploy/security decisions.** Hosting = **Vercel + managed Postgres** (Neon/Supabase; ~$0/mo on
+  free tiers, optional ~$12/yr custom domain). Security: the API is currently unauthenticated (bare `userId`), so a
+  **single-user password gate is a hard prerequisite for public deploy** → new **WP-AUTH**: a generated high-entropy
+  passphrase stored as a **scrypt hash** in env (never the raw secret) + a signed `HttpOnly`/`Secure` session cookie +
+  Next middleware gating all pages/APIs (cron keeps its own `CRON_SECRET`). Passkeys/WebAuthn deferred as **WP-PASSKEY**
+  (M4). Added **WP-EXPORT** (data export) as own-your-data insurance. `getCurrentUserId()` stays `'local'` — the gate
+  guards access to the single account, not multi-user.
 - **2026-07-21** — **WP-11 in progress: integration tests + deploy config done; live deploy pending owner.** Stood up a
   local Postgres (`brew postgresql@17`, `webnovel_test`); the offline initial migration **applies cleanly to real
   Postgres**. Refactored `server/services` for an injectable `fetch` so integration tests use the **real DB + a fake
