@@ -6,6 +6,9 @@ import type { FailureType } from '../../lib/health';
 import { pollAllSources as pollAllCore, type PollableSource, type PollEffects, type PollPorts } from './poll';
 import { addSeries as addSeriesCore, type AddSeriesInput, type AddSeriesResult } from './addSeries';
 
+export { listSeries, getSeries, updateSeries } from './series';
+export { savePushSubscription } from './push';
+
 /**
  * Prisma/HTTP bindings for the poll + add-series orchestration. The logic lives in
  * ./poll and ./addSeries (unit-tested with fakes); this file is the thin edge that

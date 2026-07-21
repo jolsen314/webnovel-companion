@@ -81,7 +81,7 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-FE | Feed/page fetcher (HTTP: realistic headers, conditional GET, Cloudflare-tolerant; injected fetch) | M0 | `DONE` | WP-05 |
 | WP-06 | Next.js + Tailwind + PWA shell (manifest + service worker) | M0 | `DONE` | WP-00 |
 | WP-07 | Services: `pollAllSources()`, `addSeries()` | M0 | `DONE` | WP-01, WP-04, WP-05, WP-FE |
-| WP-08 | API routes (series CRUD, push/subscribe, cron/poll) | M0 | `TODO` | WP-06, WP-07 |
+| WP-08 | API routes (series CRUD, push/subscribe, cron/poll) | M0 | `DONE` | WP-06, WP-07 |
 | WP-09 | Web Push end-to-end (VAPID, sw handler, subscribe flow) | M0 | `TODO` | WP-06, WP-08 |
 | WP-10 | Library + series-detail UI (unread counts, mark progress) | M0 | `TODO` | WP-06, WP-08 |
 | WP-11 | Deploy to Vercel + Cron + PWA install verification | M0 | `TODO` | WP-08, WP-09, WP-10 |
@@ -309,6 +309,14 @@ real series needs it.
 
 ## Changelog
 
+- **2026-07-21** — **WP-08 (API routes) done.** Thin App Router handlers wiring the tested services to HTTP:
+  `GET/POST /api/series` (list + add via `addSeries`), `GET/PATCH /api/series/[id]` (detail + shelf/progress update),
+  `POST /api/push/subscribe`, `GET /api/cron/poll` (Bearer-secret auth → `pollAllSources`). Extracted the testable
+  parts as pure fns: request validators (`parseAddSeriesBody`/`parseSeriesUpdate`/`parsePushSubscription`/
+  `isAuthorizedCron`) and `unreadCount` — **23 new tests (90 total)**. Prisma-backed reads/writes (`series.ts`,
+  `push.ts`) are thin, typecheck + `next build`-verified (build works with and without a DB — Prisma connects lazily),
+  integration-tested at WP-11. Documented `CRON_SECRET` + `WEBNOVEL_USER_ID` in `.env.example`. **Deferred:** actual
+  push send on new-chapter/down effects (WP-09); the Vercel cron *schedule* config (WP-11).
 - **2026-07-20** — **WP-06 (Next.js + Tailwind + PWA shell) done.** Next 16 (App Router) + React 19 + Tailwind 4
   integrated into the repo; tsconfig reconciled to serve both the strict Node lib and the DOM/JSX app; CI now also
   runs `next build`. **Design system** (via frontend-design skill): a "night reading" identity — warm ink, dimmed
