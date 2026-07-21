@@ -84,7 +84,7 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-08 | API routes (series CRUD, push/subscribe, cron/poll) | M0 | `DONE` | WP-06, WP-07 |
 | WP-09 | Web Push end-to-end (VAPID, sw handler, subscribe flow) | M0 | `TODO` | WP-06, WP-08 |
 | WP-10 | Library + series-detail UI (unread counts, mark progress) | M0 | `TODO` | WP-06, WP-08 |
-| WP-11 | Deploy to Vercel + Cron + PWA install verification | M0 | `TODO` | WP-08, WP-09, WP-10 |
+| WP-11 | Deploy to Vercel + Cron + PWA install verification | M0 | `WIP` | WP-08, WP-09, WP-10 |
 | WP-13 | `lib/completion.ts` (pure) — plan-to-read heuristic | M1 | `TODO` | WP-00 |
 | WP-14 | `lib/dedup.ts` (pure) — "already read this?" | M1 | `TODO` | WP-00 |
 | WP-15 | `lib/search.ts` (pure) — filter/query building | M1 | `TODO` | WP-00 |
@@ -309,6 +309,15 @@ real series needs it.
 
 ## Changelog
 
+- **2026-07-21** — **WP-11 in progress: integration tests + deploy config done; live deploy pending owner.** Stood up a
+  local Postgres (`brew postgresql@17`, `webnovel_test`); the offline initial migration **applies cleanly to real
+  Postgres**. Refactored `server/services` for an injectable `fetch` so integration tests use the **real DB + a fake
+  network**. Added the Vitest `integration` project harness (safety-guarded truncation) and **8 integration tests**
+  exercising all the previously typecheck-only Prisma glue (addSeries→create, poll→persist new chapters + health,
+  304, DNS-degrade, listSeries/updateSeries/progress, push upsert). `npm test` is now unit-only; `npm run
+  test:integration` is separate. **CI** gained an `integration` job (Postgres service). Deploy config: `vercel.json`
+  (daily cron `/api/cron/poll`), `vercel-build` (`prisma migrate deploy && next build`), README deploy runbook.
+  **Remaining (owner, interactive):** provision hosted Postgres, `vercel` deploy + env vars, verify PWA install.
 - **2026-07-21** — **WP-08 (API routes) done.** Thin App Router handlers wiring the tested services to HTTP:
   `GET/POST /api/series` (list + add via `addSeries`), `GET/PATCH /api/series/[id]` (detail + shelf/progress update),
   `POST /api/push/subscribe`, `GET /api/cron/poll` (Bearer-secret auth → `pollAllSources`). Extracted the testable

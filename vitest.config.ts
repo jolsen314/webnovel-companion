@@ -18,6 +18,7 @@ export default defineConfig({
         test: {
           name: 'integration',
           include: ['tests/integration/**/*.test.ts'],
+          setupFiles: ['./tests/integration/setup.ts'],
           // Serialize: all integration files share one worker so DB state can't race.
           poolOptions: { forks: { singleFork: true } },
         },

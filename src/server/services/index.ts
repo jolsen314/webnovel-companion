@@ -16,7 +16,13 @@ export { savePushSubscription } from './push';
  * (WP-11), not by unit tests.
  */
 
-const fetchPort = (url: string, opts?: { etag?: string | null; lastModified?: string | null }): Promise<PoliteResult> =>
+/** The HTTP port. Defaults to real `politeFetch`; integration tests inject a fake. */
+export type FetchImpl = (
+  url: string,
+  opts?: { etag?: string | null; lastModified?: string | null },
+) => Promise<PoliteResult>;
+
+const fetchPort: FetchImpl = (url, opts) =>
   politeFetch(url, { etag: opts?.etag ?? undefined, lastModified: opts?.lastModified ?? undefined });
 
 function toSeriesMatch(type: string, value: string | null): SeriesMatch {
@@ -53,9 +59,9 @@ function rowToPollable(row: {
   };
 }
 
-function pollPorts(): PollPorts & { loadActiveSources: () => Promise<PollableSource[]> } {
+function pollPorts(fetchImpl: FetchImpl): PollPorts & { loadActiveSources: () => Promise<PollableSource[]> } {
   return {
-    fetch: fetchPort,
+    fetch: fetchImpl,
     loadActiveSources: async () => (await db.source.findMany({ where: { isActive: true } })).map(rowToPollable),
     loadStoredChapters: async (seriesId) =>
       (await db.chapter.findMany({ where: { seriesId }, select: { guid: true, url: true } })).map((c) => ({
@@ -100,14 +106,14 @@ function pollPorts(): PollPorts & { loadActiveSources: () => Promise<PollableSou
 }
 
 /** Poll every active source, diffing new chapters and updating health. */
-export function pollAllSources(): Promise<PollEffects[]> {
-  return pollAllCore(pollPorts());
+export function pollAllSources(fetchImpl: FetchImpl = fetchPort): Promise<PollEffects[]> {
+  return pollAllCore(pollPorts(fetchImpl));
 }
 
 /** Resolve a pasted URL to a feed (or page-watch) and create the Series + Source. */
-export function addSeries(input: AddSeriesInput): Promise<AddSeriesResult> {
+export function addSeries(input: AddSeriesInput, fetchImpl: FetchImpl = fetchPort): Promise<AddSeriesResult> {
   return addSeriesCore(input, {
-    fetch: fetchPort,
+    fetch: fetchImpl,
     createSeries: async (r) => {
       const series = await db.series.create({
         data: {

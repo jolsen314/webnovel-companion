@@ -243,7 +243,17 @@ Generate VAPID keys once with `npx web-push generate-vapid-keys` and put them in
 
 ## Deployment
 
-Deploy to Vercel; add a **Vercel Cron** entry hitting `/api/cron/poll` every ~10–15 min. Install the deployed site as a PWA (on iOS, push requires Add-to-Home-Screen, iOS 16.4+).
+Deploy to Vercel against a hosted Postgres:
+
+1. **Provision Postgres** (Neon, Vercel Postgres, or Supabase — any plain Postgres) and copy its connection string.
+2. **Import the repo into Vercel.** Set env vars: `DATABASE_URL`, `CRON_SECRET` (a random string — Vercel Cron sends it as a Bearer token the `/api/cron/poll` route checks), and later the `VAPID_*` keys for push.
+3. **Migrations run on deploy** via the `vercel-build` script (`prisma migrate deploy && next build`); `postinstall` runs `prisma generate`.
+4. **Cron** is configured in [`vercel.json`](vercel.json): `/api/cron/poll` runs **once a day** (08:00 UTC) — a daily digest of new chapters, which fits the Hobby plan.
+5. **Install as a PWA.** On iOS, Web Push requires Add-to-Home-Screen (iOS 16.4+).
+
+**CI** (GitHub Actions) runs typecheck, unit tests, `next build`, and — in a separate job with a Postgres service — the integration tests (`prisma migrate deploy` + `npm run test:integration`).
+
+Local integration tests: start Postgres, then `DATABASE_URL="postgresql://…/webnovel_test" npm run test:integration` (the DB name must contain `test`).
 
 ---
 

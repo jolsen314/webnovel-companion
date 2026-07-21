@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "vercel-build": "prisma migrate deploy && next build",
     "start": "next start",
-    "test": "vitest run",
+    "test": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "postinstall": "prisma generate",
