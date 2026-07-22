@@ -280,6 +280,19 @@ Trade-off: feed = cheap/fast but lossy on dense sites; TOC = complete + carries 
 Cloudflare-exposed. A hybrid (feed as fast trigger, TOC as periodic source of truth) is possible — defer until a
 real series needs it.
 
+**Page-watch is primary, not a fallback, for two common cases (owner, 2026-07-22):**
+1. **Dense feed × daily cadence = permanent misses.** A capped window (10–30 items) polled once/day means a busy
+   multi-novel site can publish more than a window's worth between polls, so a tracked novel's chapter appears *and
+   rolls off* before we ever poll it — it's never caught by the feed. The series-scoped TOC (page-watch) is immune.
+2. **Paid/advance sites: the feed is the wrong signal.** The RSS item fires when a chapter is *published* — usually
+   **locked**. The valuable event, *becoming free* (the free frontier advancing, WP-20), never re-emits in the feed;
+   it lives only in the TOC lock markers. So for paid-heavy sites (e.g. render-clearable-source), feed tracking pings locked
+   chapters you can't read and misses the unlocks that matter — **page-watch is the core mechanism, feed is degraded.**
+
+→ This raises the real-world priority of **WP-17 (page-watch)** + **WP-20 (free frontier)** + a **Cloudflare-capable
+fetch** (headless browser) above their nominal M1 slot for the owner's actual reading (dense, paid-heavy, CF-guarded
+translator sites). Revisit ordering.
+
 **Per-WP sub-tasks folded from the spike:**
 
 - **WP-05 (feed parse + discovery):** use rss-parser (decode HTML-entity URLs like `&#038;` before canonicalizing);
