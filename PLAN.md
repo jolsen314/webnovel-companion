@@ -41,12 +41,14 @@ To re-prioritize, move rows and update the `NEXT` marker. Don't silently reorder
 
 ## Current focus
 
-> **NEXT:** owner's call — candidates: **WP-05** (feed parse/discovery, well-specified by the spike), **WP-06**
-> (Next.js + PWA shell), or **WP-07** (services — now unblocked: depends on WP-01/04/05).
+> **NEXT: WP-17 (page-watch)** — pulled ahead of WP-09 (push) per the 2026-07-22 decision: page-watch is the
+> *primary* mechanism for the owner's real reading (dense multi-novel feeds that saturate under daily polling, and
+> paid/advance sites where the "now free" event lives only in the TOC). Then WP-20 (free frontier), then WP-09 (push).
 
-WP-00 (harness), WP-GH/WP-CI (repo + CI), **WP-01 (diff)**, **WP-03 (health)**, and **WP-04 (Prisma schema +
-offline initial migration + `db.ts` singleton)** are done. **WP-02 (sm2) is deprioritized to M3.** The tested-core
-+ data-model foundation is in place; remaining M0 is the app spine (feeds/Next/push/UI/deploy).
+The MVP is **live on Vercel + Neon** — the feed pipeline, single-user auth gate, and library/detail UI all shipped
+(M0 mostly done; WP-09 push remains). Remaining priority order is reordered to **WP-17 → WP-20 → WP-09**. The
+Cloudflare-capable (headless-browser) fetch is a separate, as-needed escalation for JS-challenged TOCs
+(e.g. render-clearable-source); start WP-17 on reachable sites first.
 
 ---
 
@@ -82,6 +84,8 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-06 | Next.js + Tailwind + PWA shell (manifest + service worker) | M0 | `DONE` | WP-00 |
 | WP-07 | Services: `pollAllSources()`, `addSeries()` | M0 | `DONE` | WP-01, WP-04, WP-05, WP-FE |
 | WP-08 | API routes (series CRUD, push/subscribe, cron/poll) | M0 | `DONE` | WP-06, WP-07 |
+| ⭐ WP-17 | Page-watch — **primary** for dense/paid sites (`lib/feeds/pageWatch.ts` + per-site adapters) | M1↑ | `NEXT` | WP-01, WP-05 |
+| ⭐ WP-20 | Paid→free frontier + "now free" (free frontier off the TOC) | M1↑ | `TODO` | WP-07, WP-17 |
 | WP-09 | Web Push end-to-end (VAPID, sw handler, subscribe flow) | M0 | `TODO` | WP-06, WP-08 |
 | ⭐ WP-10 | Library + series-detail UI (unread counts, mark progress) | M0 | `DONE` | WP-06, WP-08 |
 | ⭐ WP-AUTH | Single-user password gate (scrypt hash + signed cookie + middleware) — **deploy prerequisite** | M0 | `DONE` | WP-06, WP-08 |
@@ -90,10 +94,8 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-14 | `lib/dedup.ts` (pure) — "already read this?" | M1 | `TODO` | WP-00 |
 | WP-15 | `lib/search.ts` (pure) — filter/query building | M1 | `TODO` | WP-00 |
 | WP-16 | Host-level health aggregation (site-down vs novel-moved) | M1 | `TODO` | WP-03, WP-07 |
-| WP-17 | Page-watch fallback (`lib/feeds/pageWatch.ts`) | M1 | `TODO` | WP-01, WP-05 |
 | WP-18 | Completed shelf + backfill + "Move to Completed?" | M1 | `TODO` | WP-10 |
 | WP-19 | Non-destructive re-pointing + "find new source" helper | M1 | `TODO` | WP-16, WP-18 |
-| WP-20 | Paid→free frontier tracking + "now free" notification | M1 | `TODO` | WP-07, WP-17 |
 | WP-RC | Dense-feed miss-detection + TOC reconcile fallback | M1 | `TODO` | WP-05, WP-07, WP-17 |
 | WP-21 | Plan-to-read completion watch (wire WP-13 + notify) — compare **max chapter number** vs target, not post count (split-chapter safe; see CONTEXT.md) | M1 | `TODO` | WP-13, WP-07 |
 | WP-22 | MV3 browser extension (progress capture + "track this") | M2 | `TODO` | WP-08 |
