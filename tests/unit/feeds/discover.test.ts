@@ -3,6 +3,7 @@ import {
   discoverFeeds,
   guessFeedUrls,
   chooseSeriesMatch,
+  fallbackSeriesMatch,
   filterBySeriesMatch,
 } from '../../../src/lib/feeds/discover';
 import type { FeedItem } from '../../../src/lib/feeds/diff';
@@ -71,13 +72,40 @@ describe('chooseSeriesMatch', () => {
     });
   });
 
-  test('multi-novel feed where no category matches the slug → PATH_PREFIX', () => {
+  test('some items under the series path (mixed feed) → PATH_PREFIX', () => {
     const items = [
-      item('https://reader.example/series/first/first-90/', ['Normal', 'First Novel']),
-      item('https://reader.example/series/second/second-439/', ['Normal', 'Second Novel']),
+      item('https://reader.example/series/zeta/zeta-5/', ['Zeta Chronicles']), // this series (category doesn't slug-match)
+      item('https://reader.example/series/other/other-9/', ['Other']), // a different one
     ];
 
     expect(chooseSeriesMatch(items, 'https://reader.example/series/zeta/')).toEqual({
+      type: 'PATH_PREFIX',
+      value: '/series/zeta/',
+    });
+  });
+
+  test('series not identifiable in the current window (no category or path tie) → null', () => {
+    const items = [
+      item('https://reader.example/first-90/', ['First Novel']),
+      item('https://reader.example/second-439/', ['Second Novel']),
+    ];
+
+    expect(chooseSeriesMatch(items, 'https://reader.example/novel/zeta/')).toBeNull();
+  });
+});
+
+describe('fallbackSeriesMatch (series-scoped guess when not in the window)', () => {
+  test('categorized feed → CATEGORY keyed by the series slug (fills in when it next publishes)', () => {
+    const items = [item('https://x.example/other-1/', ['Some Other Novel'])];
+    expect(fallbackSeriesMatch(items, 'https://x.example/novel/silver-moon/')).toEqual({
+      type: 'CATEGORY',
+      value: 'silver-moon',
+    });
+  });
+
+  test('uncategorized feed → PATH_PREFIX from the series URL', () => {
+    const items = [item('https://x.example/other-1/')];
+    expect(fallbackSeriesMatch(items, 'https://x.example/series/zeta/')).toEqual({
       type: 'PATH_PREFIX',
       value: '/series/zeta/',
     });
@@ -96,6 +124,11 @@ describe('filterBySeriesMatch', () => {
 
   test('CATEGORY keeps only items carrying that category', () => {
     expect(filterBySeriesMatch(items, { type: 'CATEGORY', value: 'Silver Moon Saga' })).toEqual([a]);
+  });
+
+  test('CATEGORY also matches by slug (for the slug-keyed fallback)', () => {
+    const d = item('https://x.example/tw-1/', ['The Recurring Villain']);
+    expect(filterBySeriesMatch([d], { type: 'CATEGORY', value: 'the-recurring-villain' })).toEqual([d]);
   });
 
   test('PATH_PREFIX keeps only items whose url path starts with the prefix', () => {

@@ -69,11 +69,11 @@ describe('addSeries', () => {
     expect(result.resolved.chapters.map((c) => c.guid)).toEqual(['g1']);
   });
 
-  test('no advertised feed but a guessed path works → FEED from the guess', async () => {
+  test('no advertised feed but a guessed feed we can isolate (by category) works → FEED', async () => {
     const url = 'https://translator.example/novel/beta/';
     const p = ports({
       [url]: ok('<html><head></head><body>Novel</body></html>'), // no <link alternate>
-      'https://translator.example/feed/': ok(RSS(ITEM('g1', 'https://translator.example/beta-1/'))),
+      'https://translator.example/feed/': ok(RSS(ITEM('g1', 'https://translator.example/beta-1/', 'Beta'))),
       // the page-level guess (…/novel/beta/feed/) is left to default 404
     });
 
@@ -81,6 +81,7 @@ describe('addSeries', () => {
 
     expect(result.resolved.type).toBe('FEED');
     expect(result.resolved.feedUrl).toBe('https://translator.example/feed/');
+    expect(result.resolved.match).toEqual({ type: 'CATEGORY', value: 'Beta' });
   });
 
   test('no feed anywhere → PAGE_WATCH source with no chapters yet (WP-17)', async () => {
@@ -94,10 +95,39 @@ describe('addSeries', () => {
     expect(result.resolved.chapters).toEqual([]);
   });
 
-  test('unreachable page at add-time throws (surfaced to the user)', async () => {
-    const url = 'https://dead.example/novel/x/';
-    const p = ports({ [url]: { outcome: 'DNS' } });
+  test('page blocked (Cloudflare 4xx) but a guessed feed we can isolate → resolves a FEED source', async () => {
+    const url = 'https://blocked.example/novel/x/';
+    const p = ports({
+      [url]: { outcome: 'HTTP_4XX', status: 403 }, // Cloudflare challenges the page
+      'https://blocked.example/feed/': ok(RSS(ITEM('g1', 'https://blocked.example/x-1/', 'X'))), // ...but /feed/ serves + we can isolate by category
+    });
 
-    await expect(addSeries({ url }, p)).rejects.toThrow(/could not reach/i);
+    const result = await addSeries({ url }, p);
+
+    expect(result.resolved.type).toBe('FEED');
+    expect(result.resolved.feedUrl).toBe('https://blocked.example/feed/');
+    expect(result.resolved.chapters).toHaveLength(1);
+  });
+
+  test('guessed site-wide feed, series not in the window → adds empty with a series-scoped filter (fills in later)', async () => {
+    const url = 'https://blocked.example/novel/not-in-window/';
+    const p = ports({
+      [url]: { outcome: 'HTTP_4XX', status: 403 },
+      // /feed/ serves, but only a different novel is in the current window.
+      'https://blocked.example/feed/': ok(RSS(ITEM('g1', 'https://blocked.example/other-1/', 'Some Other Novel'))),
+    });
+
+    const result = await addSeries({ url }, p);
+
+    expect(result.resolved.type).toBe('FEED');
+    expect(result.resolved.chapters).toHaveLength(0); // nothing to show yet…
+    expect(result.resolved.match).toEqual({ type: 'CATEGORY', value: 'not-in-window' }); // …but this fills when it publishes
+  });
+
+  test('neither the page nor any feed is reachable → throws', async () => {
+    const url = 'https://dead.example/novel/x/';
+    const p = ports({ [url]: { outcome: 'DNS' } }); // page dead, all feed guesses 404 by default
+
+    await expect(addSeries({ url }, p)).rejects.toThrow(/reach|feed/i);
   });
 });

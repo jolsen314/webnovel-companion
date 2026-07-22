@@ -294,7 +294,18 @@ real series needs it.
   chapters, so lock state comes from page-watch.
 - **WP-RC (dense-feed reconcile):** miss-detection (number gap + feed-window saturation) → immediate TOC scan;
   periodic reconcile for at-risk Sources; may add `lastReconciledAt` + a feed-window marker to `Source` (defer to
-  the WP-04 DB pause).
+  the WP-04 DB pause). **Also the escalation for the add-time "couldn't isolate" case** (below): a series added with
+  a best-effort slug/path filter but no chapters, that never fills after N cycles, should escalate to page-watch.
+
+**Add-time isolation fallback (built 2026-07-22).** When a series' only reachable feed is a **site-wide, multi-novel**
+one and the novel isn't in the current window, `addSeries` does *not* reject or grab the wrong novel — it adds the
+series (correct title from the URL) with a **series-scoped guess** (`fallbackSeriesMatch`: category-slug if the feed
+is categorized, else URL path). It shows 0 chapters until the novel next publishes, when the filter captures it from
+the feed. If it never fills, WP-RC escalates to page-watch. **Cloudflare caveat:** where the *page* is JS-challenged
+(e.g. render-clearable-source — 403 `cf-mitigated: challenge`) plain page-watch also fails; ongoing releases still arrive via
+`/feed/` (which isn't challenged), but backfill/true page-watch needs a **headless-browser escalation** (separate
+service; not Vercel serverless) or an unblock service — best-effort per the README. Near-term workaround: track such
+a novel via its NovelUpdates feed instead.
 
 ## Backlog / open questions
 
@@ -312,6 +323,16 @@ real series needs it.
 
 ## Changelog
 
+- **2026-07-22** — **Fixed add-time Cloudflare failure + wrong-novel capture (bug found while testing render-clearable-source).**
+  Root cause (systematic-debugging): `addSeries` threw on the page-403 *before* trying feed guesses, even though the
+  site's `/feed/` serves fine (Cloudflare only challenges HTML pages). Fixed to try feed guesses even when the page is
+  blocked. Verifying that against the real site exposed a worse bug: the site `/feed/` is multi-novel and the target
+  wasn't in the window, so the matcher fell to `WHOLE_FEED` and captured the **wrong novel** + the site's title. Fixed:
+  `chooseSeriesMatch` now returns positive matches only (`null` when it can't isolate); `addSeries` falls back to a
+  **series-scoped guess** (`fallbackSeriesMatch`, slug- or path-keyed) for guessed site feeds, trusting `WHOLE_FEED`
+  only for page-advertised feeds; `filterBySeriesMatch` CATEGORY now matches by slug too, so the fallback fills in when
+  the novel next publishes; title comes from the URL, not the site feed. Verified live: render-clearable-source now adds the
+  *correct* novel, empty, with a slug filter. 127 tests. (Page-watch escalation for still-blocked sites → WP-RC/WP-17.)
 - **2026-07-22** — **WP-10 (library + detail UI) done.** The app is now *usable*. **Library** = a release stream of
   series cards on the design system — the bookmark-ribbon + "N new" badge on unread series (the signature landing on
   real data), health dots (healthy/degraded/down), unread counts, latest chapter, status chips; empty-state when the

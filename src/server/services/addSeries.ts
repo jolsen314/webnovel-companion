@@ -3,6 +3,7 @@ import {
   discoverFeeds,
   guessFeedUrls,
   chooseSeriesMatch,
+  fallbackSeriesMatch,
   filterBySeriesMatch,
   type SeriesMatch,
 } from '../../lib/feeds/discover';
@@ -60,12 +61,12 @@ export async function addSeries(input: AddSeriesInput, ports: AddSeriesPorts): P
   const host = new URL(url).host;
 
   const page = await ports.fetch(url);
-  if (page.outcome !== 'SUCCESS') {
-    throw new Error(`Could not reach ${url} to add it (${page.outcome}).`);
-  }
+  const pageOk = page.outcome === 'SUCCESS' && !page.notModified;
 
-  // Candidate feeds: advertised <link alternate>, else common WordPress guesses.
-  const advertised = discoverFeeds(page.body ?? '', url).map((f) => f.url);
+  // Candidate feeds: advertised <link alternate> if we could read the page, else
+  // common WordPress guesses. We try guesses even when the page fetch FAILED —
+  // Cloudflare frequently challenges the HTML page while `/feed/` still serves.
+  const advertised = pageOk ? discoverFeeds(page.body, url).map((f) => f.url) : [];
   const candidates = advertised.length > 0 ? advertised : guessFeedUrls(url);
 
   let feedUrl: string | null = null;
@@ -79,8 +80,30 @@ export async function addSeries(input: AddSeriesInput, ports: AddSeriesPorts): P
     }
   }
 
-  // No feed found → page-watch mode (TOC chapter extraction is WP-17).
-  if (feedUrl === null || feedBody === null) {
+  // A feed is reachable → track via FEED (works even if the page itself was blocked).
+  if (feedUrl !== null && feedBody !== null) {
+    const parsed = await parseFeed(feedBody);
+    const usedGuesses = advertised.length === 0;
+    const positive = chooseSeriesMatch(parsed.items, url);
+    // A page-advertised feed is the series' own feed → trust WHOLE_FEED. A guessed
+    // site-wide feed we can't isolate → a series-scoped guess that captures nothing
+    // now but fills in when the series next publishes (WP-RC escalates if it never does).
+    const match = positive ?? (usedGuesses ? fallbackSeriesMatch(parsed.items, url) : { type: 'WHOLE_FEED' });
+    const chapters = filterBySeriesMatch(parsed.items, match);
+    const seriesTitle =
+      input.title ??
+      (positive?.type === 'CATEGORY'
+        ? positive.value // exact per-novel category = the novel's name
+        : match.type === 'WHOLE_FEED'
+          ? (parsed.title ?? titleFromUrl(url)) // series' own feed → channel title is the novel
+          : titleFromUrl(url)); // slug/path fallback → humanize the URL, not the site name
+    const resolved: ResolvedSource = { seriesTitle, sourceUrl: url, host, feedUrl, type: 'FEED', match, chapters };
+    const { seriesId } = await ports.createSeries(resolved);
+    return { seriesId, resolved };
+  }
+
+  // No feed, but the page loads → page-watch mode (TOC extraction is WP-17).
+  if (pageOk) {
     const resolved: ResolvedSource = {
       seriesTitle: input.title ?? titleFromUrl(url),
       sourceUrl: url,
@@ -94,18 +117,8 @@ export async function addSeries(input: AddSeriesInput, ports: AddSeriesPorts): P
     return { seriesId, resolved };
   }
 
-  const parsed = await parseFeed(feedBody);
-  const match = chooseSeriesMatch(parsed.items, url);
-  const chapters = filterBySeriesMatch(parsed.items, match);
-  const resolved: ResolvedSource = {
-    seriesTitle: input.title ?? parsed.title ?? titleFromUrl(url),
-    sourceUrl: url,
-    host,
-    feedUrl,
-    type: 'FEED',
-    match,
-    chapters,
-  };
-  const { seriesId } = await ports.createSeries(resolved);
-  return { seriesId, resolved };
+  // Neither the page nor any feed is reachable.
+  throw new Error(
+    `Couldn’t reach ${host} or find a feed for it — the site may be blocking automated requests (e.g. Cloudflare).`,
+  );
 }
