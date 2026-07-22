@@ -83,9 +83,9 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-07 | Services: `pollAllSources()`, `addSeries()` | M0 | `DONE` | WP-01, WP-04, WP-05, WP-FE |
 | WP-08 | API routes (series CRUD, push/subscribe, cron/poll) | M0 | `DONE` | WP-06, WP-07 |
 | WP-09 | Web Push end-to-end (VAPID, sw handler, subscribe flow) | M0 | `TODO` | WP-06, WP-08 |
-| WP-10 | Library + series-detail UI (unread counts, mark progress) | M0 | `TODO` | WP-06, WP-08 |
+| ⭐ WP-10 | Library + series-detail UI (unread counts, mark progress) | M0 | `DONE` | WP-06, WP-08 |
 | ⭐ WP-AUTH | Single-user password gate (scrypt hash + signed cookie + middleware) — **deploy prerequisite** | M0 | `DONE` | WP-06, WP-08 |
-| WP-11 | Deploy to Vercel + Cron + PWA install verification | M0 | `WIP` | WP-08, WP-AUTH |
+| WP-11 | Deploy to Vercel + Cron + PWA install verification | M0 | `DONE` | WP-08, WP-AUTH |
 | WP-13 | `lib/completion.ts` (pure) — plan-to-read heuristic | M1 | `TODO` | WP-00 |
 | WP-14 | `lib/dedup.ts` (pure) — "already read this?" | M1 | `TODO` | WP-00 |
 | WP-15 | `lib/search.ts` (pure) — filter/query building | M1 | `TODO` | WP-00 |
@@ -312,6 +312,19 @@ real series needs it.
 
 ## Changelog
 
+- **2026-07-22** — **WP-10 (library + detail UI) done.** The app is now *usable*. **Library** = a release stream of
+  series cards on the design system — the bookmark-ribbon + "N new" badge on unread series (the signature landing on
+  real data), health dots (healthy/degraded/down), unread counts, latest chapter, status chips; empty-state when the
+  shelf is bare. **Add-series form** (`/add`, was 404) posts to the API. **Series detail** (`/series/[id]`): chapter
+  list with a read boundary, mark-progress ("mark read"/"current"), and status/rating controls (PATCH). Pages are
+  server components calling the services directly (`dynamic`), mutations go through the gated API. Added pure
+  `relativeTime` (7 tests, 121 total). **Verified with a seeded local DB**: library + detail screenshots (desktop +
+  mobile) look on-brand, and the live PATCH round-trip persists (rating/status). Deploy will pick it up on next push.
+- **2026-07-21** — **WP-11 (deploy) done.** Live at **https://webnovel-companion.vercel.app** — Vercel + Neon prod
+  (Postgres 18), `vercel-build` applied the migration, daily cron (`vercel.json`). Verified in prod: `/`→307→/login,
+  `/login`→200, `/api/series`→401 (gated, DB path wired — not 500), `/api/cron/poll`→401 (secret set), HTTPS/HTTP2;
+  owner confirmed passphrase login + PWA install. **Note:** app is deployed & secure but not yet *usable* — no
+  add/library UI (WP-10) and no push (WP-09); the "Add a series" link 404s until WP-10.
 - **2026-07-21** — **Neon prod DB connected (WP-11 DB-host step).** Ran Neon's agent-guided `neon init` against the
   existing **webnovel-companion** project (org `Jayden`, AWS us-east-1, **Postgres 18** — matches the CI matrix). The
   offline `20260716180156_init` migration now **`migrate deploy`-ed to Neon prod**; all 5 tables (`Series`, `Source`,

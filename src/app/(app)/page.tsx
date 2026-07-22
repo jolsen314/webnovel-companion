@@ -1,6 +1,47 @@
 import Link from 'next/link';
+import { listSeries } from '../../server/services';
+import { relativeTime } from '../../lib/format';
 
-export default function HomePage() {
+export const dynamic = 'force-dynamic';
+
+type SeriesRow = Awaited<ReturnType<typeof listSeries>>[number];
+
+function SeriesCard({ series, now }: { series: SeriesRow; now: Date }) {
+  const { latestChapter: latest, unread } = series;
+  return (
+    <Link href={`/series/${series.id}`} className="card">
+      {unread > 0 && <span className="card__ribbon" aria-hidden="true" />}
+      <div className="card__body">
+        <div className="card__top">
+          <h2 className="card__title">{series.title}</h2>
+          {unread > 0 && <span className="card__unread">{unread} new</span>}
+        </div>
+        <p className="card__latest">
+          {latest ? (
+            <>
+              {latest.number != null && <span className="card__num">#{latest.number} </span>}
+              <b>{latest.title}</b>
+            </>
+          ) : (
+            'No chapters yet'
+          )}
+        </p>
+        <div className="card__meta">
+          {series.status !== 'READING' && <span className="status-chip">{series.status}</span>}
+          {series.activeSource && (
+            <>
+              <span className={`health-dot health-dot--${series.activeSource.health}`} title={series.activeSource.health} />
+              <span>{series.activeSource.host}</span>
+            </>
+          )}
+          {latest?.at && <span>· {relativeTime(new Date(latest.at), now)}</span>}
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function EmptyState() {
   return (
     <section className="hero">
       <p className="hero__eyebrow">Your shelf</p>
@@ -17,13 +58,31 @@ export default function HomePage() {
         <Link href="/add" className="btn btn--primary">
           Add your first series
         </Link>
-        <Link href="/completed" className="btn">
-          Browse the completed shelf
-        </Link>
       </div>
-      <p className="hero__note">
-        On iPhone, notifications need the app installed first: tap Share, then <code>Add to Home Screen</code>.
-      </p>
+    </section>
+  );
+}
+
+export default async function LibraryPage() {
+  const series = await listSeries();
+  if (series.length === 0) return <EmptyState />;
+
+  const now = new Date();
+  const unreadTotal = series.reduce((n, s) => n + s.unread, 0);
+
+  return (
+    <section className="stream">
+      <div className="stream__head">
+        <h1 className="stream__title">Your shelf</h1>
+        <span className="stream__meta">
+          {series.length} series{unreadTotal > 0 ? ` · ${unreadTotal} unread` : ''}
+        </span>
+      </div>
+      <div className="stream__list">
+        {series.map((s) => (
+          <SeriesCard key={s.id} series={s} now={now} />
+        ))}
+      </div>
     </section>
   );
 }

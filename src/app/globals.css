@@ -196,6 +196,142 @@ body {
   color: var(--color-paper);
 }
 
+/* ── Series detail ──────────────────────────────────────────────────────── */
+.detail {
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: clamp(1.5rem, 5vh, 3rem) clamp(1rem, 4vw, 2rem) 5rem;
+}
+.detail__back {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--color-muted);
+  text-decoration: none;
+}
+.detail__back:hover {
+  color: var(--color-glow);
+}
+.detail__title {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(1.8rem, 5vw, 2.6rem);
+  letter-spacing: -0.02em;
+  margin: 0.8rem 0 0.5rem;
+}
+.detail__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--color-muted);
+}
+.detail__meta a {
+  color: var(--color-muted);
+  text-decoration: none;
+}
+.detail__meta a:hover {
+  color: var(--color-glow);
+}
+.detail__controls {
+  display: flex;
+  gap: 1.75rem;
+  margin: 1.6rem 0;
+  padding: 1rem 1.1rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  flex-wrap: wrap;
+}
+.control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.control__label {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+.control select {
+  font: inherit;
+  color: var(--color-paper);
+  background: var(--color-ink);
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  padding: 0.4rem 0.6rem;
+}
+.stars {
+  display: flex;
+  gap: 0.15rem;
+}
+.star {
+  font-size: 1.25rem;
+  line-height: 1;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-line);
+  padding: 0;
+}
+.star--on {
+  color: var(--color-glow);
+}
+.chapters {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.chapter {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.6rem 0.2rem;
+  border-bottom: 1px solid var(--color-line);
+}
+.chapter__num {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--color-glow);
+  flex: none;
+  min-width: 2.8rem;
+}
+.chapter__title {
+  flex: 1;
+  min-width: 0;
+  color: var(--color-paper);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chapter__title:hover {
+  color: var(--color-glow);
+}
+.chapter--read .chapter__title,
+.chapter--read .chapter__num {
+  color: var(--color-muted);
+}
+.chapter__mark {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--color-muted);
+  background: none;
+  border: 1px solid var(--color-line);
+  border-radius: 6px;
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+  flex: none;
+}
+.chapter__mark:hover {
+  border-color: var(--color-glow);
+  color: var(--color-glow);
+}
+
 /* ── Login gate ─────────────────────────────────────────────────────────── */
 .login {
   position: relative;
@@ -251,6 +387,139 @@ body {
   font-size: 0.85rem;
   min-height: 1.2em;
   text-align: center;
+}
+
+/* ── Library: the release stream ────────────────────────────────────────── */
+.stream {
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: clamp(1.5rem, 5vh, 3rem) clamp(1rem, 4vw, 2rem) 5rem;
+}
+.stream__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.1rem;
+}
+.stream__title {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.7rem;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+.stream__meta {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--color-muted);
+}
+.stream__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.card {
+  display: flex;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  overflow: hidden;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.18s ease, transform 0.12s ease;
+}
+.card:hover {
+  border-color: color-mix(in oklab, var(--color-glow) 45%, var(--color-line));
+  transform: translateY(-1px);
+}
+/* the bookmark ribbon — present only on cards with unread chapters */
+.card__ribbon {
+  width: 6px;
+  background: var(--color-glow);
+  flex: none;
+}
+.card__body {
+  padding: 0.85rem 1.05rem;
+  flex: 1;
+  min-width: 0;
+}
+.card__top {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+.card__title {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 1.12rem;
+  letter-spacing: -0.01em;
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.card__unread {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #241a09;
+  background: var(--color-glow);
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  flex: none;
+}
+.card__latest {
+  color: var(--color-muted);
+  font-size: 0.9rem;
+  margin: 0.35rem 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.card__latest b {
+  color: var(--color-paper);
+  font-weight: 500;
+}
+.card__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 0.55rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--color-muted);
+}
+.card__num {
+  color: var(--color-glow);
+}
+.status-chip {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  border: 1px solid var(--color-line);
+  border-radius: 5px;
+  padding: 0.1rem 0.4rem;
+}
+.health-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+}
+.health-dot--HEALTHY {
+  background: #6fae8f;
+}
+.health-dot--DEGRADED {
+  background: var(--color-glow);
+}
+.health-dot--LIKELY_DOWN {
+  background: var(--color-down);
 }
 
 /* ── Bookmark ribbon: the signature (used on unread series cards in WP-10) ── */
