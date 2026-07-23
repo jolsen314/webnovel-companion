@@ -33,7 +33,8 @@ function normalizeCategories(categories: unknown): string[] {
  * or a guaranteed-contiguous sequence (see CONTEXT.md "chapter number").
  */
 export function parseChapterNumber(title: string): number | null {
-  const m = /\b(?:chapter|chap|ch|episode|ep)\.?\s*#?\s*(\d+(?:\.\d+)?)/i.exec(title);
+  // Allow a hyphen/underscore separator too, so URL slugs like "…-chapter-7" parse.
+  const m = /\b(?:chapter|chap|ch|episode|ep)[\s._#-]*(\d+(?:\.\d+)?)/i.exec(title);
   return m ? parseFloat(m[1]!) : null;
 }
 

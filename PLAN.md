@@ -47,8 +47,8 @@ To re-prioritize, move rows and update the `NEXT` marker. Don't silently reorder
 
 The MVP is **live on Vercel + Neon** — the feed pipeline, single-user auth gate, and library/detail UI all shipped
 (M0 mostly done; WP-09 push remains). Remaining priority order is reordered to **WP-17 → WP-20 → WP-09**. The
-Cloudflare-capable (headless-browser) fetch is a separate, as-needed escalation for JS-challenged TOCs
-(e.g. render-clearable-source); start WP-17 on reachable sites first.
+Cloudflare-capable (headless-browser) fetch is a separate, as-needed escalation for JS-rendered / Cloudflare-challenged
+TOCs; start WP-17 on reachable sites first.
 
 ---
 
@@ -84,7 +84,8 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-06 | Next.js + Tailwind + PWA shell (manifest + service worker) | M0 | `DONE` | WP-00 |
 | WP-07 | Services: `pollAllSources()`, `addSeries()` | M0 | `DONE` | WP-01, WP-04, WP-05, WP-FE |
 | WP-08 | API routes (series CRUD, push/subscribe, cron/poll) | M0 | `DONE` | WP-06, WP-07 |
-| ⭐ WP-17 | Page-watch — **primary** for dense/paid sites (`lib/feeds/pageWatch.ts` + per-site adapters) | M1↑ | `NEXT` | WP-01, WP-05 |
+| ⭐ WP-17 | Page-watch — **primary** for dense/paid sites (`lib/feeds/pageWatch.ts`; framework adapters + generic) | M1↑ | `WIP` | WP-01, WP-05 |
+| WP-17b | Hard sources: headless/API fetch for JS-rendered + Cloudflare-challenged TOCs | M1↑ | `TODO` | WP-17 |
 | ⭐ WP-20 | Paid→free frontier + "now free" (free frontier off the TOC) | M1↑ | `TODO` | WP-07, WP-17 |
 | WP-09 | Web Push end-to-end (VAPID, sw handler, subscribe flow) | M0 | `TODO` | WP-06, WP-08 |
 | ⭐ WP-10 | Library + series-detail UI (unread counts, mark progress) | M0 | `DONE` | WP-06, WP-08 |
@@ -234,25 +235,25 @@ shape matches the `Source` health fields in the README (`health`, `consecutiveFa
 
 ## Spike findings — real feed fetching (2026-07-16)
 
-Throwaway spikes (`scratchpad/feed-spike.mjs`, `feed-spike2.mjs`) probed 5 real series across concat-title-source,
-dense-feed-source, cf-wordpress-source, loadmore-source, render-clearable-source. Verdicts:
+Throwaway spikes (`scratchpad/feed-spike.mjs`, `feed-spike2.mjs`) probed 5 real series across a custom-app source,
+a WordPress source, a multi-novel WordPress source, a JS-rendered source, a Cloudflare-challenged source. Verdicts:
 
-- **guid varies, exactly as feared → our guid-AND-url matching is validated.** concat-title-source: guid = chapter permalink
-  (`isPermaLink=true`). WordPress (dense-feed-source, chrysanthemum): guid = opaque `?p=ID` (`isPermaLink=false`) ≠ link.
-- **Chapter links validated; utm-stripping validated.** dense-feed-source links carry `?utm_source=rss&utm_medium=…`.
+- **guid varies, exactly as feared → our guid-AND-url matching is validated.** a custom-app source: guid = chapter permalink
+  (`isPermaLink=true`). WordPress (a WordPress source, a multi-novel WordPress source): guid = opaque `?p=ID` (`isPermaLink=false`) ≠ link.
+- **Chapter links validated; utm-stripping validated.** a WordPress source links carry `?utm_source=rss&utm_medium=…`.
   Links also arrive **HTML-entity-encoded** (`&#038;`) → WP-05 must use a real XML parser (rss-parser) to decode
   before canonicalizing, not regex.
 - **Split-chapter convention confirmed in the wild:** `"…Part 2 Chapter 407: Night and Light (3)"`.
-- **Conditional GET is not universal.** WordPress → clean `304`. concat-title-source (custom) → **no ETag/Last-Modified**. The
+- **Conditional GET is not universal.** WordPress → clean `304`. a custom-app source (custom) → **no ETag/Last-Modified**. The
   poller must treat conditional GET as an optimization, degrading to full refetch + diff.
 - **Feed granularity is the big finding:** discovered/available feeds are often **site-wide, multi-novel**
-  (chrysanthemum `/feed/` = ~20 novels; dense-feed-source = 4). Isolate a series by per-novel **`<category>`** (primary)
+  (a multi-novel WordPress source `/feed/` = ~20 novels; a WordPress source = 4). Isolate a series by per-novel **`<category>`** (primary)
   or **URL-path prefix** (backup). BUT shared feeds are **capped (10–30 items)**, so a slow series can fall off the
   window → **prefer a per-series/category feed; filter the shared feed only when no per-series feed is reachable.**
-- **Locked/paid chapters are a page-watch/DOM concern.** loadmore-source marks them structurally
+- **Locked/paid chapters are a page-watch/DOM concern.** a JS-rendered source marks them structurally
   (`.chapter-status.premium`, gold) and advertises **no feed** → page-watch mandatory; free frontier = highest
   chapter without the lock marker. Confirms README's per-site adapter model. → affects **WP-17, WP-20**.
-- **Cloudflare is a first-class obstacle.** render-clearable-source page + chrysanthemum series page hard-403'd our bot,
+- **Cloudflare is a first-class obstacle.** a Cloudflare-challenged source page + a multi-novel WordPress source series page hard-403'd our bot,
   though `/feed/` sometimes still served. WP-05/WP-17 need realistic browser headers, a feed-even-when-page-blocked
   path, and headless-browser (Playwright) escalation for stubborn sites.
 
@@ -263,7 +264,7 @@ set at add-time; filtering runs upstream of the (still pure) `diffChapters`. See
 
 **Fetch-strategy ladder — per Source, pick the highest reachable rung at add-time:**
 1. **Per-series / category feed** — series-scoped, immune to feed density. WP category feed
-   (`/category/<slug>/feed/`) or a native per-series RSS (concat-title-source-style). **Preferred.**
+   (`/category/<slug>/feed/`) or a native per-series RSS (a native per-series RSS). **Preferred.**
 2. **Site feed + matcher** (`matchType` CATEGORY/PATH_PREFIX) — cheap, but the feed window is *capped* (10–30
    items), so a slow series on a busy multi-novel site can be missed between polls. Only safe when the series
    updates often relative to site volume.
@@ -288,7 +289,7 @@ real series needs it.
    rolls off* before we ever poll it — it's never caught by the feed. The series-scoped TOC (page-watch) is immune.
 2. **Paid/advance sites: the feed is the wrong signal.** The RSS item fires when a chapter is *published* — usually
    **locked**. The valuable event, *becoming free* (the free frontier advancing, WP-20), never re-emits in the feed;
-   it lives only in the TOC lock markers. So for paid-heavy sites (e.g. render-clearable-source), feed tracking pings locked
+   it lives only in the TOC lock markers. So for paid-heavy sites (e.g. a Cloudflare-challenged source), feed tracking pings locked
    chapters you can't read and misses the unlocks that matter — **page-watch is the core mechanism, feed is degraded.**
 
 → This raises the real-world priority of **WP-17 (page-watch)** + **WP-20 (free frontier)** + a **Cloudflare-capable
@@ -317,7 +318,7 @@ one and the novel isn't in the current window, `addSeries` does *not* reject or 
 series (correct title from the URL) with a **series-scoped guess** (`fallbackSeriesMatch`: category-slug if the feed
 is categorized, else URL path). It shows 0 chapters until the novel next publishes, when the filter captures it from
 the feed. If it never fills, WP-RC escalates to page-watch. **Cloudflare caveat:** where the *page* is JS-challenged
-(e.g. render-clearable-source — 403 `cf-mitigated: challenge`) plain page-watch also fails; ongoing releases still arrive via
+(e.g. a Cloudflare-challenged source — 403 `cf-mitigated: challenge`) plain page-watch also fails; ongoing releases still arrive via
 `/feed/` (which isn't challenged), but backfill/true page-watch needs a **headless-browser escalation** (separate
 service; not Vercel serverless) or an unblock service — best-effort per the README. Near-term workaround: track such
 a novel via its NovelUpdates feed instead.
@@ -338,7 +339,20 @@ a novel via its NovelUpdates feed instead.
 
 ## Changelog
 
-- **2026-07-22** — **Fixed add-time Cloudflare failure + wrong-novel capture (bug found while testing render-clearable-source).**
+- **2026-07-23** — **WP-17 in progress: `parseToc` (page-watch parser) built + validated on real sites.** After a
+  TOC spike across the owner's real sites, built `lib/feeds/pageWatch.ts` `parseToc(html, baseUrl, config?)` with
+  **cheerio** (chosen over node-html-parser for malformed-HTML robustness + full CSS selectors). A generic scan
+  extracts chapters (url/title/number/access) across the common frameworks — **validated live** against real TOCs on
+  the dominant WordPress light-novel theme (Madara/`.eplister`), a WordPress list-posts plugin, a Blogger TOC widget,
+  and a custom SSR site: all parse, numbers correct. Per-host `SiteTocConfig` overrides
+  (`chapterSelector`/`lockSelector`/`lockText`) for oddballs. Fixed `parseChapterNumber` to accept `…-chapter-7`
+  hyphen URLs; filter unrendered `{{…}}` template stubs. **6 page-watch tests (133 total).** **Findings:** extraction
+  is solid; the reachable sites returned 0 locked — **correct** per owner (those novels have no locked chapters; the
+  "premium" markers were theme boilerplate). Lock detection is a reasonable baseline but **unverified against a real
+  locked TOC** — every paid/advance site is JS-rendered or Cloudflare-challenged (WP-17b), so we'll tune lock configs
+  when WP-17b makes one reachable. **Remaining WP-17:** wire the PAGE_WATCH branch into `pollSource` (fetch TOC →
+  parseToc → diff, persist access). **WP-17b:** headless/API for JS-rendered + Cloudflare-challenged TOCs.
+- **2026-07-22** — **Fixed add-time Cloudflare failure + wrong-novel capture (bug found while testing a Cloudflare-challenged site).**
   Root cause (systematic-debugging): `addSeries` threw on the page-403 *before* trying feed guesses, even though the
   site's `/feed/` serves fine (Cloudflare only challenges HTML pages). Fixed to try feed guesses even when the page is
   blocked. Verifying that against the real site exposed a worse bug: the site `/feed/` is multi-novel and the target
@@ -346,7 +360,7 @@ a novel via its NovelUpdates feed instead.
   `chooseSeriesMatch` now returns positive matches only (`null` when it can't isolate); `addSeries` falls back to a
   **series-scoped guess** (`fallbackSeriesMatch`, slug- or path-keyed) for guessed site feeds, trusting `WHOLE_FEED`
   only for page-advertised feeds; `filterBySeriesMatch` CATEGORY now matches by slug too, so the fallback fills in when
-  the novel next publishes; title comes from the URL, not the site feed. Verified live: render-clearable-source now adds the
+  the novel next publishes; title comes from the URL, not the site feed. Verified live: a Cloudflare-challenged source now adds the
   *correct* novel, empty, with a slug filter. 127 tests. (Page-watch escalation for still-blocked sites → WP-RC/WP-17.)
 - **2026-07-22** — **WP-10 (library + detail UI) done.** The app is now *usable*. **Library** = a release stream of
   series cards on the design system — the bookmark-ribbon + "N new" badge on unread series (the signature landing on
@@ -427,7 +441,7 @@ a novel via its NovelUpdates feed instead.
   `parse.ts` (rss-parser wrapper → `FeedItem`, decoding entity-encoded URLs, RSS `<guid>` + Atom `<id>`, categories;
   plus best-effort `parseChapterNumber`), `discover.ts` (`discoverFeeds` from `<link alternate>`, `guessFeedUrls`
   WordPress fallbacks, and `chooseSeriesMatch` → WHOLE_FEED / CATEGORY / PATH_PREFIX). Test fixtures use anonymized
-  `.example` domains + generic works (structure mirrors the concat-title-source/dense-feed-source/chrysanthemum archetypes without
+  `.example` domains + generic works (structure mirrors the custom-app / WordPress / multi-novel archetypes without
   depending on real URLs/titles). Added `categories` to `FeedItem`. **44 tests**, typecheck clean.
   Split the impure HTTP concerns (headers, conditional GET, Cloudflare) into **WP-FE** (fetcher), keeping the lib pure.
   **Completion rule captured** (CONTEXT.md + WP-21 note): compare *max parsed chapter number*, never post count —
