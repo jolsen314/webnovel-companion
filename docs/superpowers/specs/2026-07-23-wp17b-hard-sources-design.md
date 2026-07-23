@@ -1,7 +1,7 @@
 # WP-17b — Hard sources: self-hosted renderer + manual release-schedule fallback
 
 Date: 2026-07-23
-Status: Draft (awaiting owner review)
+Status: Accepted (owner decisions D-1..D-3 resolved 2026-07-23; see Resolved decisions)
 
 ## Context
 
@@ -79,9 +79,11 @@ URLs), these run *your* code — no third party harvests your reading list as a 
 / Oracle VM > cloud function you deploy > managed PaaS. Because the interface is fixed, the owner can start on Vercel
 (option 0) and migrate to Cloud Run or an Oracle VM later without touching app code.
 
-**Recommendation:** prototype **option 0 (Vercel)** — it may make WP-17b nearly free of new infra. If page renders
-bump the function timeout, fall back to **Cloud Run** (free, scale-to-zero, more headroom); choose the **Oracle VM**
-if the owner wants a box they own with zero cold starts.
+**Decision (D-1):** prototype **option 0 (Vercel)** first — it may make WP-17b nearly free of new infra. If page
+renders bump the function timeout/memory, fall back to a cloud function: **AWS Lambda + `@sparticuz/chromium`** (owner
+already has an AWS account) or **Cloud Run** (owner can set up GCP; scale-to-zero, more headroom). The Oracle VM stays
+a later option if a box-you-own is ever wanted. Interface is fixed, so the migration is deploy-only, no app-code
+change.
 
 ### How the app calls it (the seam)
 
@@ -99,57 +101,67 @@ until Tier 2-via-vendor is ever chosen.)
 - **Orchestration** ([`pollSource`](../../../src/server/services/poll.ts)) selects the fetch port by
   `src.fetchMode`: `PLAIN` → `politeFetch`, `RENDER` → `renderFetch`. Everything downstream (`parseToc`, diff,
   access) is unchanged — the renderer just supplies fuller HTML.
-- **Becoming RENDER (escalation heuristic):** during a poll or at add-time, if a page-watch source fetched via PLAIN
-  returns `200`, is **not** a CF challenge, is **not** a feed, and `parseToc` yields **0** chapters (or fewer than a
-  low threshold), flag it `RENDER` and persist — one self-correcting upgrade, then it stays rendered. A `403
+- **Becoming RENDER (escalation heuristic, D-2):** during a poll or at add-time, if a page-watch source fetched via
+  PLAIN returns `200`, is **not** a CF challenge, is **not** a feed, and `parseToc` yields **≤ 5** chapters, flag it
+  `RENDER` and persist — one self-correcting upgrade, then it stays rendered. (The owner will keep genuinely-tiny
+  works out of a state that polls, so ≤ 5 reads as "the list didn't render" rather than "the work is short.") A `403
   cf-mitigated` response does **not** escalate to RENDER (rendering won't help a CF wall); it marks the source
   CF-blocked so the UI can prompt for a release schedule. A **manual override** lets the owner force a mode.
-  *(Heuristic thresholds are a guess until real data — Decision D-2.)*
 
 ## Component 3 — manual release schedule (no-fetch fallback)
 
 For fully-blocked sites (and any series the owner simply wants to predict), an **optional, editable per-series
 schedule** produces "a release is likely available" notifications with **zero fetching** — the most private path.
 
-- **Model (on `Series`):** a nullable schedule made of a **cadence** (`releaseCadenceDays: Int?`, e.g. 7 = weekly,
-  1 = daily) + an **anchor** (`releaseAnchoredOn: DateTime?`, a known past release the cadence counts from), a
-  free-text `releaseNote: String?` (e.g. "advance chapters go free ~2 weeks later"), and `scheduleLastNotifiedAt:
-  DateTime?` to de-dupe. Editable at any time — translators change cadence. *(A cadence+anchor recurrence is chosen
-  over storing explicit future dates so it keeps predicting after the owner stops updating it.)*
-- **Pure logic (`lib/schedule.ts`, test-first):** `nextDueRelease(schedule, now): Date | null` — project predicted
-  release dates forward from the anchor by the cadence, and return the most recent predicted date `D` for which
-  **`now >= D + 1 day`** (the day-after buffer, since time-of-day is unknown and tightness isn't needed) and `D` is
-  newer than `scheduleLastNotifiedAt`. Returns `null` when nothing is due. Fully pure and unit-tested; no clock,
-  no I/O — `now` is injected.
+- **Model (on `Series`):** a nullable schedule with **two recurrence modes** (D-bonus), so it fits how translators
+  actually publish:
+  - **INTERVAL** — `releaseCadenceDays` (e.g. 7 = weekly, 3 = every 3 days) + `releaseAnchoredOn` (a known past
+    release the cadence counts from). Good for "every N days" cadences.
+  - **WEEKLY** — `releaseWeekdays: Int[]` (0 = Sun … 6 = Sat), for fixed weekday patterns like **MWF** `[1,3,5]`,
+    **M–W** `[1,2,3]`, or **Sat/Sun** `[6,0]`. No anchor needed — weekday recurrence is absolute.
+
+  Plus a **`releaseEventKind`** tag (D-3): `NEW_CHAPTER` vs `UNLOCKED` — what the prediction means, so the
+  notification copy is right ("a new chapter is likely up" vs "an advance chapter likely went free"). A free-text
+  `releaseNote` and `scheduleLastNotifiedAt` (de-dupe) round it out. Editable any time — translators change cadence.
+  *(Recurrence rules are chosen over stored future dates so predictions continue after the owner stops updating.)*
+- **Pure logic (`lib/schedule.ts`, test-first):** `nextDueRelease(state, now): Date | null` over a discriminated
+  `Schedule` union (`{kind:'INTERVAL', cadenceDays, anchoredOn}` | `{kind:'WEEKLY', weekdays}`). It finds the most
+  recent predicted release date `D ≤ now` (INTERVAL: `anchoredOn + k·cadenceDays`; WEEKLY: the latest past date whose
+  weekday is in the set), then returns `D` **only if `now ≥ D + 1 day`** (the day-after buffer — time-of-day is
+  unknown and tightness isn't needed) **and** `D` is newer than `scheduleLastNotifiedAt`; else `null`. Fully pure and
+  unit-tested; no clock, no I/O — `now` is injected.
 - **Wiring:** the cron, after polling, evaluates schedules for CF-blocked (or any scheduled) series, emits a
-  notification effect when one is due, and stamps `scheduleLastNotifiedAt`. It runs **independently of any fetch**, so
-  it works even when the source is 100% blocked.
-- **What it predicts:** a generic "release you're waiting for" — copy stays neutral ("a new/free chapter is likely
-  up"). *(Whether to distinguish new-chapter vs locked→free is Decision D-3; MVP keeps it generic.)*
+  notification effect (carrying `releaseEventKind` for copy) when one is due, and stamps `scheduleLastNotifiedAt`. It
+  runs **independently of any fetch**, so it works even when the source is 100% blocked.
 - **UI:** a small editable schedule panel on the series-detail page (cadence, anchor date, note). Ships with the
   frontend already in place (WP-10); no new framework.
 
 ## Data model changes (Prisma)
 
 ```prisma
-enum SourceFetchMode { PLAIN RENDER }         // new
+enum SourceFetchMode      { PLAIN RENDER }            // new — how we fetch
+enum ReleaseScheduleKind  { INTERVAL WEEKLY }         // new — how predicted dates recur
+enum ReleaseEventKind     { NEW_CHAPTER UNLOCKED }    // new — what a prediction means (D-3)
 
 model Source {
   // …
-  fetchMode SourceFetchMode @default(PLAIN)    // new
+  fetchMode SourceFetchMode @default(PLAIN)           // new
 }
 
 model Series {
   // …
-  releaseCadenceDays     Int?                  // new — recurrence period in days
-  releaseAnchoredOn      DateTime?             // new — a known release the cadence counts from
-  releaseNote            String?               // new — free text, owner's own reminder
-  scheduleLastNotifiedAt DateTime?             // new — de-dupe schedule notifications
+  releaseScheduleKind    ReleaseScheduleKind?         // new — null = no schedule
+  releaseCadenceDays     Int?                         // new — INTERVAL: period in days
+  releaseAnchoredOn      DateTime?                    // new — INTERVAL: anchor date
+  releaseWeekdays        Int[]                        // new — WEEKLY: 0=Sun..6=Sat (e.g. MWF = [1,3,5])
+  releaseEventKind       ReleaseEventKind @default(NEW_CHAPTER) // new — new vs unlocked
+  releaseNote            String?                      // new — free text, owner's own reminder
+  scheduleLastNotifiedAt DateTime?                    // new — de-dupe schedule notifications
 }
 ```
 
-One additive migration; all columns nullable; no backfill. `SourceType` (FEED/PAGE_WATCH) is unchanged and
-orthogonal — `fetchMode` is *how* we fetch, `type` is *what we parse*.
+One additive migration; all columns nullable (`releaseWeekdays` defaults to `[]`); no backfill. `SourceType`
+(FEED/PAGE_WATCH) is unchanged and orthogonal — `fetchMode` is *how* we fetch, `type` is *what we parse*.
 
 ## Data flow
 
@@ -158,10 +170,10 @@ cron/poll
  ├─ for each active source in {READING, PLANNED}:               (WP-27 gating)
  │    fetchMode == PLAIN  → politeFetch ─┐
  │    fetchMode == RENDER → renderFetch ─┤→ parseToc/parseFeed → diff → persist (access)
- │    (PLAIN 200 & !CF & !feed & 0 chapters ⇒ escalate to RENDER, persist)
+ │    (PLAIN 200 & !CF & !feed & <=5 chapters ⇒ escalate to RENDER, persist)
  │    (PLAIN 403 cf-mitigated ⇒ mark CF-blocked; keep feed trigger)
  └─ for each series with a schedule:
-      nextDueRelease(schedule, now) != null ⇒ emit "likely available" notify + stamp
+      nextDueRelease(state, now) != null ⇒ emit notify (copy per releaseEventKind) + stamp
 ```
 
 ## Error handling & health
@@ -176,8 +188,9 @@ cron/poll
 
 ## Testing
 
-- `lib/schedule.ts` — pure, TDD: due/not-due across cadences, the day-after buffer boundary, de-dupe vs
-  `scheduleLastNotifiedAt`, null/degenerate schedules, DST-agnostic day math.
+- `lib/schedule.ts` — pure, TDD: INTERVAL (anchor + cadence) and WEEKLY (weekday-set: MWF, M–W, Sat/Sun) modes; the
+  day-after buffer boundary; de-dupe vs `scheduleLastNotifiedAt`; `releaseEventKind` carried through; null/degenerate
+  schedules (empty weekdays, missing anchor); DST-agnostic day math.
 - `renderFetch` adapter — unit-tested with a fake HTTP impl (success → `PoliteResult`; 5xx/timeout → health
   outcomes), mirroring the `politeFetch` tests.
 - `pollSource` — a `RENDER`-mode source calls the render port; the PLAIN-200-but-empty escalation path sets
@@ -187,14 +200,15 @@ cron/poll
 - Renderer service — a couple of black-box tests against a local fixture page (its own suite under
   `services/renderer/`), not in the main Vitest projects.
 
-## Open decisions (for owner review)
+## Resolved decisions (owner, 2026-07-23)
 
-- **D-1 Renderer hosting:** prototype Vercel (option 0) → Cloud Run → Oracle Always-Free VM, per the table above.
-  Affects ops, not app code (interface is fixed).
-- **D-2 Escalation heuristic:** auto-escalate on "0 chapters from a 200 non-CF page", plus manual override — is
-  auto-escalation wanted, or manual-only to start? Thresholds need real-data tuning.
-- **D-3 Schedule semantics:** keep the notification generic, or let the owner tag a schedule as "new chapter" vs
-  "locked→free" for clearer copy?
+- **D-1 Renderer hosting:** prototype **Vercel** (option 0) first; if its limits bite, fall back to **AWS Lambda**
+  (account exists) or **GCP Cloud Run**. Oracle VM later if a box-you-own is wanted. Deploy-only migration.
+- **D-2 Escalation heuristic:** **auto-escalate** a `200`, non-CF, non-feed page-watch source to `RENDER` when
+  `parseToc` yields **≤ 5** chapters; owner keeps genuinely-short works out of polling states. Manual override kept.
+- **D-3 Schedule semantics:** **tagged**, not generic — `releaseEventKind` = `NEW_CHAPTER` | `UNLOCKED` drives copy.
+- **D-bonus Schedule modes:** support **WEEKLY** weekday-sets (MWF / M–W / Sat-Sun) in addition to **INTERVAL**
+  every-N-days.
 
 ## Rollout / WP breakdown
 
