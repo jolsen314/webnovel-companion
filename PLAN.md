@@ -89,7 +89,7 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-08 | API routes (series CRUD, push/subscribe, cron/poll) | M0 | `DONE` | WP-06, WP-07 |
 | ⭐ WP-17 | Page-watch — **primary** for dense/paid sites (`lib/feeds/pageWatch.ts`; framework adapters + generic) | M1↑ | `DONE` | WP-01, WP-05 |
 | WP-17b | Hard sources: headless/API fetch for JS-rendered + Cloudflare-challenged TOCs | M1↑ | `TODO` | WP-17 |
-| ⭐ WP-20 | Paid→free frontier + "now free" (free frontier off the TOC) | M1↑ | `TODO` | WP-07, WP-17 |
+| ⭐ WP-20 | Paid→free frontier + "now free" (free frontier off the TOC; **PLANNED+paid → fire only when 0 locked remain**, see WP-27) | M1↑ | `TODO` | WP-07, WP-17 |
 | WP-09 | Web Push end-to-end (VAPID, sw handler, subscribe flow) | M0 | `TODO` | WP-06, WP-08 |
 | ⭐ WP-10 | Library + series-detail UI (unread counts, mark progress) | M0 | `DONE` | WP-06, WP-08 |
 | ⭐ WP-AUTH | Single-user password gate (scrypt hash + signed cookie + middleware) — **deploy prerequisite** | M0 | `DONE` | WP-06, WP-08 |
@@ -99,9 +99,11 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-15 | `lib/search.ts` (pure) — filter/query building | M1 | `TODO` | WP-00 |
 | WP-16 | Host-level health aggregation (site-down vs novel-moved) | M1 | `TODO` | WP-03, WP-07 |
 | WP-18 | Completed shelf + backfill + "Move to Completed?" | M1 | `TODO` | WP-10 |
+| WP-28 | Frontend styling & theming — ordering, feed-page vs library split, theme system (night default + cultivation ancient-scroll, sci-fi holographic-panel) | M1 | `TODO` | WP-10 |
 | WP-19 | Non-destructive re-pointing + "find new source" helper | M1 | `TODO` | WP-16, WP-18 |
 | WP-RC | Dense-feed miss-detection + TOC reconcile fallback | M1 | `TODO` | WP-05, WP-07, WP-17 |
 | WP-21 | Plan-to-read completion watch (wire WP-13 + notify) — compare **max chapter number** vs target, not post count (split-chapter safe; see CONTEXT.md) | M1 | `TODO` | WP-13, WP-07 |
+| WP-27 | Reading-status lifecycle for poll + store — status-gated polling (skip COMPLETED/DROPPED), PLANNED seeds a **summary** not the full TOC (backfill on →READING), per-status notify rules | M1 | `TODO` | WP-07, WP-17, WP-18 |
 | WP-22 | MV3 browser extension (progress capture + "track this") | M2 | `TODO` | WP-08 |
 | WP-23 | Chinese mining: `tokenize/zh.ts` + `dict/cedict.ts` | M3 | `TODO` | WP-04 |
 | WP-02 | `lib/srs/sm2.ts` (pure, test-first) — SM-2 scheduler | M3 | `TODO` | WP-00 |
@@ -326,8 +328,43 @@ the feed. If it never fills, WP-RC escalates to page-watch. **Cloudflare caveat:
 service; not Vercel serverless) or an unblock service — best-effort per the README. Near-term workaround: track such
 a novel via its NovelUpdates feed instead.
 
+### WP-27 — Reading-status lifecycle for poll + store
+
+Keyed on **reading status** (`SeriesStatus`: READING / PLANNED / PAUSED / DROPPED / COMPLETED = *I* finished reading), not
+`translationStatus`. Three parts:
+
+- **Status-gated polling.** `pollAllSources` polls every active source today regardless of shelf. Gate it: **skip
+  COMPLETED and DROPPED** (no new chapters wanted). Motivation is **compute + politeness**, not storage — see the
+  free-tier note in the backlog. Cheap: filter the active-sources query by the parent series' status. *(Open:
+  PAUSED — poll-but-suppress-notify, or skip? Leaning poll-quietly so the backlog is there on resume.)*
+- **PLANNED seeds a summary, not the full TOC.** For a plan-to-read series, seeding the whole TOC of a finished
+  ~1,000-chapter translation at add-time is a large insert for something you may never open, and the PLANNED signal is
+  a **milestone**, not per-chapter. Seed a summary (max chapter number, total vs `targetChapterCount`, free/locked
+  counts); **backfill the full TOC when it flips to READING** (shares the WP-18 backfill path). This is the *only*
+  place "store less" earns its keep.
+- **Per-status notify rules** (wire with WP-09/WP-20/WP-21): READING → per new chapter (+ locked→free, WP-20);
+  PLANNED + paid → **fire only when 0 LOCKED remain** (whole work bingeable free — the real "start now" trigger, not
+  "all chapters published"); PLANNED + free ongoing → fire at `targetChapterCount` (WP-21).
+
+> Explicitly **not** doing: pruning stored chapters for COMPLETED. It saves negligible space (see backlog) and costs
+> reading position (`lastReadChapterId` → a real `Chapter` row), the chapter list, and re-diff ability. YAGNI.
+
+### WP-28 — Frontend styling & theming
+
+UX-polish pass on the shipped library/detail UI (WP-10). Scope to design when picked up: **ordering** (how the shelf
+sorts — recent-activity, unread-first, alphabetical, manual); **feed page vs library** (a separate "what's new across
+everything" river distinct from the per-series library grid — decide whether they're one view or two); a **theme
+system** beyond the current "night reading" identity — pluggable themes such as *cultivation ancient-scroll* and
+*sci-fi holographic-panel*, selectable by the user. Uses `frontend-design` (primary) + `ai-toolkit:design-workflow`
+for tokens; gets its own brainstorm → spec when prioritized. Depends on WP-10 (done).
+
 ## Backlog / open questions
 
+- **Free-tier constraint is compute, not chapter storage** *(resolved 2026-07-23)* — worry was that many chapters
+  (100–1,000/series) might exceed the DB free tier. Math says no: a `Chapter` row is ~300–400 B with indexes, so a
+  1,000-chapter series ≈ ~0.4 MB and a *heavy* library (200 series × 300 ch ≈ 60k rows) ≈ ~20–30 MB against Neon
+  free's **0.5 GB**. The binding free-tier limit is **compute hours** (~192/mo, autosuspend) → the reason to skip
+  polling COMPLETED/DROPPED (WP-27) is compute + politeness, and pruning stored chapters for space is a non-goal.
 - **Auth & multi-device** — README scopes to single-user, but Web Push targets multiple subscribed devices per user.
   Decide the minimal identity story for MVP (single hardcoded user? a token?). Affects WP-08/WP-09.
 - **Cron cadence** — README suggests every 10–15 min; make it configurable (freshness vs. politeness). WP-07/WP-11.
@@ -342,6 +379,14 @@ a novel via its NovelUpdates feed instead.
 
 ## Changelog
 
+- **2026-07-23** — **Folded reading-status lifecycle + theming into the plan (WP-27, WP-28).** Discussed poll/store
+  behavior by *reading* shelf status. Established the free-tier worry is a non-problem for chapter storage (~20–30 MB
+  for a heavy library vs Neon free's 0.5 GB; compute hours are the real limit — see backlog). New **WP-27**:
+  status-gated polling (skip COMPLETED/DROPPED for compute+politeness), PLANNED seeds a *summary* not the full TOC
+  (backfill on →READING), and per-status notify rules — notably **PLANNED+paid fires only when 0 locked remain** (the
+  bingeable-now trigger). Decided *against* pruning COMPLETED chapters (negligible space, loses reading position).
+  New **WP-28**: frontend styling & theming (ordering, feed-vs-library split, pluggable themes — ancient-scroll,
+  holographic-panel). `NEXT` unchanged (**WP-20**).
 - **2026-07-23** — **WP-17 DONE: page-watch wired end-to-end into add + poll.** `pollSource` now branches on
   `Source.type`: `PAGE_WATCH` sources fetch the page and run `parseToc` (already series-scoped) instead of
   `parseFeed` + series-matcher; `FeedItem` carries an optional `access` (`FREE`/`LOCKED`) that flows through the diff
