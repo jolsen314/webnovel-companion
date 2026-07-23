@@ -88,7 +88,8 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-07 | Services: `pollAllSources()`, `addSeries()` | M0 | `DONE` | WP-01, WP-04, WP-05, WP-FE |
 | WP-08 | API routes (series CRUD, push/subscribe, cron/poll) | M0 | `DONE` | WP-06, WP-07 |
 | ⭐ WP-17 | Page-watch — **primary** for dense/paid sites (`lib/feeds/pageWatch.ts`; framework adapters + generic) | M1↑ | `DONE` | WP-01, WP-05 |
-| WP-17b | Hard sources: headless/API fetch for JS-rendered + Cloudflare-challenged TOCs | M1↑ | `TODO` | WP-17 |
+| WP-17b | Hard sources: self-run headless renderer (`fetchMode` PLAIN→RENDER) for JS-rendered TOCs — [design](docs/superpowers/specs/2026-07-23-wp17b-hard-sources-design.md) | M1↑ | `TODO` | WP-17 |
+| WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` (INTERVAL + WEEKLY), notify day-after, new/unlocked tag | M1↑ | `TODO` | WP-07, WP-10 |
 | ⭐ WP-20 | Paid→free frontier + "now free" (free frontier off the TOC; **PLANNED+paid → fire only when 0 locked remain**, see WP-27) | M1↑ | `TODO` | WP-07, WP-17 |
 | WP-09 | Web Push end-to-end (VAPID, sw handler, subscribe flow) | M0 | `TODO` | WP-06, WP-08 |
 | ⭐ WP-10 | Library + series-detail UI (unread counts, mark progress) | M0 | `DONE` | WP-06, WP-08 |
@@ -379,6 +380,16 @@ for tokens; gets its own brainstorm → spec when prioritized. Depends on WP-10 
 
 ## Changelog
 
+- **2026-07-23** — **WP-17b design accepted; split out WP-29 (manual release schedule).** A live probe of the paid
+  sources showed the "hard" bucket is two problems: **CF-challenged** (403 `cf-mitigated`; the site's feed still
+  serves) and **JS-rendered non-CF** (200 but the chapter list is client-rendered — plain fetch under-reads). Design
+  ([spec](docs/superpowers/specs/2026-07-23-wp17b-hard-sources-design.md)): **WP-17b** = a *self-run* headless
+  renderer behind a fixed `render(url)` interface (per-source `fetchMode` PLAIN→RENDER, auto-escalate at ≤5 parsed
+  chapters), hosting prototyped on **Vercel** (`@sparticuz/chromium` — correcting the old "not Vercel serverless"
+  note) with AWS Lambda / Cloud Run fallback; **no third-party unblocker** (privacy). **WP-29** = a no-fetch,
+  editable per-series **release schedule** (`lib/schedule.ts`, INTERVAL every-N-days + WEEKLY weekday-sets like MWF,
+  notify the day after, tagged NEW_CHAPTER vs UNLOCKED) — the private "now free" signal for fully-blocked sites; it's
+  fetch-independent so it can land first.
 - **2026-07-23** — **Folded reading-status lifecycle + theming into the plan (WP-27, WP-28).** Discussed poll/store
   behavior by *reading* shelf status. Established the free-tier worry is a non-problem for chapter storage (~20–30 MB
   for a heavy library vs Neon free's 0.5 GB; compute hours are the real limit — see backlog). New **WP-27**:
