@@ -34,6 +34,7 @@ function toSeriesMatch(type: string, value: string | null): SeriesMatch {
 function rowToPollable(row: {
   id: string;
   seriesId: string;
+  type: PollableSource['type'];
   url: string;
   feedUrl: string | null;
   matchType: string;
@@ -48,6 +49,7 @@ function rowToPollable(row: {
   return {
     id: row.id,
     seriesId: row.seriesId,
+    type: row.type,
     fetchUrl: row.feedUrl ?? row.url,
     match: toSeriesMatch(row.matchType, row.matchValue),
     etag: row.etag,
@@ -95,6 +97,7 @@ function pollPorts(fetchImpl: FetchImpl): PollPorts & { loadActiveSources: () =>
                   guid: c.guid ?? null,
                   number: c.number ?? null,
                   publishedAt: c.publishedAt ?? null,
+                  access: c.access ?? 'UNKNOWN',
                 })),
                 skipDuplicates: true,
               }),
@@ -138,6 +141,7 @@ export function addSeries(input: AddSeriesInput, fetchImpl: FetchImpl = fetchPor
                     guid: c.guid ?? null,
                     number: c.number ?? null,
                     publishedAt: c.publishedAt ?? null,
+                    access: c.access ?? 'UNKNOWN',
                   })),
                 }
               : undefined,

@@ -13,6 +13,7 @@ function source(overrides: Partial<PollableSource> = {}): PollableSource {
   return {
     id: 's1',
     seriesId: 'series1',
+    type: 'FEED',
     fetchUrl: 'https://feed.example/rss',
     match: { type: 'WHOLE_FEED' },
     etag: null,
@@ -107,6 +108,24 @@ describe('pollSource', () => {
     const effects = await pollSource(source({ match: { type: 'CATEGORY', value: 'Silver Moon Saga' } }), ports(ok(feed)));
 
     expect(effects.newChapters.map((c) => c.guid)).toEqual(['gk']);
+  });
+
+  test('PAGE_WATCH source: parses the TOC and diffs new chapters with access state', async () => {
+    const toc = `<ul>
+      <li><a href="https://x.example/novel/a/chapter-1/">Chapter 1</a></li>
+      <li class="premium"><a href="https://x.example/novel/a/chapter-2/">Chapter 2</a></li>
+    </ul>`;
+
+    const effects = await pollSource(
+      source({ type: 'PAGE_WATCH', fetchUrl: 'https://x.example/novel/a/', match: { type: 'WHOLE_FEED' } }),
+      ports(ok(toc)),
+    );
+
+    expect(effects.newChapters.map((c) => c.url)).toEqual([
+      'https://x.example/novel/a/chapter-1/',
+      'https://x.example/novel/a/chapter-2/',
+    ]);
+    expect(effects.newChapters.map((c) => c.access)).toEqual(['FREE', 'LOCKED']);
   });
 
   test('does not re-report already-stored chapters', async () => {

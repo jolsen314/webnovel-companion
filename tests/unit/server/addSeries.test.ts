@@ -95,6 +95,25 @@ describe('addSeries', () => {
     expect(result.resolved.chapters).toEqual([]);
   });
 
+  test('no feed but the page is a TOC → PAGE_WATCH seeded from the TOC (so the first poll does not storm)', async () => {
+    const url = 'https://reader.example/series/delta/';
+    const toc = `<html><body><ul>
+      <li><a href="https://reader.example/series/delta/chapter-1/">Chapter 1</a></li>
+      <li class="premium"><a href="https://reader.example/series/delta/chapter-2/">Chapter 2</a></li>
+    </ul></body></html>`;
+    const p = ports({ [url]: ok(toc) }); // all feed guesses 404
+
+    const result = await addSeries({ url }, p);
+
+    expect(result.resolved.type).toBe('PAGE_WATCH');
+    expect(result.resolved.feedUrl).toBeNull();
+    expect(result.resolved.chapters.map((c) => c.url)).toEqual([
+      'https://reader.example/series/delta/chapter-1/',
+      'https://reader.example/series/delta/chapter-2/',
+    ]);
+    expect(result.resolved.chapters.map((c) => c.access)).toEqual(['FREE', 'LOCKED']);
+  });
+
   test('page blocked (Cloudflare 4xx) but a guessed feed we can isolate → resolves a FEED source', async () => {
     const url = 'https://blocked.example/novel/x/';
     const p = ports({

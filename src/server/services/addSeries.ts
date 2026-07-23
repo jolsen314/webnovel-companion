@@ -7,6 +7,7 @@ import {
   filterBySeriesMatch,
   type SeriesMatch,
 } from '../../lib/feeds/discover';
+import { parseToc } from '../../lib/feeds/pageWatch';
 import type { FeedItem } from '../../lib/feeds/diff';
 import type { PoliteResult } from '../../lib/feeds/fetch';
 
@@ -102,7 +103,8 @@ export async function addSeries(input: AddSeriesInput, ports: AddSeriesPorts): P
     return { seriesId, resolved };
   }
 
-  // No feed, but the page loads → page-watch mode (TOC extraction is WP-17).
+  // No feed, but the page loads → page-watch mode. Seed from the TOC so the first
+  // poll diffs against a known set instead of re-reporting the whole backlog.
   if (pageOk) {
     const resolved: ResolvedSource = {
       seriesTitle: input.title ?? titleFromUrl(url),
@@ -111,7 +113,7 @@ export async function addSeries(input: AddSeriesInput, ports: AddSeriesPorts): P
       feedUrl: null,
       type: 'PAGE_WATCH',
       match: { type: 'WHOLE_FEED' },
-      chapters: [],
+      chapters: parseToc(page.body, url),
     };
     const { seriesId } = await ports.createSeries(resolved);
     return { seriesId, resolved };

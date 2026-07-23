@@ -112,6 +112,48 @@ describe('pollAllSources (real DB)', () => {
   });
 });
 
+describe('page-watch source (real DB)', () => {
+  const WATCH_URL = 'https://reader.example/series/omega/';
+  const W1 = 'https://reader.example/series/omega/chapter-1/';
+  const W2 = 'https://reader.example/series/omega/chapter-2/';
+  const W3 = 'https://reader.example/series/omega/chapter-3/';
+  const TOC = (rows: string) => `<html><body><ul>${rows}</ul></body></html>`;
+  const ROW = (url: string, locked = false) =>
+    `<li${locked ? ' class="premium"' : ''}><a href="${url}">Chapter</a></li>`;
+
+  test('adds a PAGE_WATCH source seeded from the TOC, with FREE/LOCKED access', async () => {
+    // No feed anywhere (all guesses 404) → page-watch; the page IS the TOC.
+    const fetch = fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1) + ROW(W2, true))) });
+    const { seriesId } = await addSeries({ url: WATCH_URL }, fetch);
+
+    const series = await db.series.findUniqueOrThrow({
+      where: { id: seriesId },
+      include: { sources: true, chapters: { orderBy: { url: 'asc' } } },
+    });
+    expect(series.sources[0]!.type).toBe('PAGE_WATCH');
+    expect(series.sources[0]!.feedUrl).toBeNull();
+    expect(series.chapters.map((c) => c.url)).toEqual([W1, W2]);
+    expect(series.chapters.map((c) => c.access)).toEqual(['FREE', 'LOCKED']);
+  });
+
+  test('poll parses the TOC, persists only the new chapter with its access, no storm on re-poll', async () => {
+    const fetch = fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1) + ROW(W2, true))) });
+    const { seriesId } = await addSeries({ url: WATCH_URL }, fetch);
+
+    // A third (locked) chapter appears; the first two are unchanged.
+    const effects = await pollAllSources(
+      fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1) + ROW(W2, true) + ROW(W3, true))) }),
+    );
+
+    expect(effects).toHaveLength(1);
+    expect(effects[0]!.newChapters.map((c) => c.url)).toEqual([W3]);
+
+    const chapters = await db.chapter.findMany({ where: { seriesId }, orderBy: { url: 'asc' } });
+    expect(chapters.map((c) => c.url)).toEqual([W1, W2, W3]);
+    expect(chapters.find((c) => c.url === W3)!.access).toBe('LOCKED');
+  });
+});
+
 describe('updateSeries (real DB)', () => {
   test('updates shelf fields, sets finishedAt, and records reading progress', async () => {
     const seriesId = await addAlpha();

@@ -17,8 +17,8 @@ export interface FeedItem {
   publishedAt?: Date | null;
   /** Feed `<category>` values — used to isolate a series in a multi-novel feed (see match logic). */
   categories?: string[];
-  // Extension point: paid→free tracking (README roadmap) will add an access
-  // state here (e.g. `access?: 'FREE' | 'LOCKED'`). Add the field; don't reshape.
+  /** Free/locked state, populated by page-watch (`parseToc`) for paid/advance sites. */
+  access?: 'FREE' | 'LOCKED';
 }
 
 /** The minimum needed to recognize an already-seen chapter. */

@@ -1,5 +1,6 @@
 import { diffChapters, type FeedItem, type KnownChapter } from '../../lib/feeds/diff';
 import { parseFeed } from '../../lib/feeds/parse';
+import { parseToc } from '../../lib/feeds/pageWatch';
 import { filterBySeriesMatch, type SeriesMatch } from '../../lib/feeds/discover';
 import { step, type FailureType, type HealthState, type SourceHealth } from '../../lib/health';
 import type { PoliteResult } from '../../lib/feeds/fetch';
@@ -14,6 +15,8 @@ import type { PoliteResult } from '../../lib/feeds/fetch';
 export interface PollableSource {
   id: string;
   seriesId: string;
+  /** FEED → parse as a feed + apply the series matcher; PAGE_WATCH → parse the TOC. */
+  type: 'FEED' | 'PAGE_WATCH';
   /** The URL to GET (feedUrl ?? url). */
   fetchUrl: string;
   match: SeriesMatch;
@@ -71,8 +74,15 @@ export async function pollSource(src: PollableSource, ports: PollPorts): Promise
     } else {
       etag = res.etag ?? etag;
       lastModified = res.lastModified ?? lastModified;
-      const parsed = await parseFeed(res.body);
-      const mine = filterBySeriesMatch(parsed.items, src.match);
+      // FEED: parse the feed and isolate this series. PAGE_WATCH: parse the TOC
+      // (already series-scoped) — its chapters carry FREE/LOCKED access.
+      let mine: FeedItem[];
+      if (src.type === 'PAGE_WATCH') {
+        mine = parseToc(res.body, src.fetchUrl);
+      } else {
+        const parsed = await parseFeed(res.body);
+        mine = filterBySeriesMatch(parsed.items, src.match);
+      }
       const stored = await ports.loadStoredChapters(src.seriesId);
       newChapters = diffChapters(stored, mine).new;
     }

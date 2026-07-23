@@ -41,9 +41,12 @@ To re-prioritize, move rows and update the `NEXT` marker. Don't silently reorder
 
 ## Current focus
 
-> **NEXT: WP-17 (page-watch)** — pulled ahead of WP-09 (push) per the 2026-07-22 decision: page-watch is the
-> *primary* mechanism for the owner's real reading (dense multi-novel feeds that saturate under daily polling, and
-> paid/advance sites where the "now free" event lives only in the TOC). Then WP-20 (free frontier), then WP-09 (push).
+> **NEXT: WP-20 (paid→free frontier)** — with page-watch now wired end-to-end (WP-17 done), the remaining paid-site
+> value is detecting the *locked→free* transition on chapters we've already seen (the "now free" event), reading the
+> free frontier off the TOC. Then WP-09 (push). WP-17b (headless/Cloudflare fetch) stays a parallel as-needed escalation.
+>
+> WP-17 recap: page-watch is the *primary* mechanism for the owner's real reading (dense multi-novel feeds that
+> saturate under daily polling, and paid/advance sites where the "now free" event lives only in the TOC).
 
 The MVP is **live on Vercel + Neon** — the feed pipeline, single-user auth gate, and library/detail UI all shipped
 (M0 mostly done; WP-09 push remains). Remaining priority order is reordered to **WP-17 → WP-20 → WP-09**. The
@@ -84,7 +87,7 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-06 | Next.js + Tailwind + PWA shell (manifest + service worker) | M0 | `DONE` | WP-00 |
 | WP-07 | Services: `pollAllSources()`, `addSeries()` | M0 | `DONE` | WP-01, WP-04, WP-05, WP-FE |
 | WP-08 | API routes (series CRUD, push/subscribe, cron/poll) | M0 | `DONE` | WP-06, WP-07 |
-| ⭐ WP-17 | Page-watch — **primary** for dense/paid sites (`lib/feeds/pageWatch.ts`; framework adapters + generic) | M1↑ | `WIP` | WP-01, WP-05 |
+| ⭐ WP-17 | Page-watch — **primary** for dense/paid sites (`lib/feeds/pageWatch.ts`; framework adapters + generic) | M1↑ | `DONE` | WP-01, WP-05 |
 | WP-17b | Hard sources: headless/API fetch for JS-rendered + Cloudflare-challenged TOCs | M1↑ | `TODO` | WP-17 |
 | ⭐ WP-20 | Paid→free frontier + "now free" (free frontier off the TOC) | M1↑ | `TODO` | WP-07, WP-17 |
 | WP-09 | Web Push end-to-end (VAPID, sw handler, subscribe flow) | M0 | `TODO` | WP-06, WP-08 |
@@ -339,6 +342,16 @@ a novel via its NovelUpdates feed instead.
 
 ## Changelog
 
+- **2026-07-23** — **WP-17 DONE: page-watch wired end-to-end into add + poll.** `pollSource` now branches on
+  `Source.type`: `PAGE_WATCH` sources fetch the page and run `parseToc` (already series-scoped) instead of
+  `parseFeed` + series-matcher; `FeedItem` carries an optional `access` (`FREE`/`LOCKED`) that flows through the diff
+  and is persisted on `Chapter.access`. `addSeries` now **seeds page-watch chapters from the TOC at add-time** (was
+  `chapters: []`) so the first poll diffs against a known set instead of re-reporting the whole backlog. Conditional
+  GET (etag/304) applies unchanged, keeping page-watch polite. **New tests:** `pollSource` PAGE_WATCH branch, an
+  `addSeries` TOC-seeding case, and two real-DB integration tests (add seeds FREE/LOCKED; poll persists only the new
+  chapter with its access, no re-poll storm). **135 unit + 10 integration green, typecheck + build clean.** `NEXT` →
+  **WP-20** (locked→free frontier). Lock detection remains the unverified baseline from the parser work — it gets
+  tuned against a real locked TOC once WP-17b makes one reachable.
 - **2026-07-23** — **WP-17 in progress: `parseToc` (page-watch parser) built + validated on real sites.** After a
   TOC spike across the owner's real sites, built `lib/feeds/pageWatch.ts` `parseToc(html, baseUrl, config?)` with
   **cheerio** (chosen over node-html-parser for malformed-HTML robustness + full CSS selectors). A generic scan
