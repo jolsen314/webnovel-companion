@@ -55,8 +55,10 @@ ethos.
 - **Interface:** `POST /render` with `{ url, waitForSelector?, timeoutMs? }` → `200 { status, finalUrl, html }`
   (the browser's post-render DOM), or a typed error. A `GET /health` for liveness.
 - **Auth:** a shared secret (`RENDER_SECRET`) in an `Authorization: Bearer` header, checked constant-time.
-- **Behavior:** navigate, wait for network-idle (or `waitForSelector` when a per-host config names the TOC element),
-  return `document.documentElement.outerHTML`. One browser context per request; hard navigation timeout.
+- **Behavior:** navigate, wait for network-idle, then run optional **per-host post-render interactions** before
+  returning `document.documentElement.outerHTML`: loop-click a "load more" control until it disappears, and/or visit
+  named tabs (e.g. Free/Premium) and concatenate their DOM. Interactions are declared per host (see the spike
+  findings), defaulting to none. One browser context per request; hard navigation timeout.
 - **Implementation:** `playwright-core` + a serverless-friendly Chromium (`@sparticuz/chromium`) so the same code runs
   as a serverless function *or* a long-lived server. Lives in `services/renderer/` (own `package.json` + Dockerfile),
   importing nothing from `src/`.
@@ -209,6 +211,26 @@ cron/poll
 - **D-3 Schedule semantics:** **tagged**, not generic — `releaseEventKind` = `NEW_CHAPTER` | `UNLOCKED` drives copy.
 - **D-bonus Schedule modes:** support **WEEKLY** weekday-sets (MWF / M–W / Sat-Sun) in addition to **INTERVAL**
   every-N-days.
+
+## Render-spike findings (2026-07-23, local Playwright, scratchpad)
+
+A throwaway local `playwright` + Chromium spike validated Tier-1's premise against two JS-rendered non-CF categories,
+and surfaced that **a bare render is not enough — the full TOC needs per-host post-render interactions.**
+
+- **Premise holds.** Rendering reaches chapter lists plain fetch can't: a Next.js paid site's initial render exposed
+  its full free list; a CF-*served* (not challenged) JS site rendered too. Render times **~6–19 s** — inside a Vercel
+  60 s budget. Scrolling did **not** lazy-load more (not infinite-scroll).
+- **Completeness is a per-host trap — two interaction patterns seen:**
+  - **Tabbed free/locked (Next.js site).** Exposes **`Free(N Eps)` / `Premium(M Eps)` tabs**; the default view is the
+    free set (matched the site's own live Free counter exactly, confirming the *whole* free list renders), and
+    unlocking slides a chapter Premium→Free. The spike also clicked Premium and read the locked list. The adapter must
+    read **both tabs**; the **tab labels embed counts**, giving WP-20 an almost-free "now free" frontier signal.
+  - **"Load more" button (CF-served JS site).** The initial render showed only a partial list; one click of the
+    load-more control jumped it **11 → 140** chapters, then the button vanished. A naive render silently under-reads —
+    the adapter must **loop-click load-more until gone** before extracting.
+- **Takeaway:** the render endpoint needs a small per-host interaction vocabulary (`waitForSelector`,
+  `clickWhileVisible` for load-more, `readTabs`), consistent with the existing per-host `SiteTocConfig` / runbook
+  model. Chapter-count sanity vs. the site's own counter (where shown) is a cheap guard against under-reads.
 
 ## Rollout / WP breakdown
 

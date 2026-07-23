@@ -380,6 +380,13 @@ for tokens; gets its own brainstorm → spec when prioritized. Depends on WP-10 
 
 ## Changelog
 
+- **2026-07-23** — **WP-17b render spike: feasibility CONFIRMED (local Playwright, scratchpad).** A headless render
+  reaches chapter lists plain fetch can't (one site 0→36, another 2→…), in ~6–19 s (inside a Vercel 60 s budget).
+  Key finding: **a bare render under-reads — the full TOC needs per-host post-render interactions.** Two patterns:
+  a Next.js site splits **Free/Premium into tabs** (read both; tab labels embed counts → near-free WP-20 frontier
+  signal), and a CF-*served* JS site gates its list behind a **"load more" button** (one click jumped 11→140; must
+  loop-click until gone). Spec updated with a per-host interaction vocabulary (`waitForSelector`/`clickWhileVisible`/
+  `readTabs`). Premise holds → WP-17b proceeds.
 - **2026-07-23** — **WP-17b design accepted; split out WP-29 (manual release schedule).** A live probe of the paid
   sources showed the "hard" bucket is two problems: **CF-challenged** (403 `cf-mitigated`; the site's feed still
   serves) and **JS-rendered non-CF** (200 but the chapter list is client-rendered — plain fetch under-reads). Design
