@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import {
   addSeries,
   pollAllSources,
+  evaluateSchedules,
   listSeries,
   updateSeries,
   savePushSubscription,
@@ -174,6 +175,33 @@ describe('updateSeries (real DB)', () => {
 
   test('returns null for a series that is not the current user’s', async () => {
     expect(await updateSeries('nonexistent-id', { status: 'DROPPED' })).toBeNull();
+  });
+});
+
+describe('evaluateSchedules (real DB)', () => {
+  const day = (iso: string) => new Date(`${iso}T00:00:00Z`);
+
+  test('fires a due scheduled release, stamps it, and does not re-fire on the next run', async () => {
+    const seriesId = await addAlpha();
+    await db.series.update({
+      where: { id: seriesId },
+      data: { releaseScheduleKind: 'WEEKLY', releaseWeekdays: [1], releaseEventKind: 'UNLOCKED' },
+    });
+
+    // now = Tue Jul 14 → Monday Jul 13 release is due.
+    const now = new Date('2026-07-14T09:00:00Z');
+    const effects = await evaluateSchedules(now);
+    expect(effects).toEqual([{ seriesId, releaseDate: day('2026-07-13'), eventKind: 'UNLOCKED' }]);
+
+    const after = await db.series.findUniqueOrThrow({ where: { id: seriesId } });
+    expect(after.scheduleLastNotifiedAt).toEqual(day('2026-07-13'));
+
+    expect(await evaluateSchedules(now)).toEqual([]); // already stamped → no double-fire
+  });
+
+  test('a series without a schedule is ignored', async () => {
+    await addAlpha();
+    expect(await evaluateSchedules(new Date('2026-07-14T09:00:00Z'))).toEqual([]);
   });
 });
 

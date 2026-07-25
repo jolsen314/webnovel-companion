@@ -5,6 +5,13 @@ import type { SeriesMatch } from '../../lib/feeds/discover';
 import type { FailureType } from '../../lib/health';
 import { pollAllSources as pollAllCore, type PollableSource, type PollEffects, type PollPorts } from './poll';
 import { addSeries as addSeriesCore, type AddSeriesInput, type AddSeriesResult } from './addSeries';
+import {
+  evaluateSchedules as evaluateSchedulesCore,
+  type ScheduledSeries,
+  type ScheduleEffect,
+  type SchedulePorts,
+} from './scheduleNotify';
+import type { ReleaseSchedule } from '../../lib/schedule';
 
 export { listSeries, getSeries, updateSeries } from './series';
 export { savePushSubscription } from './push';
@@ -111,6 +118,55 @@ function pollPorts(fetchImpl: FetchImpl): PollPorts & { loadActiveSources: () =>
 /** Poll every active source, diffing new chapters and updating health. */
 export function pollAllSources(fetchImpl: FetchImpl = fetchPort): Promise<PollEffects[]> {
   return pollAllCore(pollPorts(fetchImpl));
+}
+
+/** Build a pure `ReleaseSchedule` from a Series row's schedule columns (null if malformed). */
+function toReleaseSchedule(row: {
+  releaseScheduleKind: 'INTERVAL' | 'WEEKLY' | null;
+  releaseCadenceDays: number | null;
+  releaseAnchoredOn: Date | null;
+  releaseWeekdays: number[];
+}): ReleaseSchedule | null {
+  if (row.releaseScheduleKind === 'INTERVAL') {
+    if (row.releaseCadenceDays === null || row.releaseAnchoredOn === null) return null;
+    return { kind: 'INTERVAL', cadenceDays: row.releaseCadenceDays, anchoredOn: row.releaseAnchoredOn };
+  }
+  if (row.releaseScheduleKind === 'WEEKLY') return { kind: 'WEEKLY', weekdays: row.releaseWeekdays };
+  return null;
+}
+
+function schedulePorts(): SchedulePorts {
+  return {
+    loadScheduledSeries: async () => {
+      const rows = await db.series.findMany({
+        where: { releaseScheduleKind: { not: null } },
+        select: {
+          id: true,
+          releaseScheduleKind: true,
+          releaseCadenceDays: true,
+          releaseAnchoredOn: true,
+          releaseWeekdays: true,
+          releaseEventKind: true,
+          scheduleLastNotifiedAt: true,
+        },
+      });
+      return rows.flatMap((row): ScheduledSeries[] => {
+        const schedule = toReleaseSchedule(row);
+        if (!schedule) return [];
+        return [{ seriesId: row.id, schedule, lastNotifiedAt: row.scheduleLastNotifiedAt, eventKind: row.releaseEventKind }];
+      });
+    },
+    applyScheduleEffects: async (effects) => {
+      await db.$transaction(
+        effects.map((e) => db.series.update({ where: { id: e.seriesId }, data: { scheduleLastNotifiedAt: e.releaseDate } })),
+      );
+    },
+  };
+}
+
+/** Evaluate every series' manual release schedule; stamp + return the ones now due (WP-29). */
+export function evaluateSchedules(now: Date = new Date()): Promise<ScheduleEffect[]> {
+  return evaluateSchedulesCore(schedulePorts(), now);
 }
 
 /** Resolve a pasted URL to a feed (or page-watch) and create the Series + Source. */

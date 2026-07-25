@@ -89,7 +89,7 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-08 | API routes (series CRUD, push/subscribe, cron/poll) | M0 | `DONE` | WP-06, WP-07 |
 | ⭐ WP-17 | Page-watch — **primary** for dense/paid sites (`lib/feeds/pageWatch.ts`; framework adapters + generic) | M1↑ | `DONE` | WP-01, WP-05 |
 | WP-17b | Hard sources: self-run headless renderer (`fetchMode` PLAIN→RENDER) for JS-rendered TOCs — [design](docs/superpowers/specs/2026-07-23-wp17b-hard-sources-design.md) | M1↑ | `TODO` | WP-17 |
-| WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` (INTERVAL + WEEKLY), notify day-after, new/unlocked tag | M1↑ | `TODO` | WP-07, WP-10 |
+| WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` (INTERVAL + WEEKLY), notify day-after, new/unlocked tag. **Lib + schema + cron wiring DONE; editor UI + push delivery (WP-09) remain** | M1↑ | `WIP` | WP-07, WP-10 |
 | ⭐ WP-20 | Paid→free frontier + "now free" (free frontier off the TOC; **PLANNED+paid → fire only when 0 locked remain**, see WP-27) | M1↑ | `TODO` | WP-07, WP-17 |
 | WP-09 | Web Push end-to-end (VAPID, sw handler, subscribe flow) | M0 | `TODO` | WP-06, WP-08 |
 | ⭐ WP-10 | Library + series-detail UI (unread counts, mark progress) | M0 | `DONE` | WP-06, WP-08 |
@@ -380,6 +380,15 @@ for tokens; gets its own brainstorm → spec when prioritized. Depends on WP-10 
 
 ## Changelog
 
+- **2026-07-25** — **WP-29 (partial): release-schedule lib + schema + cron wiring landed (test-first).** `lib/schedule.ts`
+  `nextDueRelease(state, now)` — pure, INTERVAL (cadence+anchor) and WEEKLY (weekday-sets, e.g. MWF), day-after
+  buffer, de-dupe (11 tests). Additive Prisma migration adds the schedule columns + `ReleaseScheduleKind`/
+  `ReleaseEventKind` enums to `Series` (all nullable/defaulted — safe for existing rows). `evaluateSchedules()` service
+  (unit-tested with fakes, 3 tests) loads scheduled series, emits a due-release effect per series, and stamps
+  `scheduleLastNotifiedAt` in one transaction; wired into the cron alongside `pollAllSources`. Integration tests (real
+  DB, +2) prove fire→stamp→no-refire. **149 unit + 12 integration green.** Per owner: **editor UI deferred**, and
+  **push delivery is WP-09** (the cron computes + stamps but doesn't yet send). *Deploy note: the next push runs this
+  migration on Neon via `vercel-build`.*
 - **2026-07-23** — **WP-17b render spike: feasibility CONFIRMED (local Playwright, scratchpad).** A headless render
   reaches chapter lists plain fetch can't (one site 0→36, another 2→…), in ~6–19 s (inside a Vercel 60 s budget).
   Key finding: **a bare render under-reads — the full TOC needs per-host post-render interactions.** Two patterns:

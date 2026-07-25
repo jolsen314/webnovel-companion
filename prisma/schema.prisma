@@ -75,6 +75,18 @@ enum TranslationStatus {
   UNKNOWN
 }
 
+/// How a manual release schedule's predicted dates recur (lib/schedule.ts).
+enum ReleaseScheduleKind {
+  INTERVAL // every N days from an anchor
+  WEEKLY // fixed weekdays (e.g. Mon/Wed/Fri)
+}
+
+/// What a scheduled release predicts — drives notification copy.
+enum ReleaseEventKind {
+  NEW_CHAPTER
+  UNLOCKED // an advance chapter likely went free
+}
+
 // ── Models ───────────────────────────────────────────────────────────────────
 
 /// A tracked work on the shelf. Survives translator/site moves; owns progress/rating/notes.
@@ -92,6 +104,17 @@ model Series {
   finishedAt         DateTime?
   targetChapterCount Int? // raw/native total (NU or manual) — plan-to-read completion watch
   translationStatus  TranslationStatus @default(UNKNOWN)
+
+  // Manual release schedule (WP-29) — a no-fetch fallback for fully-blocked sites.
+  // Evaluated by lib/schedule.ts; notifies the day after a predicted release.
+  releaseScheduleKind    ReleaseScheduleKind? // null = no schedule
+  releaseCadenceDays     Int? // INTERVAL: period in days
+  releaseAnchoredOn      DateTime? // INTERVAL: a known past release the cadence counts from
+  releaseWeekdays        Int[] // WEEKLY: 0=Sun..6=Sat (e.g. MWF = [1,3,5])
+  releaseEventKind       ReleaseEventKind @default(NEW_CHAPTER)
+  releaseNote            String? // free text, owner's own reminder
+  scheduleLastNotifiedAt DateTime? // de-dupe: the last predicted release we notified
+
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 

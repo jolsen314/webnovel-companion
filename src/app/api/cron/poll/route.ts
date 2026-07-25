@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { pollAllSources } from '../../../../server/services';
+import { pollAllSources, evaluateSchedules } from '../../../../server/services';
 import { isAuthorizedCron } from '../../../../server/api/validation';
 
 export const dynamic = 'force-dynamic';
@@ -13,12 +13,15 @@ export async function GET(request: Request) {
   }
 
   const effects = await pollAllSources();
+  // No-fetch fallback: predicted releases for series with a manual schedule (WP-29).
+  const scheduleEffects = await evaluateSchedules();
 
-  // TODO(WP-09): send Web Push for effects with new chapters / crossedDown.
+  // TODO(WP-09): send Web Push for new chapters, crossedDown, and due scheduled releases.
   const summary = {
     polled: effects.length,
     newChapters: effects.reduce((n, e) => n + e.newChapters.length, 0),
     wentDown: effects.filter((e) => e.crossedDown).length,
+    scheduledReleases: scheduleEffects.length,
   };
   return NextResponse.json(summary);
 }
