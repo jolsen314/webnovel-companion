@@ -7,13 +7,12 @@
  * (scheduled) releases, then source-down alerts — and preserve input order within a
  * category (no sorting).
  *
- * TODO(privacy — WP-09 follow-up): keep the *work's title out of the always-visible
- * notification `title`* so a lock-screen preview doesn't reveal what the owner reads to
- * a passing glance. The intended shape is a generic `title` ("New chapter") with the
- * series name in the `body`, which the OS "show previews: when unlocked" setting then
- * masks until the notification is expanded/unlocked (iOS can't be forced from the web,
- * so we cooperate with that setting rather than control it). Optionally a "discreet"
- * pref. Current copy puts the series in the title — revisit before shipping push wide.
+ * Privacy: the *work's name is kept out of the always-visible notification `title`*
+ * (generic category there, series name in the `body`) so a lock-screen glance doesn't
+ * reveal what the owner reads. This cooperates with the OS "show previews: when unlocked"
+ * setting, which masks the body until the notification is expanded/unlocked — the web
+ * can't force that on iOS, so the owner should set previews to "when unlocked". The
+ * source-down host also lives in the body for the same reason.
  */
 
 import type { ReleaseEventKind } from './schedule';
@@ -53,11 +52,14 @@ export function buildPushMessages(input: NotifyInput): PushMessage[] {
   const push = input.push ?? { newChapters: true, scheduledReleases: true, sourcesDown: true };
   const messages: PushMessage[] = [];
 
+  // Privacy: the work's name goes in the BODY, never the always-visible title — so a
+  // lock-screen glance shows only a generic category. The OS "previews when unlocked"
+  // setting then masks the body until the notification is expanded/unlocked.
   for (const { seriesId, count } of push.newChapters ? input.newChapters : []) {
     if (count <= 0) continue;
     messages.push({
-      title: seriesTitle(seriesId),
-      body: `${count} new chapter${count === 1 ? '' : 's'}`,
+      title: count === 1 ? 'New chapter' : 'New chapters',
+      body: count === 1 ? seriesTitle(seriesId) : `${seriesTitle(seriesId)} — ${count} new`,
       url: `/series/${seriesId}`,
       tag: `new-${seriesId}`,
     });
@@ -65,8 +67,8 @@ export function buildPushMessages(input: NotifyInput): PushMessage[] {
 
   for (const { seriesId, eventKind } of push.scheduledReleases ? input.scheduledReleases : []) {
     messages.push({
-      title: seriesTitle(seriesId),
-      body: eventKind === 'UNLOCKED' ? 'An advance chapter likely went free' : 'A new chapter is likely up',
+      title: eventKind === 'UNLOCKED' ? 'Likely now free' : 'New chapter likely',
+      body: seriesTitle(seriesId),
       url: `/series/${seriesId}`,
       tag: `sched-${seriesId}`,
     });

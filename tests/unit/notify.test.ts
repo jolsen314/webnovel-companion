@@ -11,16 +11,17 @@ const base = (over: Partial<NotifyInput>): NotifyInput => ({
 });
 
 describe('buildPushMessages', () => {
-  test('new chapters → one per-series digest, pluralized, deep-linked', () => {
+  test('new chapters → one per-series digest, deep-linked, work name kept out of the title', () => {
     const msgs = buildPushMessages(base({ newChapters: [{ seriesId: 's1', count: 3 }] }));
     expect(msgs).toEqual([
-      { title: 'Silver Moon Saga', body: '3 new chapters', url: '/series/s1', tag: 'new-s1' },
+      { title: 'New chapters', body: 'Silver Moon Saga — 3 new', url: '/series/s1', tag: 'new-s1' },
     ]);
   });
 
-  test('a single new chapter is not pluralized', () => {
+  test('a single new chapter uses the singular title, with just the work name in the body', () => {
     const msgs = buildPushMessages(base({ newChapters: [{ seriesId: 's2', count: 1 }] }));
-    expect(msgs[0]!.body).toBe('1 new chapter');
+    expect(msgs[0]!.title).toBe('New chapter');
+    expect(msgs[0]!.body).toBe('Cannon Fodder');
   });
 
   test('a zero/negative count produces no message', () => {
@@ -37,16 +38,26 @@ describe('buildPushMessages', () => {
       }),
     );
     expect(msgs).toEqual([
-      { title: 'Silver Moon Saga', body: 'A new chapter is likely up', url: '/series/s1', tag: 'sched-s1' },
-      { title: 'Cannon Fodder', body: 'An advance chapter likely went free', url: '/series/s2', tag: 'sched-s2' },
+      { title: 'New chapter likely', body: 'Silver Moon Saga', url: '/series/s1', tag: 'sched-s1' },
+      { title: 'Likely now free', body: 'Cannon Fodder', url: '/series/s2', tag: 'sched-s2' },
     ]);
   });
 
-  test('a source going down is its own alert', () => {
+  test('a source going down is its own alert (title already work-agnostic)', () => {
     const msgs = buildPushMessages(base({ sourcesDown: [{ seriesId: 's3', host: 'reader.example' }] }));
     expect(msgs).toEqual([
       { title: 'Source may be down', body: "Hotel Business — reader.example isn't responding", url: '/series/s3', tag: 'down-s3' },
     ]);
+  });
+
+  test('privacy: the work title never appears in the always-visible notification title', () => {
+    const msgs = buildPushMessages(
+      base({
+        newChapters: [{ seriesId: 's1', count: 2 }],
+        scheduledReleases: [{ seriesId: 's1', eventKind: 'UNLOCKED' }],
+      }),
+    );
+    for (const m of msgs) expect(m.title).not.toContain('Silver Moon Saga');
   });
 
   test('within a category, messages preserve input order (no sorting)', () => {

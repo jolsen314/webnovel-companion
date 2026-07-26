@@ -245,8 +245,8 @@ describe('notifyForEffects (real DB)', () => {
     );
 
     expect(captured.map((m) => ({ title: m.title, body: m.body, tag: m.tag }))).toEqual([
-      { title: 'Alpha', body: '2 new chapters', tag: `new-${seriesId}` },
-      { title: 'Alpha', body: 'An advance chapter likely went free', tag: `sched-${seriesId}` },
+      { title: 'New chapters', body: 'Alpha — 2 new', tag: `new-${seriesId}` },
+      { title: 'Likely now free', body: 'Alpha', tag: `sched-${seriesId}` },
     ]);
     expect(summary.sent).toBe(2);
   });

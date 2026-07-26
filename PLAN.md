@@ -361,11 +361,11 @@ for tokens; gets its own brainstorm → spec when prioritized. Depends on WP-10 
 
 ## Backlog / open questions
 
-- **Notification privacy (WP-09 follow-up)** — a lock-screen preview shouldn't reveal *which* novel the owner reads
-  to a passing glance. Plan: keep the work title out of the always-visible notification `title` (generic title, series
-  in the `body`), so the OS "show previews: when unlocked" setting masks it until the notification is expanded/unlocked
-  (iOS can't be forced from the web — we cooperate with that setting). Current copy puts the series in the title; flip
-  before shipping push wide. Possible "discreet" pref later. See TODO in `lib/notify.ts`.
+- **Notification privacy** *(implemented 2026-07-26)* — the work's name is kept out of the always-visible notification
+  `title` (generic category there, series in the `body`; source-down host in the body too), so a lock-screen glance
+  reveals only "New chapters" / "Likely now free" and not *which* novel. Relies on the owner setting the OS to "show
+  previews: when unlocked" (iOS can't be forced from the web). A "discreet" pref (hide even the category) is a possible
+  future add. See `lib/notify.ts`.
 - **Free-tier constraint is compute, not chapter storage** *(resolved 2026-07-23)* — worry was that many chapters
   (100–1,000/series) might exceed the DB free tier. Math says no: a `Chapter` row is ~300–400 B with indexes, so a
   1,000-chapter series ≈ ~0.4 MB and a *heavy* library (200 series × 300 ch ≈ 60k rows) ≈ ~20–30 MB against Neon
@@ -385,6 +385,11 @@ for tokens; gets its own brainstorm → spec when prioritized. Depends on WP-10 
 
 ## Changelog
 
+- **2026-07-26** — **WP-09 notification privacy: work title kept off the lock screen (test-first).** Restructured the
+  push copy so the series name lives in the `body`, never the always-visible `title` — new: "New chapter(s)" /
+  "{Series} — N new"; scheduled: "New chapter likely" | "Likely now free" / "{Series}"; source-down title was already
+  work-agnostic. A regression test asserts the work title never appears in `title`. Cooperates with the OS "previews
+  when unlocked" setting (can't be forced on iOS). 167 unit + 18 integration green.
 - **2026-07-26** — **WP-09 Slice B browser: service worker + Settings page built.** `sw.js` gained `push` (renders the
   JSON `PushMessage`, tag-collapsed) + `notificationclick` (focus/open the deep link) handlers. `pushClient.ts`
   (browser): support check, permission+subscribe with the VAPID public key, unsubscribe, and **`resyncSubscription`**
