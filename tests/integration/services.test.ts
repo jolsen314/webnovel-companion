@@ -3,6 +3,7 @@ import {
   addSeries,
   pollAllSources,
   evaluateSchedules,
+  notifyForEffects,
   listSeries,
   updateSeries,
   savePushSubscription,
@@ -10,6 +11,9 @@ import {
 } from '../../src/server/services';
 import { db } from '../../src/server/db';
 import type { PoliteResult } from '../../src/lib/feeds/fetch';
+import type { PollEffects } from '../../src/server/services/poll';
+import type { PushSendPorts, PushTarget } from '../../src/server/services/pushSend';
+import type { PushMessage } from '../../src/lib/notify';
 
 // ── fixtures ────────────────────────────────────────────────────────────────
 const okRes = (body: string, extra: Partial<Extract<PoliteResult, { outcome: 'SUCCESS' }>> = {}): PoliteResult => ({
@@ -202,6 +206,86 @@ describe('evaluateSchedules (real DB)', () => {
   test('a series without a schedule is ignored', async () => {
     await addAlpha();
     expect(await evaluateSchedules(new Date('2026-07-14T09:00:00Z'))).toEqual([]);
+  });
+});
+
+describe('notifyForEffects (real DB)', () => {
+  const HEALTHY = { health: 'HEALTHY', consecutiveFailures: 0, score: 0, lastFailureType: null } as const;
+  const effect = (over: Partial<PollEffects>): PollEffects => ({
+    sourceId: 'src',
+    seriesId: 'series',
+    health: HEALTHY,
+    succeeded: true,
+    notModified: false,
+    newChapters: [],
+    etag: null,
+    lastModified: null,
+    crossedDown: false,
+    ...over,
+  });
+
+  test('builds per-series digest + scheduled messages with real titles', async () => {
+    const seriesId = await addAlpha(); // series title "Alpha"
+    const captured: PushMessage[] = [];
+    const ports: PushSendPorts = {
+      loadSubscriptions: async () => [{ endpoint: 'e1', p256dh: 'p', auth: 'a' }],
+      send: async (_t, m) => {
+        captured.push(m);
+        return 'SENT';
+      },
+      deleteSubscription: async () => {},
+    };
+
+    const summary = await notifyForEffects(
+      [effect({ seriesId, newChapters: [{ url: 'u1', title: 'C1' }, { url: 'u2', title: 'C2' }] })],
+      [{ seriesId, releaseDate: new Date('2026-07-13T00:00:00Z'), eventKind: 'UNLOCKED' }],
+      ports,
+    );
+
+    expect(captured.map((m) => ({ title: m.title, body: m.body, tag: m.tag }))).toEqual([
+      { title: 'Alpha', body: '2 new chapters', tag: `new-${seriesId}` },
+      { title: 'Alpha', body: 'An advance chapter likely went free', tag: `sched-${seriesId}` },
+    ]);
+    expect(summary.sent).toBe(2);
+  });
+
+  test('a source crossing down produces a "may be down" alert with the resolved host', async () => {
+    const seriesId = await addAlpha();
+    const source = await db.source.findFirstOrThrow({ where: { seriesId } });
+    const captured: PushMessage[] = [];
+    const ports: PushSendPorts = {
+      loadSubscriptions: async () => [{ endpoint: 'e1', p256dh: 'p', auth: 'a' }],
+      send: async (_t, m) => {
+        captured.push(m);
+        return 'SENT';
+      },
+      deleteSubscription: async () => {},
+    };
+
+    await notifyForEffects([effect({ sourceId: source.id, seriesId, crossedDown: true })], [], ports);
+
+    expect(captured).toHaveLength(1);
+    expect(captured[0]!.body).toBe(`Alpha — ${source.host} isn't responding`);
+    expect(captured[0]!.tag).toBe(`down-${seriesId}`);
+  });
+
+  test('an EXPIRED push channel (404/410) is pruned — independent of source health', async () => {
+    const seriesId = await addAlpha();
+    await db.pushSubscription.create({ data: { userId: 'local', endpoint: 'gone', p256dh: 'p', auth: 'a' } });
+    const ports: PushSendPorts = {
+      loadSubscriptions: async () =>
+        db.pushSubscription.findMany({ select: { endpoint: true, p256dh: true, auth: true } }) as Promise<PushTarget[]>,
+      send: async () => 'EXPIRED', // the push service says this device's channel is gone
+      deleteSubscription: async (endpoint) => {
+        await db.pushSubscription.delete({ where: { endpoint } });
+      },
+    };
+
+    // A plain new-chapter effect (source is HEALTHY) — pruning has nothing to do with the site.
+    const summary = await notifyForEffects([effect({ seriesId, newChapters: [{ url: 'u', title: 'C' }] })], [], ports);
+
+    expect(summary.expired).toBe(1);
+    expect(await db.pushSubscription.count()).toBe(0);
   });
 });
 

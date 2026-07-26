@@ -91,7 +91,7 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-17b | Hard sources: self-run headless renderer (`fetchMode` PLAIN→RENDER) for JS-rendered TOCs — [design](docs/superpowers/specs/2026-07-23-wp17b-hard-sources-design.md) | M1↑ | `TODO` | WP-17 |
 | WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` (INTERVAL + WEEKLY), notify day-after, new/unlocked tag. **Lib + schema + cron wiring DONE; editor UI + push delivery (WP-09) remain** | M1↑ | `WIP` | WP-07, WP-10 |
 | ⭐ WP-20 | Paid→free frontier + "now free" (free frontier off the TOC; **PLANNED+paid → fire only when 0 locked remain**, see WP-27) | M1↑ | `TODO` | WP-07, WP-17 |
-| WP-09 | Web Push end-to-end (VAPID, sw handler, subscribe flow) | M0 | `TODO` | WP-06, WP-08 |
+| WP-09 | Web Push end-to-end (VAPID, sw handler, subscribe flow). **Slice A (server send-path) DONE; Slice B (sw push handler + client subscribe, re-syncing on load) remains** | M0 | `WIP` | WP-06, WP-08 |
 | ⭐ WP-10 | Library + series-detail UI (unread counts, mark progress) | M0 | `DONE` | WP-06, WP-08 |
 | ⭐ WP-AUTH | Single-user password gate (scrypt hash + signed cookie + middleware) — **deploy prerequisite** | M0 | `DONE` | WP-06, WP-08 |
 | WP-11 | Deploy to Vercel + Cron + PWA install verification | M0 | `DONE` | WP-08, WP-AUTH |
@@ -380,6 +380,18 @@ for tokens; gets its own brainstorm → spec when prioritized. Depends on WP-10 
 
 ## Changelog
 
+- **2026-07-25** — **WP-09 Slice A: Web Push server send-path landed (test-first).** Pure `lib/notify.ts`
+  `buildPushMessages` turns normalized signals into messages — per-series new-chapter **digest** ("N new chapters"),
+  kind-specific **scheduled-release** copy (WP-29), and **source-down** alerts (only on `crossedDown` = crossing into
+  LIKELY_DOWN, never DEGRADED), in a fixed category order (7 tests). `server/services/pushSend.ts` `sendPushMessages`
+  fans messages out to every subscription via an injected transport and **prunes EXPIRED channels** (push service
+  404/410 — a *device* channel gone, unrelated to source health) (4 tests). Prisma + `web-push` binding
+  (`notifyForEffects`, VAPID from env, skipped if unconfigured) wired into the cron; integration tests (real DB, +3)
+  cover digest/scheduled copy, host-resolved down alerts, and expired-channel pruning. **160 unit + 15 integration
+  green.** **Slice B remains:** `sw.js` push + notificationclick handlers, and a client subscribe flow that
+  **re-syncs the subscription on every app load** (self-heals server-side pruning; no manual "reinstate"). Source-down
+  *recovery* is separate: transient downtime self-heals on the next successful poll, permanent moves are WP-19. Env:
+  `VAPID_*` + `NEXT_PUBLIC_VAPID_PUBLIC_KEY` (owner adds to Vercel).
 - **2026-07-25** — **WP-29 (partial): release-schedule lib + schema + cron wiring landed (test-first).** `lib/schedule.ts`
   `nextDueRelease(state, now)` — pure, INTERVAL (cadence+anchor) and WEEKLY (weekday-sets, e.g. MWF), day-after
   buffer, de-dupe (11 tests). Additive Prisma migration adds the schedule columns + `ReleaseScheduleKind`/

@@ -12,6 +12,9 @@ import {
   type SchedulePorts,
 } from './scheduleNotify';
 import type { ReleaseSchedule } from '../../lib/schedule';
+import { setVapidDetails, sendNotification } from 'web-push';
+import { buildPushMessages } from '../../lib/notify';
+import { sendPushMessages, type PushSendPorts, type SendSummary } from './pushSend';
 
 export { listSeries, getSeries, updateSeries } from './series';
 export { savePushSubscription } from './push';
@@ -167,6 +170,86 @@ function schedulePorts(): SchedulePorts {
 /** Evaluate every series' manual release schedule; stamp + return the ones now due (WP-29). */
 export function evaluateSchedules(now: Date = new Date()): Promise<ScheduleEffect[]> {
   return evaluateSchedulesCore(schedulePorts(), now);
+}
+
+// ── Web Push (WP-09) ─────────────────────────────────────────────────────────
+
+let vapidReady: boolean | null = null;
+/** Configure web-push from env once. Missing keys → sending is skipped (local dev). */
+function ensureVapid(): boolean {
+  if (vapidReady !== null) return vapidReady;
+  const publicKey = process.env.VAPID_PUBLIC_KEY;
+  const privateKey = process.env.VAPID_PRIVATE_KEY;
+  if (publicKey && privateKey) {
+    setVapidDetails(process.env.VAPID_SUBJECT ?? 'mailto:admin@example.com', publicKey, privateKey);
+    vapidReady = true;
+  } else {
+    vapidReady = false;
+  }
+  return vapidReady;
+}
+
+function pushSendPorts(): PushSendPorts {
+  return {
+    loadSubscriptions: () =>
+      db.pushSubscription.findMany({ select: { endpoint: true, p256dh: true, auth: true } }),
+    send: async (target, message) => {
+      if (!ensureVapid()) return 'FAILED'; // no keys configured → don't crash the cron
+      try {
+        await sendNotification(
+          { endpoint: target.endpoint, keys: { p256dh: target.p256dh, auth: target.auth } },
+          JSON.stringify(message),
+        );
+        return 'SENT';
+      } catch (e) {
+        const status = (e as { statusCode?: number }).statusCode;
+        return status === 404 || status === 410 ? 'EXPIRED' : 'FAILED';
+      }
+    },
+    deleteSubscription: async (endpoint) => {
+      await db.pushSubscription.delete({ where: { endpoint } }).catch(() => {}); // already gone is fine
+    },
+  };
+}
+
+/** Preload titles for the given series ids → a resolver for `buildPushMessages`. */
+async function seriesTitleResolver(ids: string[]): Promise<(id: string) => string> {
+  const unique = [...new Set(ids)];
+  const rows =
+    unique.length > 0
+      ? await db.series.findMany({ where: { id: { in: unique } }, select: { id: true, title: true } })
+      : [];
+  const titles = new Map(rows.map((r) => [r.id, r.title]));
+  return (id) => titles.get(id) ?? 'A series';
+}
+
+/** Turn a cron run's poll + schedule effects into push notifications and send them. */
+export async function notifyForEffects(
+  pollEffects: PollEffects[],
+  scheduleEffects: ScheduleEffect[],
+  ports: PushSendPorts = pushSendPorts(),
+): Promise<SendSummary> {
+  const newChapters = pollEffects
+    .filter((e) => e.newChapters.length > 0)
+    .map((e) => ({ seriesId: e.seriesId, count: e.newChapters.length }));
+  const scheduledReleases = scheduleEffects.map((e) => ({ seriesId: e.seriesId, eventKind: e.eventKind }));
+
+  // Source-down alerts need the host, which lives on the Source row.
+  const downSourceIds = pollEffects.filter((e) => e.crossedDown).map((e) => e.sourceId);
+  const downSources =
+    downSourceIds.length > 0
+      ? await db.source.findMany({ where: { id: { in: downSourceIds } }, select: { seriesId: true, host: true } })
+      : [];
+  const sourcesDown = downSources.map((s) => ({ seriesId: s.seriesId, host: s.host }));
+
+  const seriesTitle = await seriesTitleResolver([
+    ...newChapters.map((n) => n.seriesId),
+    ...scheduledReleases.map((s) => s.seriesId),
+    ...sourcesDown.map((s) => s.seriesId),
+  ]);
+
+  const messages = buildPushMessages({ seriesTitle, newChapters, scheduledReleases, sourcesDown });
+  return sendPushMessages(messages, ports);
 }
 
 /** Resolve a pasted URL to a feed (or page-watch) and create the Series + Source. */
