@@ -46,12 +46,18 @@ export default function SettingsPage() {
     setTestMsg(null);
     try {
       const res = await fetch('/api/push/test', { method: 'POST' });
-      const s = (await res.json()) as { sent: number; expired: number; failed: number };
-      setTestMsg(
-        s.sent > 0
-          ? `Sent to ${s.sent} device${s.sent === 1 ? '' : 's'}. Check your notifications.`
-          : 'No device received it — make sure notifications are enabled above and in your OS settings.',
-      );
+      const data = (await res.json().catch(() => ({}))) as {
+        sent?: number;
+        failed?: number;
+        error?: string;
+      };
+      if (!res.ok) {
+        setTestMsg(data.error ? `Server error: ${data.error}` : `Server error (${res.status}).`);
+      } else if ((data.sent ?? 0) > 0) {
+        setTestMsg(`Sent to ${data.sent} device${data.sent === 1 ? '' : 's'}. Check your notifications.`);
+      } else {
+        setTestMsg('No device received it — re-enable notifications above, and check your OS notification settings.');
+      }
     } catch {
       setTestMsg('Couldn’t reach the server. Try again.');
     }

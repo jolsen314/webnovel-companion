@@ -17,7 +17,14 @@ export async function GET(request: Request) {
   const scheduleEffects = await evaluateSchedules();
 
   // Web Push (WP-09): new chapters, sources that crossed down, and due scheduled releases.
-  const push = await notifyForEffects(effects, scheduleEffects);
+  // Isolated so a push/VAPID misconfiguration can't fail the poll — the diff already persisted.
+  let push: Awaited<ReturnType<typeof notifyForEffects>> | { error: string };
+  try {
+    push = await notifyForEffects(effects, scheduleEffects);
+  } catch (e) {
+    push = { error: e instanceof Error ? e.message : 'push send failed' };
+    console.error('cron push send failed:', e);
+  }
 
   const summary = {
     polled: effects.length,
