@@ -47,6 +47,7 @@ function rowToPollable(row: {
   id: string;
   seriesId: string;
   type: PollableSource['type'];
+  fetchMode: PollableSource['fetchMode'];
   url: string;
   feedUrl: string | null;
   matchType: string;
@@ -62,6 +63,7 @@ function rowToPollable(row: {
     id: row.id,
     seriesId: row.seriesId,
     type: row.type,
+    fetchMode: row.fetchMode,
     fetchUrl: row.feedUrl ?? row.url,
     match: toSeriesMatch(row.matchType, row.matchValue),
     etag: row.etag,
@@ -73,9 +75,13 @@ function rowToPollable(row: {
   };
 }
 
-function pollPorts(fetchImpl: FetchImpl): PollPorts & { loadActiveSources: () => Promise<PollableSource[]> } {
+function pollPorts(
+  fetchImpl: FetchImpl,
+  renderImpl?: FetchImpl,
+): PollPorts & { loadActiveSources: () => Promise<PollableSource[]> } {
   return {
     fetch: fetchImpl,
+    renderFetch: renderImpl,
     loadActiveSources: async () => (await db.source.findMany({ where: { isActive: true } })).map(rowToPollable),
     loadStoredChapters: async (seriesId) =>
       (await db.chapter.findMany({ where: { seriesId }, select: { guid: true, url: true } })).map((c) => ({
@@ -96,6 +102,7 @@ function pollPorts(fetchImpl: FetchImpl): PollPorts & { loadActiveSources: () =>
             lastModified: e.lastModified,
             lastCheckedAt: now,
             ...(e.succeeded ? { lastSuccessAt: now } : {}),
+            ...(e.escalateToRender ? { fetchMode: 'RENDER' as const } : {}),
           },
         }),
         ...(e.newChapters.length > 0
@@ -121,8 +128,8 @@ function pollPorts(fetchImpl: FetchImpl): PollPorts & { loadActiveSources: () =>
 }
 
 /** Poll every active source, diffing new chapters and updating health. */
-export function pollAllSources(fetchImpl: FetchImpl = fetchPort): Promise<PollEffects[]> {
-  return pollAllCore(pollPorts(fetchImpl));
+export function pollAllSources(fetchImpl: FetchImpl = fetchPort, renderImpl?: FetchImpl): Promise<PollEffects[]> {
+  return pollAllCore(pollPorts(fetchImpl, renderImpl));
 }
 
 /** Build a pure `ReleaseSchedule` from a Series row's schedule columns (null if malformed). */

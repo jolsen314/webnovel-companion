@@ -159,6 +159,21 @@ describe('page-watch source (real DB)', () => {
     expect(chapters.map((c) => c.url)).toEqual([W1, W2, W3]);
     expect(chapters.find((c) => c.url === W3)!.access).toBe('LOCKED');
   });
+
+  test('a plain page-watch that under-reads escalates the source to RENDER (when a renderer is available)', async () => {
+    const { seriesId } = await addSeries({ url: WATCH_URL }, fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1))) }));
+    // A tiny plain TOC (1 chapter ≤ 5) + a renderer available → persist fetchMode = RENDER for next time.
+    await pollAllSources(fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1))) }), async () => okRes(TOC(ROW(W1))));
+
+    expect((await db.source.findFirstOrThrow({ where: { seriesId } })).fetchMode).toBe('RENDER');
+  });
+
+  test('the same under-read does not escalate when no renderer is configured', async () => {
+    const { seriesId } = await addSeries({ url: WATCH_URL }, fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1))) }));
+    await pollAllSources(fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1))) })); // no render impl
+
+    expect((await db.source.findFirstOrThrow({ where: { seriesId } })).fetchMode).toBe('PLAIN');
+  });
 });
 
 describe('updateSeries (real DB)', () => {
@@ -223,6 +238,7 @@ describe('notifyForEffects (real DB)', () => {
     etag: null,
     lastModified: null,
     crossedDown: false,
+    escalateToRender: false,
     ...over,
   });
 

@@ -14,6 +14,7 @@ function source(overrides: Partial<PollableSource> = {}): PollableSource {
     id: 's1',
     seriesId: 'series1',
     type: 'FEED',
+    fetchMode: 'PLAIN',
     fetchUrl: 'https://feed.example/rss',
     match: { type: 'WHOLE_FEED' },
     etag: null,
@@ -126,6 +127,69 @@ describe('pollSource', () => {
       'https://x.example/novel/a/chapter-2/',
     ]);
     expect(effects.newChapters.map((c) => c.access)).toEqual(['FREE', 'LOCKED']);
+  });
+
+  // ── WP-17b: render fetch mode + escalation ──────────────────────────────
+  function renderPorts(
+    plain: PoliteResult,
+    render: PoliteResult,
+    stored: KnownChapter[] = [],
+  ): PollPorts & { applied: unknown[] } {
+    const applied: unknown[] = [];
+    return {
+      applied,
+      fetch: async () => plain,
+      renderFetch: async () => render,
+      loadStoredChapters: async () => stored,
+      applyPollEffects: async (e) => {
+        applied.push(e);
+      },
+    };
+  }
+
+  const toc = (...urls: string[]) =>
+    `<ul>${urls.map((u) => `<li><a href="${u}">Chapter</a></li>`).join('')}</ul>`;
+
+  test('a RENDER-mode source fetches via the render port, not plain fetch', async () => {
+    const p = renderPorts(ok(toc('https://x.example/plain-1/')), ok(toc('https://x.example/render-1/')));
+    const effects = await pollSource(
+      source({ type: 'PAGE_WATCH', fetchMode: 'RENDER', fetchUrl: 'https://x.example/a/', match: { type: 'WHOLE_FEED' } }),
+      p,
+    );
+    expect(effects.newChapters.map((c) => c.url)).toEqual(['https://x.example/render-1/']);
+  });
+
+  test('escalates a PAGE_WATCH source to RENDER when a plain fetch yields ≤5 chapters and a renderer exists', async () => {
+    const p = renderPorts(ok(toc('https://x.example/a/chapter-1/')), ok('<ul></ul>'));
+    const effects = await pollSource(
+      source({ type: 'PAGE_WATCH', fetchMode: 'PLAIN', fetchUrl: 'https://x.example/a/', match: { type: 'WHOLE_FEED' } }),
+      p,
+    );
+    expect(effects.escalateToRender).toBe(true);
+  });
+
+  test('does not escalate when the plain TOC is already rich (>5 chapters)', async () => {
+    const urls = Array.from({ length: 6 }, (_, i) => `https://x.example/a/chapter-${i + 1}/`);
+    const p = renderPorts(ok(toc(...urls)), ok('<ul></ul>'));
+    const effects = await pollSource(
+      source({ type: 'PAGE_WATCH', fetchMode: 'PLAIN', fetchUrl: 'https://x.example/a/', match: { type: 'WHOLE_FEED' } }),
+      p,
+    );
+    expect(effects.escalateToRender).toBe(false);
+  });
+
+  test('does not escalate a FEED source, even with few items', async () => {
+    const p = renderPorts(ok(RSS(ITEM('g1', 'https://x.example/c1'))), ok('<ul></ul>'));
+    const effects = await pollSource(source({ type: 'FEED', fetchMode: 'PLAIN' }), p);
+    expect(effects.escalateToRender).toBe(false);
+  });
+
+  test('does not escalate when no renderer is configured (plain-only ports)', async () => {
+    const effects = await pollSource(
+      source({ type: 'PAGE_WATCH', fetchMode: 'PLAIN', fetchUrl: 'https://x.example/a/', match: { type: 'WHOLE_FEED' } }),
+      ports(ok(toc('https://x.example/a/chapter-1/'))),
+    );
+    expect(effects.escalateToRender).toBe(false);
   });
 
   test('does not re-report already-stored chapters', async () => {

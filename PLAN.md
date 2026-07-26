@@ -384,6 +384,13 @@ for tokens; gets its own brainstorm → spec when prioritized. Depends on WP-10 
 
 ## Changelog
 
+- **2026-07-26** — **WP-17b Slice A: fetch-mode dispatch + render escalation (test-first).** Added `Source.fetchMode`
+  (PLAIN|RENDER, additive migration). `pollSource` picks the render port for RENDER sources (falls back to plain when
+  no renderer is configured), and **escalates** a PAGE_WATCH source to RENDER when a plain poll returns ≤5 chapters and
+  a renderer is available (persisted via an `escalateToRender` effect) — the "the JS TOC didn't render" signal. Threaded
+  an optional `renderImpl` through `pollAllSources`/`pollPorts`. Safe/no-op in prod until the renderer is wired (no
+  render impl → no escalation, RENDER falls back to plain). 172 unit + 20 integration green. Next: the `renderFetch`
+  adapter (Slice B) + the `services/renderer/` Playwright service & Vercel `@sparticuz/chromium` prototype (Slice C).
 - **2026-07-26** — **WP-09 DONE: Web Push verified live on a device.** Added a "Send a test" button + `/api/push/test`
   (fires a canned push through the real send path). Live-testing surfaced a config gotcha — a bare-email
   `VAPID_SUBJECT` makes `setVapidDetails` throw; hardened the test route to return the real error as JSON (not a bare

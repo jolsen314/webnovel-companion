@@ -29,6 +29,12 @@ enum SourceType {
   PAGE_WATCH
 }
 
+/// How a source is fetched (WP-17b). PLAIN = politeFetch; RENDER = headless renderer.
+enum SourceFetchMode {
+  PLAIN
+  RENDER
+}
+
 /// How to isolate one series' items within a (possibly site-wide, multi-novel) feed.
 enum SourceMatch {
   WHOLE_FEED
@@ -131,10 +137,11 @@ model Source {
   id       String     @id @default(cuid())
   seriesId String
   series   Series     @relation(fields: [seriesId], references: [id], onDelete: Cascade)
-  url      String // page the user reads on — kept visible even if down
-  host     String // domain, for host-level health aggregation
-  type     SourceType @default(FEED)
-  feedUrl  String?
+  url       String // page the user reads on — kept visible even if down
+  host      String // domain, for host-level health aggregation
+  type      SourceType      @default(FEED)
+  fetchMode SourceFetchMode @default(PLAIN) // WP-17b: escalates to RENDER when a plain TOC under-reads
+  feedUrl   String?
 
   // Series isolation within a (possibly site-wide, multi-novel) feed.
   matchType  SourceMatch @default(WHOLE_FEED)

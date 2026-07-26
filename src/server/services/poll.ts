@@ -17,6 +17,8 @@ export interface PollableSource {
   seriesId: string;
   /** FEED → parse as a feed + apply the series matcher; PAGE_WATCH → parse the TOC. */
   type: 'FEED' | 'PAGE_WATCH';
+  /** PLAIN → `politeFetch`; RENDER → the headless renderer (WP-17b). */
+  fetchMode: 'PLAIN' | 'RENDER';
   /** The URL to GET (feedUrl ?? url). */
   fetchUrl: string;
   match: SeriesMatch;
@@ -42,10 +44,14 @@ export interface PollEffects {
   lastModified: string | null;
   /** Health transitioned INTO LIKELY_DOWN on this poll → fire a "source may be down" alert. */
   crossedDown: boolean;
+  /** A plain page-watch under-read (≤5 chapters) and a renderer is available → switch to RENDER. */
+  escalateToRender: boolean;
 }
 
 export interface PollPorts {
   fetch: (url: string, opts: { etag?: string | null; lastModified?: string | null }) => Promise<PoliteResult>;
+  /** Headless-render fetch (WP-17b). Absent → no renderer configured; RENDER falls back to plain. */
+  renderFetch?: (url: string, opts: { etag?: string | null; lastModified?: string | null }) => Promise<PoliteResult>;
   loadStoredChapters: (seriesId: string) => Promise<KnownChapter[]>;
   applyPollEffects: (effects: PollEffects) => Promise<void>;
 }
@@ -59,12 +65,18 @@ function toHealthState(s: PollableSource): HealthState {
   };
 }
 
+/** A plain page-watch yielding at most this many chapters reads as "the list didn't render". */
+const RENDER_ESCALATION_MAX = 5;
+
 export async function pollSource(src: PollableSource, ports: PollPorts): Promise<PollEffects> {
-  const res = await ports.fetch(src.fetchUrl, { etag: src.etag, lastModified: src.lastModified });
+  // RENDER sources use the headless renderer when one is configured; otherwise fall back to plain.
+  const fetcher = src.fetchMode === 'RENDER' && ports.renderFetch ? ports.renderFetch : ports.fetch;
+  const res = await fetcher(src.fetchUrl, { etag: src.etag, lastModified: src.lastModified });
   const health = step(toHealthState(src), res.outcome);
 
   let newChapters: FeedItem[] = [];
   let notModified = false;
+  let escalateToRender = false;
   let etag = src.etag;
   let lastModified = src.lastModified;
 
@@ -79,6 +91,11 @@ export async function pollSource(src: PollableSource, ports: PollPorts): Promise
       let mine: FeedItem[];
       if (src.type === 'PAGE_WATCH') {
         mine = parseToc(res.body, src.fetchUrl);
+        // A plain page-watch returning almost nothing is usually a JS-rendered TOC that
+        // didn't render — escalate to the headless renderer, if one is available.
+        if (ports.renderFetch && src.fetchMode === 'PLAIN' && mine.length <= RENDER_ESCALATION_MAX) {
+          escalateToRender = true;
+        }
       } else {
         const parsed = await parseFeed(res.body);
         mine = filterBySeriesMatch(parsed.items, src.match);
@@ -98,6 +115,7 @@ export async function pollSource(src: PollableSource, ports: PollPorts): Promise
     etag,
     lastModified,
     crossedDown: src.health !== 'LIKELY_DOWN' && health.health === 'LIKELY_DOWN',
+    escalateToRender,
   };
   await ports.applyPollEffects(effects);
   return effects;
