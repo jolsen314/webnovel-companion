@@ -41,15 +41,14 @@ To re-prioritize, move rows and update the `NEXT` marker. Don't silently reorder
 
 ## Current focus
 
-> **NEXT: WP-20 (paid→free frontier)** — with page-watch now wired end-to-end (WP-17 done), the remaining paid-site
-> value is detecting the *locked→free* transition on chapters we've already seen (the "now free" event), reading the
-> free frontier off the TOC. Then WP-09 (push). WP-17b (headless/Cloudflare fetch) stays a parallel as-needed escalation.
->
-> WP-17 recap: page-watch is the *primary* mechanism for the owner's real reading (dense multi-novel feeds that
-> saturate under daily polling, and paid/advance sites where the "now free" event lives only in the TOC).
+> **NEXT: WP-20 (paid→free frontier)** — with page-watch wired (WP-17) and push delivering (WP-09), the remaining
+> paid-site value is detecting the *locked→free* transition on chapters we've already seen (the "now free" event),
+> reading the free frontier off the TOC. It reuses the WP-09 send-path (an `UNLOCKED` scheduled-style event) and, for
+> the fully-blocked paid sites, pairs with WP-17b (renderer) / WP-29 (manual schedule). Also open: **WP-29's schedule
+> editor UI** (lib + wiring done) and **WP-17b** (renderer).
 
-The MVP is **live on Vercel + Neon** — the feed pipeline, single-user auth gate, and library/detail UI all shipped
-(M0 mostly done; WP-09 push remains). Remaining priority order is reordered to **WP-17 → WP-20 → WP-09**. The
+The MVP is **live on Vercel + Neon** — the feed pipeline, auth gate, library/detail UI, **and Web Push (WP-09)** all
+shipped. Remaining near-term priority: **WP-20 → WP-17b / WP-29-UI**. The
 Cloudflare-capable (headless-browser) fetch is a separate, as-needed escalation for JS-rendered / Cloudflare-challenged
 TOCs; start WP-17 on reachable sites first.
 
@@ -91,7 +90,7 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-17b | Hard sources: self-run headless renderer (`fetchMode` PLAIN→RENDER) for JS-rendered TOCs — [design](docs/superpowers/specs/2026-07-23-wp17b-hard-sources-design.md) | M1↑ | `TODO` | WP-17 |
 | WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` (INTERVAL + WEEKLY), notify day-after, new/unlocked tag. **Lib + schema + cron wiring DONE; editor UI + push delivery (WP-09) remain** | M1↑ | `WIP` | WP-07, WP-10 |
 | ⭐ WP-20 | Paid→free frontier + "now free" (free frontier off the TOC; **PLANNED+paid → fire only when 0 locked remain**, see WP-27) | M1↑ | `TODO` | WP-07, WP-17 |
-| WP-09 | Web Push end-to-end (VAPID, sw handler, subscribe flow, per-type prefs in Settings). **Built end-to-end (send-path + per-type prefs + sw handlers + Settings page + on-load re-sync); live device verification + prod VAPID env pending** | M0 | `WIP` | WP-06, WP-08 |
+| WP-09 | Web Push end-to-end (VAPID, sw handler, subscribe flow, per-type prefs in Settings, privacy copy, test button) — **verified live on a device** | M0 | `DONE` | WP-06, WP-08 |
 | ⭐ WP-10 | Library + series-detail UI (unread counts, mark progress) | M0 | `DONE` | WP-06, WP-08 |
 | ⭐ WP-AUTH | Single-user password gate (scrypt hash + signed cookie + middleware) — **deploy prerequisite** | M0 | `DONE` | WP-06, WP-08 |
 | WP-11 | Deploy to Vercel + Cron + PWA install verification | M0 | `DONE` | WP-08, WP-AUTH |
@@ -385,6 +384,12 @@ for tokens; gets its own brainstorm → spec when prioritized. Depends on WP-10 
 
 ## Changelog
 
+- **2026-07-26** — **WP-09 DONE: Web Push verified live on a device.** Added a "Send a test" button + `/api/push/test`
+  (fires a canned push through the real send path). Live-testing surfaced a config gotcha — a bare-email
+  `VAPID_SUBJECT` makes `setVapidDetails` throw; hardened the test route to return the real error as JSON (not a bare
+  500) and isolated the cron's push step so a VAPID/push misconfig can't fail the poll (the diff has already
+  persisted). With `VAPID_SUBJECT=mailto:…` set in Vercel, "Send a test" delivered to the device. Full WP-09 surface —
+  send-path, per-type prefs, service worker, subscribe + on-load re-sync, privacy copy — confirmed.
 - **2026-07-26** — **WP-09 notification privacy: work title kept off the lock screen (test-first).** Restructured the
   push copy so the series name lives in the `body`, never the always-visible `title` — new: "New chapter(s)" /
   "{Series} — N new"; scheduled: "New chapter likely" | "Likely now free" / "{Series}"; source-down title was already
