@@ -31,6 +31,9 @@ export function isBlockedIp(ip: string): boolean {
   return false;
 }
 
+/** Internal service-discovery suffixes that shouldn't be reachable regardless of DNS. */
+const BLOCKED_SUFFIXES = ['.localhost', '.local', '.internal', '.svc'];
+
 type Resolver = (host: string) => Promise<{ address: string }[]>;
 
 const defaultResolver: Resolver = (host) => lookup(host, { all: true });
@@ -49,7 +52,7 @@ export async function assertPublicUrl(raw: string, resolver: Resolver = defaultR
   if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('Only http(s) URLs are allowed.');
 
   const host = url.hostname.replace(/^\[|\]$/g, ''); // strip IPv6 brackets
-  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.internal')) {
+  if (host === 'localhost' || BLOCKED_SUFFIXES.some((s) => host.endsWith(s))) {
     throw new Error('Blocked host.');
   }
 

@@ -45,6 +45,11 @@ describe('assertPublicUrl', () => {
     await expect(assertPublicUrl('http://localhost/admin', resolveTo('93.184.216.34'))).rejects.toThrow();
   });
 
+  test('rejects internal service suffixes (.internal / .svc) even if they "resolve" public', async () => {
+    await expect(assertPublicUrl('http://kubernetes.default.svc/', resolveTo('93.184.216.34'))).rejects.toThrow();
+    await expect(assertPublicUrl('http://db.internal/', resolveTo('93.184.216.34'))).rejects.toThrow();
+  });
+
   test('rejects a host that resolves to a private address (DNS-based SSRF)', async () => {
     await expect(assertPublicUrl('http://sneaky.example/', resolveTo('169.254.169.254'))).rejects.toThrow();
   });

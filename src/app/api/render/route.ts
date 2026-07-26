@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import chromium from '@sparticuz/chromium';
 import puppeteer from 'puppeteer-core';
-import { assertPublicUrl, isBlockedIp } from '../../../server/render/ssrfGuard';
+import { assertPublicUrl } from '../../../server/render/ssrfGuard';
 
 /**
  * Headless render endpoint (WP-17b) — the Vercel `@sparticuz/chromium` prototype. The
@@ -54,19 +54,20 @@ export async function POST(request: Request) {
     const page = await browser.newPage();
     await page.setUserAgent(USER_AGENT);
 
-    // Re-validate every request so redirects/subresources can't reach an internal address.
-    // Navigations get a full DNS check; subresources get a cheap IP-literal/localhost block.
+    // Re-validate EVERY request (navigation + subresource) with the DNS-resolving guard so
+    // redirects/subresources can't reach an internal address. Cached per host to stay cheap.
     await page.setRequestInterception(true);
+    const hostChecks = new Map<string, Promise<unknown>>();
     page.on('request', async (req) => {
       try {
         const target = new URL(req.url());
         if (target.protocol !== 'http:' && target.protocol !== 'https:') return void (await req.abort());
-        if (req.isNavigationRequest()) {
-          await assertPublicUrl(req.url());
-        } else {
-          const host = target.hostname.replace(/^\[|\]$/g, '');
-          if (host === 'localhost' || isBlockedIp(host)) return void (await req.abort());
+        let check = hostChecks.get(target.hostname);
+        if (!check) {
+          check = assertPublicUrl(req.url());
+          hostChecks.set(target.hostname, check);
         }
+        await check;
         await req.continue();
       } catch {
         await req.abort().catch(() => {});
