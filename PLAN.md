@@ -384,6 +384,13 @@ for tokens; gets its own brainstorm → spec when prioritized. Depends on WP-10 
 
 ## Changelog
 
+- **2026-07-26** — **WP-17b Slice B: `renderFetch` adapter + binding wiring (test-first).** `lib/feeds/renderFetch.ts`
+  `makeRenderFetch(config, http)` POSTs a URL to the render service and maps the reply onto `PoliteResult` (target-page
+  4xx/5xx → HTTP failures; service 5xx → HTTP_5XX; network → soft TIMEOUT), injected HTTP so it unit-tests without a
+  socket (5 tests). Wired into the binding: `pollAllSources` defaults its render port to `makeRenderFetch` from
+  `RENDER_URL`/`RENDER_SECRET` (undefined when unset → no-op). `.env.example` documents the vars. 177 unit + 20
+  integration green. **Next: Slice C** — the `services/renderer/` Playwright service (per-host load-more + tabs) and
+  the Vercel `@sparticuz/chromium` prototype deploy.
 - **2026-07-26** — **WP-17b Slice A: fetch-mode dispatch + render escalation (test-first).** Added `Source.fetchMode`
   (PLAIN|RENDER, additive migration). `pollSource` picks the render port for RENDER sources (falls back to plain when
   no renderer is configured), and **escalates** a PAGE_WATCH source to RENDER when a plain poll returns ≤5 chapters and

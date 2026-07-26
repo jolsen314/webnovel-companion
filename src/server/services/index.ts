@@ -1,6 +1,7 @@
 import { db } from '../db';
 import { getCurrentUserId } from '../user';
 import { politeFetch, type PoliteResult } from '../../lib/feeds/fetch';
+import { makeRenderFetch } from '../../lib/feeds/renderFetch';
 import type { SeriesMatch } from '../../lib/feeds/discover';
 import type { FailureType } from '../../lib/health';
 import { pollAllSources as pollAllCore, type PollableSource, type PollEffects, type PollPorts } from './poll';
@@ -36,6 +37,13 @@ export type FetchImpl = (
 
 const fetchPort: FetchImpl = (url, opts) =>
   politeFetch(url, { etag: opts?.etag ?? undefined, lastModified: opts?.lastModified ?? undefined });
+
+/** The headless-render fetch port, or undefined when no renderer is configured (WP-17b). */
+function renderPort(): FetchImpl | undefined {
+  const endpoint = process.env.RENDER_URL;
+  if (!endpoint) return undefined;
+  return makeRenderFetch({ endpoint, secret: process.env.RENDER_SECRET });
+}
 
 function toSeriesMatch(type: string, value: string | null): SeriesMatch {
   if (type === 'CATEGORY') return { type: 'CATEGORY', value: value ?? '' };
@@ -128,7 +136,10 @@ function pollPorts(
 }
 
 /** Poll every active source, diffing new chapters and updating health. */
-export function pollAllSources(fetchImpl: FetchImpl = fetchPort, renderImpl?: FetchImpl): Promise<PollEffects[]> {
+export function pollAllSources(
+  fetchImpl: FetchImpl = fetchPort,
+  renderImpl: FetchImpl | undefined = renderPort(),
+): Promise<PollEffects[]> {
   return pollAllCore(pollPorts(fetchImpl, renderImpl));
 }
 
