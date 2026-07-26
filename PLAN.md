@@ -87,7 +87,7 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-07 | Services: `pollAllSources()`, `addSeries()` | M0 | `DONE` | WP-01, WP-04, WP-05, WP-FE |
 | WP-08 | API routes (series CRUD, push/subscribe, cron/poll) | M0 | `DONE` | WP-06, WP-07 |
 | ⭐ WP-17 | Page-watch — **primary** for dense/paid sites (`lib/feeds/pageWatch.ts`; framework adapters + generic) | M1↑ | `DONE` | WP-01, WP-05 |
-| WP-17b | Hard sources: self-run headless renderer (`fetchMode` PLAIN→RENDER) for JS-rendered TOCs — [design](docs/superpowers/specs/2026-07-23-wp17b-hard-sources-design.md) | M1↑ | `TODO` | WP-17 |
+| WP-17b | Hard sources: self-run headless renderer (`fetchMode` PLAIN→RENDER) for JS-rendered TOCs — [design](docs/superpowers/specs/2026-07-23-wp17b-hard-sources-design.md). **Live-validated on Vercel** | M1↑ | `DONE` | WP-17 |
 | WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` (INTERVAL + WEEKLY), notify day-after, new/unlocked tag. **Lib + schema + cron wiring DONE; editor UI + push delivery (WP-09) remain** | M1↑ | `WIP` | WP-07, WP-10 |
 | ⭐ WP-20 | Paid→free frontier + "now free" (free frontier off the TOC; **PLANNED+paid → fire only when 0 locked remain**, see WP-27) | M1↑ | `TODO` | WP-07, WP-17 |
 | WP-09 | Web Push end-to-end (VAPID, sw handler, subscribe flow, per-type prefs in Settings, privacy copy, test button) — **verified live on a device** | M0 | `DONE` | WP-06, WP-08 |
@@ -384,6 +384,13 @@ for tokens; gets its own brainstorm → spec when prioritized. Depends on WP-10 
 
 ## Changelog
 
+- **2026-07-26** — **WP-17b DONE: renderer live-validated on Vercel.** Fixed the deploy (`outputFileTracingIncludes`
+  ships the `@sparticuz/chromium` `bin/**` binary, which the file-tracer otherwise prunes → the "bin does not exist"
+  runtime error). Direct `/api/render` curls against the two hard JS categories: the **Next.js tab site** rendered a
+  full ~261-chapter TOC (plain fetch saw ~0), and the **load-more site** returned ~194 (the generic load-more loop
+  fired — not stuck at the ~2 the shell shows). Chromium launches within the function budget. The render captures all
+  chapters (free + locked); splitting them by access is `parseToc`/WP-20. Renderer + escalation are now wired
+  end-to-end — a plain page-watch that under-reads self-upgrades to RENDER on the next poll.
 - **2026-07-26** — **WP-17b Slice C: Vercel `@sparticuz/chromium` render prototype.** New public `/api/render` route
   (puppeteer-core + serverless Chromium): launches, renders, loop-clicks a generic "load more" control (paginated
   TOCs), returns `{ status, finalUrl, html }`. Auth by `RENDER_SECRET` bearer and **fail-closed** when unset (never an
