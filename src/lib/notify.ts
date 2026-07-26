@@ -6,6 +6,14 @@
  * Messages come out in a fixed category priority — new chapters, then predicted
  * (scheduled) releases, then source-down alerts — and preserve input order within a
  * category (no sorting).
+ *
+ * TODO(privacy — WP-09 follow-up): keep the *work's title out of the always-visible
+ * notification `title`* so a lock-screen preview doesn't reveal what the owner reads to
+ * a passing glance. The intended shape is a generic `title` ("New chapter") with the
+ * series name in the `body`, which the OS "show previews: when unlocked" setting then
+ * masks until the notification is expanded/unlocked (iOS can't be forced from the web,
+ * so we cooperate with that setting rather than control it). Optionally a "discreet"
+ * pref. Current copy puts the series in the title — revisit before shipping push wide.
  */
 
 import type { ReleaseEventKind } from './schedule';

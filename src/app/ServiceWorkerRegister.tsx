@@ -1,12 +1,16 @@
 'use client';
 
 import { useEffect } from 'react';
+import { resyncSubscription } from './pushClient';
 
 /**
  * Registers the service worker in production only. In development a SW's caching
  * fights the dev server and HMR (and a cached HTML shell without its hashed CSS/JS
  * renders unstyled), so here we actively unregister any stale one instead.
- * Push handling arrives in WP-09.
+ *
+ * On each production load it also re-syncs the push subscription (WP-09): if the
+ * browser still holds a valid subscription, we re-POST it — self-healing a server-side
+ * prune of an EXPIRED channel with no manual "reinstate" step.
  */
 export function ServiceWorkerRegister() {
   useEffect(() => {
@@ -19,9 +23,12 @@ export function ServiceWorkerRegister() {
       return;
     }
 
-    const register = () => navigator.serviceWorker.register('/sw.js').catch(() => {});
-    if (document.readyState === 'complete') register();
-    else window.addEventListener('load', register, { once: true });
+    const register = async () => {
+      await navigator.serviceWorker.register('/sw.js').catch(() => {});
+      await resyncSubscription().catch(() => {});
+    };
+    if (document.readyState === 'complete') void register();
+    else window.addEventListener('load', () => void register(), { once: true });
   }, []);
 
   return null;

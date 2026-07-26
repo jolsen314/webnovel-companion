@@ -91,7 +91,7 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-17b | Hard sources: self-run headless renderer (`fetchMode` PLAIN→RENDER) for JS-rendered TOCs — [design](docs/superpowers/specs/2026-07-23-wp17b-hard-sources-design.md) | M1↑ | `TODO` | WP-17 |
 | WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` (INTERVAL + WEEKLY), notify day-after, new/unlocked tag. **Lib + schema + cron wiring DONE; editor UI + push delivery (WP-09) remain** | M1↑ | `WIP` | WP-07, WP-10 |
 | ⭐ WP-20 | Paid→free frontier + "now free" (free frontier off the TOC; **PLANNED+paid → fire only when 0 locked remain**, see WP-27) | M1↑ | `TODO` | WP-07, WP-17 |
-| WP-09 | Web Push end-to-end (VAPID, sw handler, subscribe flow, per-type prefs in Settings). **Slice A (send-path) + Slice B backend (per-type prefs: model/API/filter) DONE; Slice B browser (sw push handler, Settings page with subscribe + toggles re-syncing on load, VAPID keys) remains** | M0 | `WIP` | WP-06, WP-08 |
+| WP-09 | Web Push end-to-end (VAPID, sw handler, subscribe flow, per-type prefs in Settings). **Built end-to-end (send-path + per-type prefs + sw handlers + Settings page + on-load re-sync); live device verification + prod VAPID env pending** | M0 | `WIP` | WP-06, WP-08 |
 | ⭐ WP-10 | Library + series-detail UI (unread counts, mark progress) | M0 | `DONE` | WP-06, WP-08 |
 | ⭐ WP-AUTH | Single-user password gate (scrypt hash + signed cookie + middleware) — **deploy prerequisite** | M0 | `DONE` | WP-06, WP-08 |
 | WP-11 | Deploy to Vercel + Cron + PWA install verification | M0 | `DONE` | WP-08, WP-AUTH |
@@ -361,6 +361,11 @@ for tokens; gets its own brainstorm → spec when prioritized. Depends on WP-10 
 
 ## Backlog / open questions
 
+- **Notification privacy (WP-09 follow-up)** — a lock-screen preview shouldn't reveal *which* novel the owner reads
+  to a passing glance. Plan: keep the work title out of the always-visible notification `title` (generic title, series
+  in the `body`), so the OS "show previews: when unlocked" setting masks it until the notification is expanded/unlocked
+  (iOS can't be forced from the web — we cooperate with that setting). Current copy puts the series in the title; flip
+  before shipping push wide. Possible "discreet" pref later. See TODO in `lib/notify.ts`.
 - **Free-tier constraint is compute, not chapter storage** *(resolved 2026-07-23)* — worry was that many chapters
   (100–1,000/series) might exceed the DB free tier. Math says no: a `Chapter` row is ~300–400 B with indexes, so a
   1,000-chapter series ≈ ~0.4 MB and a *heavy* library (200 series × 300 ch ≈ 60k rows) ≈ ~20–30 MB against Neon
@@ -380,6 +385,15 @@ for tokens; gets its own brainstorm → spec when prioritized. Depends on WP-10 
 
 ## Changelog
 
+- **2026-07-26** — **WP-09 Slice B browser: service worker + Settings page built.** `sw.js` gained `push` (renders the
+  JSON `PushMessage`, tag-collapsed) + `notificationclick` (focus/open the deep link) handlers. `pushClient.ts`
+  (browser): support check, permission+subscribe with the VAPID public key, unsubscribe, and **`resyncSubscription`**
+  wired into `ServiceWorkerRegister` so each production load re-POSTs an existing subscription — self-healing a
+  server-side prune. New **/settings** page (matches the "night reading" system: amber lamp-switch toggles): enable/
+  disable push + the three per-type toggles (optimistic PUT), reached via a gear in the header. VAPID keys generated
+  (owner set locally; **prod keys go in Vercel**). **166 unit + 18 integration green, typecheck + build clean.**
+  Captured a **notification-privacy** follow-up (keep the work title off the lock screen — see backlog). Remaining:
+  **live device verification** (push is production/installed-PWA only) + prod VAPID env.
 - **2026-07-26** — **WP-09 Slice B backend: per-type push preferences (test-first).** `buildPushMessages` gained a
   per-type `push` filter — a disabled type stays an in-app surface only (source health / unread counts already show
   it), pure + tested. New `NotificationPrefs` model (keyed by `userId` like the rest — multi-user folds it under a
