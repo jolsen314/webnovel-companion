@@ -204,3 +204,14 @@ model PushSubscription {
   auth      String
   createdAt DateTime @default(now())
 }
+
+/// Per-user push notification preferences (WP-09). A disabled type stays in-app only.
+/// Keyed by `userId` like the rest of the schema; a Tier-4 multi-user step folds this
+/// under a `User` via FK with no reshaping (see ADR-0002 / CONTEXT.md).
+model NotificationPrefs {
+  userId         String   @id
+  pushNewChapter Boolean  @default(true)
+  pushScheduled  Boolean  @default(true)
+  pushSourceDown Boolean  @default(false) // default: in-app only (owner's choice)
+  updatedAt      DateTime @updatedAt
+}

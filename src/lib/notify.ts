@@ -19,19 +19,33 @@ export interface PushMessage {
   tag: string;
 }
 
+/**
+ * Per-type push toggles; a disabled type stays an in-app surface only. This is just the
+ * value shape — persisted prefs are stored per-user (keyed by `userId`, like the rest of
+ * the schema), so a future multi-user step folds them under a `User` with no change here.
+ */
+export interface PushPrefs {
+  newChapters: boolean;
+  scheduledReleases: boolean;
+  sourcesDown: boolean;
+}
+
 export interface NotifyInput {
   /** Resolve a series id to its display title (binding preloads these). */
   seriesTitle: (seriesId: string) => string;
   newChapters: { seriesId: string; count: number }[];
   scheduledReleases: { seriesId: string; eventKind: ReleaseEventKind }[];
   sourcesDown: { seriesId: string; host: string }[];
+  /** Which categories to actually push. Omitted → all enabled. */
+  push?: PushPrefs;
 }
 
 export function buildPushMessages(input: NotifyInput): PushMessage[] {
   const { seriesTitle } = input;
+  const push = input.push ?? { newChapters: true, scheduledReleases: true, sourcesDown: true };
   const messages: PushMessage[] = [];
 
-  for (const { seriesId, count } of input.newChapters) {
+  for (const { seriesId, count } of push.newChapters ? input.newChapters : []) {
     if (count <= 0) continue;
     messages.push({
       title: seriesTitle(seriesId),
@@ -41,7 +55,7 @@ export function buildPushMessages(input: NotifyInput): PushMessage[] {
     });
   }
 
-  for (const { seriesId, eventKind } of input.scheduledReleases) {
+  for (const { seriesId, eventKind } of push.scheduledReleases ? input.scheduledReleases : []) {
     messages.push({
       title: seriesTitle(seriesId),
       body: eventKind === 'UNLOCKED' ? 'An advance chapter likely went free' : 'A new chapter is likely up',
@@ -50,7 +64,7 @@ export function buildPushMessages(input: NotifyInput): PushMessage[] {
     });
   }
 
-  for (const { seriesId, host } of input.sourcesDown) {
+  for (const { seriesId, host } of push.sourcesDown ? input.sourcesDown : []) {
     messages.push({
       title: 'Source may be down',
       body: `${seriesTitle(seriesId)} — ${host} isn't responding`,

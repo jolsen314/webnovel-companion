@@ -4,6 +4,8 @@ import {
   pollAllSources,
   evaluateSchedules,
   notifyForEffects,
+  getNotificationPrefs,
+  updateNotificationPrefs,
   listSeries,
   updateSeries,
   savePushSubscription,
@@ -249,24 +251,42 @@ describe('notifyForEffects (real DB)', () => {
     expect(summary.sent).toBe(2);
   });
 
-  test('a source crossing down produces a "may be down" alert with the resolved host', async () => {
-    const seriesId = await addAlpha();
-    const source = await db.source.findFirstOrThrow({ where: { seriesId } });
+  const captureAll = (): { ports: PushSendPorts; captured: PushMessage[] } => {
     const captured: PushMessage[] = [];
-    const ports: PushSendPorts = {
-      loadSubscriptions: async () => [{ endpoint: 'e1', p256dh: 'p', auth: 'a' }],
-      send: async (_t, m) => {
-        captured.push(m);
-        return 'SENT';
+    return {
+      captured,
+      ports: {
+        loadSubscriptions: async () => [{ endpoint: 'e1', p256dh: 'p', auth: 'a' }],
+        send: async (_t, m) => {
+          captured.push(m);
+          return 'SENT';
+        },
+        deleteSubscription: async () => {},
       },
-      deleteSubscription: async () => {},
     };
+  };
+
+  test('a source crossing down produces a "may be down" alert (when source-down push is on)', async () => {
+    const seriesId = await addAlpha();
+    await updateNotificationPrefs({ pushSourceDown: true }); // default is off — opt in
+    const source = await db.source.findFirstOrThrow({ where: { seriesId } });
+    const { ports, captured } = captureAll();
 
     await notifyForEffects([effect({ sourceId: source.id, seriesId, crossedDown: true })], [], ports);
 
     expect(captured).toHaveLength(1);
     expect(captured[0]!.body).toBe(`Alpha — ${source.host} isn't responding`);
     expect(captured[0]!.tag).toBe(`down-${seriesId}`);
+  });
+
+  test('by default, source-down is in-app only — no push', async () => {
+    const seriesId = await addAlpha();
+    const source = await db.source.findFirstOrThrow({ where: { seriesId } });
+    const { ports, captured } = captureAll();
+
+    await notifyForEffects([effect({ sourceId: source.id, seriesId, crossedDown: true })], [], ports);
+
+    expect(captured).toEqual([]); // pushSourceDown defaults off
   });
 
   test('an EXPIRED push channel (404/410) is pruned — independent of source health', async () => {
@@ -286,6 +306,20 @@ describe('notifyForEffects (real DB)', () => {
 
     expect(summary.expired).toBe(1);
     expect(await db.pushSubscription.count()).toBe(0);
+  });
+});
+
+describe('notification preferences (real DB)', () => {
+  test('defaults when unset: new + scheduled on, source-down off', async () => {
+    expect(await getNotificationPrefs()).toEqual({ pushNewChapter: true, pushScheduled: true, pushSourceDown: false });
+  });
+
+  test('a partial update upserts and persists, leaving other toggles at their default', async () => {
+    const updated = await updateNotificationPrefs({ pushSourceDown: true });
+    expect(updated).toEqual({ pushNewChapter: true, pushScheduled: true, pushSourceDown: true });
+    // a second partial update only touches its field
+    await updateNotificationPrefs({ pushNewChapter: false });
+    expect(await getNotificationPrefs()).toEqual({ pushNewChapter: false, pushScheduled: true, pushSourceDown: true });
   });
 });
 

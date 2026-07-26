@@ -91,6 +91,25 @@ export function parsePushSubscription(input: unknown): ParseResult<PushSubscript
   return ok({ endpoint: input.endpoint, p256dh: keys.p256dh, auth: keys.auth });
 }
 
+export interface NotificationPrefsPatch {
+  pushNewChapter?: boolean;
+  pushScheduled?: boolean;
+  pushSourceDown?: boolean;
+}
+
+/** Validate a partial notification-prefs update: any subset of the boolean toggles. */
+export function parseNotificationPrefsPatch(input: unknown): ParseResult<NotificationPrefsPatch> {
+  if (!isObject(input)) return err('Expected a JSON object.');
+  const patch: NotificationPrefsPatch = {};
+  for (const key of ['pushNewChapter', 'pushScheduled', 'pushSourceDown'] as const) {
+    const v = input[key];
+    if (v === undefined) continue;
+    if (typeof v !== 'boolean') return err(`"${key}" must be a boolean.`);
+    patch[key] = v;
+  }
+  return ok(patch);
+}
+
 /**
  * Authorize the cron poll endpoint. Vercel Cron sends `Authorization: Bearer <CRON_SECRET>`.
  * When no secret is configured (local dev), allow the request.

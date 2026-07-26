@@ -15,9 +15,15 @@ if (!/test/i.test(url)) {
 }
 
 beforeEach(async () => {
-  await db.$executeRawUnsafe(
-    'TRUNCATE TABLE "Chapter", "Source", "ReadingProgress", "PushSubscription", "Series" RESTART IDENTITY CASCADE',
-  );
+  // Truncate every app table dynamically so new models are cleared automatically
+  // (a hardcoded list silently leaks state the moment a table is added).
+  const rows = await db.$queryRaw<{ tablename: string }[]>`
+    SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'
+  `;
+  if (rows.length > 0) {
+    const list = rows.map((r) => `"${r.tablename}"`).join(', ');
+    await db.$executeRawUnsafe(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE`);
+  }
 });
 
 afterAll(async () => {

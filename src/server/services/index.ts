@@ -15,9 +15,11 @@ import type { ReleaseSchedule } from '../../lib/schedule';
 import { setVapidDetails, sendNotification } from 'web-push';
 import { buildPushMessages } from '../../lib/notify';
 import { sendPushMessages, type PushSendPorts, type SendSummary } from './pushSend';
+import { getNotificationPrefs } from './notificationPrefs';
 
 export { listSeries, getSeries, updateSeries } from './series';
 export { savePushSubscription } from './push';
+export { getNotificationPrefs, updateNotificationPrefs, type NotificationPrefsView } from './notificationPrefs';
 
 /**
  * Prisma/HTTP bindings for the poll + add-series orchestration. The logic lives in
@@ -248,7 +250,18 @@ export async function notifyForEffects(
     ...sourcesDown.map((s) => s.seriesId),
   ]);
 
-  const messages = buildPushMessages({ seriesTitle, newChapters, scheduledReleases, sourcesDown });
+  const prefs = await getNotificationPrefs();
+  const messages = buildPushMessages({
+    seriesTitle,
+    newChapters,
+    scheduledReleases,
+    sourcesDown,
+    push: {
+      newChapters: prefs.pushNewChapter,
+      scheduledReleases: prefs.pushScheduled,
+      sourcesDown: prefs.pushSourceDown,
+    },
+  });
   return sendPushMessages(messages, ports);
 }
 

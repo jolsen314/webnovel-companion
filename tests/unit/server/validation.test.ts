@@ -3,6 +3,7 @@ import {
   parseAddSeriesBody,
   parseSeriesUpdate,
   parsePushSubscription,
+  parseNotificationPrefsPatch,
   isAuthorizedCron,
 } from '../../../src/server/api/validation';
 
@@ -65,6 +66,31 @@ describe('parsePushSubscription', () => {
     [{ keys: { p256dh: 'p', auth: 'a' } }, 'missing endpoint'],
   ])('rejects %j (%s)', (input, _why) => {
     expect(parsePushSubscription(input).ok).toBe(false);
+  });
+});
+
+describe('parseNotificationPrefsPatch', () => {
+  test('accepts a partial of boolean toggles', () => {
+    expect(parseNotificationPrefsPatch({ pushSourceDown: true })).toEqual({ ok: true, value: { pushSourceDown: true } });
+    expect(parseNotificationPrefsPatch({ pushNewChapter: false, pushScheduled: true })).toEqual({
+      ok: true,
+      value: { pushNewChapter: false, pushScheduled: true },
+    });
+  });
+
+  test('ignores unknown fields', () => {
+    expect(parseNotificationPrefsPatch({ pushSourceDown: true, wat: 5 })).toEqual({
+      ok: true,
+      value: { pushSourceDown: true },
+    });
+  });
+
+  test('rejects a non-object', () => {
+    expect(parseNotificationPrefsPatch(null).ok).toBe(false);
+  });
+
+  test('rejects a non-boolean toggle', () => {
+    expect(parseNotificationPrefsPatch({ pushScheduled: 'yes' }).ok).toBe(false);
   });
 });
 

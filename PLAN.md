@@ -91,7 +91,7 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-17b | Hard sources: self-run headless renderer (`fetchMode` PLAIN→RENDER) for JS-rendered TOCs — [design](docs/superpowers/specs/2026-07-23-wp17b-hard-sources-design.md) | M1↑ | `TODO` | WP-17 |
 | WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` (INTERVAL + WEEKLY), notify day-after, new/unlocked tag. **Lib + schema + cron wiring DONE; editor UI + push delivery (WP-09) remain** | M1↑ | `WIP` | WP-07, WP-10 |
 | ⭐ WP-20 | Paid→free frontier + "now free" (free frontier off the TOC; **PLANNED+paid → fire only when 0 locked remain**, see WP-27) | M1↑ | `TODO` | WP-07, WP-17 |
-| WP-09 | Web Push end-to-end (VAPID, sw handler, subscribe flow). **Slice A (server send-path) DONE; Slice B (sw push handler + client subscribe, re-syncing on load) remains** | M0 | `WIP` | WP-06, WP-08 |
+| WP-09 | Web Push end-to-end (VAPID, sw handler, subscribe flow, per-type prefs in Settings). **Slice A (send-path) + Slice B backend (per-type prefs: model/API/filter) DONE; Slice B browser (sw push handler, Settings page with subscribe + toggles re-syncing on load, VAPID keys) remains** | M0 | `WIP` | WP-06, WP-08 |
 | ⭐ WP-10 | Library + series-detail UI (unread counts, mark progress) | M0 | `DONE` | WP-06, WP-08 |
 | ⭐ WP-AUTH | Single-user password gate (scrypt hash + signed cookie + middleware) — **deploy prerequisite** | M0 | `DONE` | WP-06, WP-08 |
 | WP-11 | Deploy to Vercel + Cron + PWA install verification | M0 | `DONE` | WP-08, WP-AUTH |
@@ -380,6 +380,14 @@ for tokens; gets its own brainstorm → spec when prioritized. Depends on WP-10 
 
 ## Changelog
 
+- **2026-07-26** — **WP-09 Slice B backend: per-type push preferences (test-first).** `buildPushMessages` gained a
+  per-type `push` filter — a disabled type stays an in-app surface only (source health / unread counts already show
+  it), pure + tested. New `NotificationPrefs` model (keyed by `userId` like the rest — multi-user folds it under a
+  `User` later, no reshape), **defaults: new-chapter ON, scheduled ON, source-down OFF** (owner's choice); additive
+  migration. `parseNotificationPrefsPatch` validator (TDD), `get/updateNotificationPrefs` services, and
+  `GET/PUT /api/notification-prefs`. `notifyForEffects` now loads prefs and gates each category. Also made the
+  integration truncation **dynamic** (all tables) so new models can't silently leak state — caught exactly that here.
+  **166 unit + 18 integration green.** Remaining: the browser half (sw handler + Settings UI + VAPID keys).
 - **2026-07-25** — **WP-09 Slice A: Web Push server send-path landed (test-first).** Pure `lib/notify.ts`
   `buildPushMessages` turns normalized signals into messages — per-series new-chapter **digest** ("N new chapters"),
   kind-specific **scheduled-release** copy (WP-29), and **source-down** alerts (only on `crossedDown` = crossing into

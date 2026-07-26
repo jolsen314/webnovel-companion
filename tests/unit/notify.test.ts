@@ -57,6 +57,25 @@ describe('buildPushMessages', () => {
     expect(msgs.map((m) => m.tag)).toEqual(['new-s2', 'new-s1']);
   });
 
+  test('per-type push preferences suppress disabled categories (in-app only)', () => {
+    const msgs = buildPushMessages(
+      base({
+        newChapters: [{ seriesId: 's1', count: 2 }],
+        scheduledReleases: [{ seriesId: 's2', eventKind: 'UNLOCKED' }],
+        sourcesDown: [{ seriesId: 's3', host: 'reader.example' }],
+        push: { newChapters: true, scheduledReleases: false, sourcesDown: false },
+      }),
+    );
+    expect(msgs.map((m) => m.tag)).toEqual(['new-s1']); // scheduled + down suppressed
+  });
+
+  test('omitting preferences enables every category (back-compat default)', () => {
+    const msgs = buildPushMessages(
+      base({ newChapters: [{ seriesId: 's1', count: 1 }], sourcesDown: [{ seriesId: 's3', host: 'h' }] }),
+    );
+    expect(msgs.map((m) => m.tag)).toEqual(['new-s1', 'down-s3']);
+  });
+
   test('categories are emitted in a fixed priority order: new chapters → scheduled → down', () => {
     // Inputs are supplied down → scheduled → new to show the output order is the category
     // priority, not the order the categories were passed in.
