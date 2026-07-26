@@ -265,6 +265,14 @@ export async function notifyForEffects(
   return sendPushMessages(messages, ports);
 }
 
+/** Fire one canned push to every subscription — validates the full VAPID/send path. */
+export function sendTestNotification(ports: PushSendPorts = pushSendPorts()): Promise<SendSummary> {
+  return sendPushMessages(
+    [{ title: 'Test notification', body: 'Push is working — real chapter alerts will look like this.', url: '/settings', tag: 'test' }],
+    ports,
+  );
+}
+
 /** Resolve a pasted URL to a feed (or page-watch) and create the Series + Source. */
 export function addSeries(input: AddSeriesInput, fetchImpl: FetchImpl = fetchPort): Promise<AddSeriesResult> {
   return addSeriesCore(input, {

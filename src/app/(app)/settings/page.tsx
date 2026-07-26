@@ -24,6 +24,8 @@ export default function SettingsPage() {
   const [push, setPush] = useState<PushState | 'loading'>('loading');
   const [prefs, setPrefs] = useState<Prefs | null>(null);
   const [busy, setBusy] = useState(false);
+  const [testMsg, setTestMsg] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
 
   useEffect(() => {
     void getPushState().then(setPush);
@@ -37,6 +39,23 @@ export default function SettingsPage() {
     setBusy(true);
     setPush(push === 'subscribed' ? await disablePush() : await enablePush());
     setBusy(false);
+  }
+
+  async function sendTest() {
+    setTesting(true);
+    setTestMsg(null);
+    try {
+      const res = await fetch('/api/push/test', { method: 'POST' });
+      const s = (await res.json()) as { sent: number; expired: number; failed: number };
+      setTestMsg(
+        s.sent > 0
+          ? `Sent to ${s.sent} device${s.sent === 1 ? '' : 's'}. Check your notifications.`
+          : 'No device received it — make sure notifications are enabled above and in your OS settings.',
+      );
+    } catch {
+      setTestMsg('Couldn’t reach the server. Try again.');
+    }
+    setTesting(false);
   }
 
   async function setType(key: keyof Prefs, value: boolean) {
@@ -79,6 +98,18 @@ export default function SettingsPage() {
             </button>
           )}
         </div>
+        {push === 'subscribed' && (
+          <div className="settings__test">
+            <button className="btn" onClick={sendTest} disabled={testing}>
+              {testing ? 'Sending…' : 'Send a test'}
+            </button>
+            {testMsg && (
+              <p className="settings__rowHint" role="status">
+                {testMsg}
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="settings__panel" aria-disabled={push !== 'subscribed'}>

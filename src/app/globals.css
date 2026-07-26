@@ -688,3 +688,15 @@ body {
   border-color: var(--color-glow);
   transform: translateY(-1px);
 }
+.settings__test {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-line);
+}
+.settings__test .settings__rowHint {
+  margin: 0;
+}
