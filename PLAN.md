@@ -41,16 +41,16 @@ To re-prioritize, move rows and update the `NEXT` marker. Don't silently reorder
 
 ## Current focus
 
-> **NEXT: WP-20 (paid→free frontier)** — with page-watch wired (WP-17) and push delivering (WP-09), the remaining
-> paid-site value is detecting the *locked→free* transition on chapters we've already seen (the "now free" event),
-> reading the free frontier off the TOC. It reuses the WP-09 send-path (an `UNLOCKED` scheduled-style event) and, for
-> the fully-blocked paid sites, pairs with WP-17b (renderer) / WP-29 (manual schedule). Also open: **WP-29's schedule
-> editor UI** (lib + wiring done) and **WP-17b** (renderer).
+> **NEXT: WP-20 (paid→free frontier)** — with page-watch wired (WP-17), the renderer live (WP-17b), and push
+> delivering (WP-09), the remaining paid-site value is detecting the *locked→free* transition on chapters we've already
+> seen (the "now free" event), reading the free frontier off the (now renderable) TOC. It reuses the WP-09 send-path
+> (the `UNLOCKED` event/copy already exist), and for the fully CF-blocked paid sites pairs with WP-29 (manual schedule).
+> This is where `parseToc`'s free-vs-locked access marking gets real (the renderer already returns the full TOC
+> incl. locked chapters). Also open, lower priority: **WP-29's schedule-editor UI** (lib + cron wiring done).
 
-The MVP is **live on Vercel + Neon** — the feed pipeline, auth gate, library/detail UI, **and Web Push (WP-09)** all
-shipped. Remaining near-term priority: **WP-20 → WP-17b / WP-29-UI**. The
-Cloudflare-capable (headless-browser) fetch is a separate, as-needed escalation for JS-rendered / Cloudflare-challenged
-TOCs; start WP-17 on reachable sites first.
+The MVP is **live on Vercel + Neon** — feed pipeline, auth gate, library/detail UI, **Web Push (WP-09, verified on a
+device)**, and the **headless renderer (WP-17b, live-validated)**. Remaining near-term: **WP-20 → WP-29 editor UI**.
+(Real site/series names for testing live in the gitignored `TESTING-NOTES.local.md`.)
 
 ---
 

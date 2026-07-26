@@ -16,3 +16,5 @@ coverage/
 .neon
 .agents/
 skills-lock.json
+*.local.md
+/local/
