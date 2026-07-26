@@ -5,5 +5,11 @@
       "path": "/api/cron/poll",
       "schedule": "0 8 * * *"
     }
-  ]
+  ],
+  "functions": {
+    "src/app/api/render/route.ts": {
+      "memory": 1024,
+      "maxDuration": 60
+    }
+  }
 }

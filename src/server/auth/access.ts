@@ -1,13 +1,15 @@
 /**
  * The gate's allowlist: paths reachable without a session cookie. Everything else
- * (all pages + APIs) requires auth. `/api/cron/poll` is here because it authenticates
- * with its own CRON_SECRET Bearer token, not the session cookie. Pure.
+ * (all pages + APIs) requires auth. `/api/cron/poll` and `/api/render` are here because
+ * they authenticate with their own Bearer secret (CRON_SECRET / RENDER_SECRET), not the
+ * session cookie — both are called server-to-server. Pure.
  */
 const PUBLIC_EXACT = new Set([
   '/login',
   '/api/auth/login',
   '/api/auth/logout',
   '/api/cron/poll',
+  '/api/render',
   '/manifest.webmanifest',
   '/sw.js',
   '/icon.svg',

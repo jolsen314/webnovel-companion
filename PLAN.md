@@ -384,6 +384,16 @@ for tokens; gets its own brainstorm → spec when prioritized. Depends on WP-10 
 
 ## Changelog
 
+- **2026-07-26** — **WP-17b Slice C: Vercel `@sparticuz/chromium` render prototype.** New public `/api/render` route
+  (puppeteer-core + serverless Chromium): launches, renders, loop-clicks a generic "load more" control (paginated
+  TOCs), returns `{ status, finalUrl, html }`. Auth by `RENDER_SECRET` bearer and **fail-closed** when unset (never an
+  open SSRF surface); added to the middleware allowlist since the cron calls it server-to-server. Interaction selectors
+  are generic (by visible text — no site names in the repo). **SSRF-guarded** (`server/render/ssrfGuard.ts`, 25 tests):
+  rejects non-http(s) and any host resolving to a private/loopback/link-local/metadata IP, with puppeteer request
+  interception re-validating redirects/subresources. `next.config` externalizes the chromium binary; `vercel.json`
+  bumps the render function to 1024 MB / 60 s. Render execution not unit-tested (needs a browser) — verified live.
+  **Pending: deploy + set `RENDER_URL`/`RENDER_SECRET` in Vercel + test against the real JS sites.** Tab-accumulation
+  (Free/Premium) is a follow-up; v1 renders the default (free) view, which is the free frontier.
 - **2026-07-26** — **WP-17b Slice B: `renderFetch` adapter + binding wiring (test-first).** `lib/feeds/renderFetch.ts`
   `makeRenderFetch(config, http)` POSTs a URL to the render service and maps the reply onto `PoliteResult` (target-page
   4xx/5xx → HTTP failures; service 5xx → HTTP_5XX; network → soft TIMEOUT), injected HTTP so it unit-tests without a
