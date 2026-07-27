@@ -24,6 +24,10 @@ export interface TocChapter {
 export interface SiteTocConfig {
   /** CSS selector for the chapter link anchors. */
   chapterSelector: string;
+  /** Restrict the scan to this container (drops everything outside it). */
+  contentSelector?: string;
+  /** Keep only chapters whose URL path contains one of these slug prefixes (supports multiple families). */
+  slugFamilies?: string[];
   /** If this selector matches within a chapter's row, the chapter is LOCKED. */
   lockSelector?: string;
   /** Text signals (case-insensitive) that mark a chapter LOCKED. */
@@ -34,18 +38,27 @@ const CHAPTER_TEXT = /chapter|\bch\.?\s*\d|\bep\.?\s*\d|第\s*\d+\s*[章话]/i;
 const CHAPTER_HREF = /chapter|\/ch(?:apter)?[-_/]?\d|\/ep[-_/]?\d|\/v\d+\/\d+/i;
 const LOCK_CLASS = /class=["'][^"']*(?:lock|premium|vip|coin)[^"']*["']|fa-lock/i;
 const LOCK_TEXT = /locked|premium|\bvip\b|\bcoins?\b|🔒|🔐|unlock/i;
+/** Page chrome that must not contribute chapters — sidebars / "recent entries" widgets / nav / footer. */
+const CHROME_SELECTOR =
+  'aside, nav, header, footer, .sidebar, #sidebar, #secondary, .widget-area, .widget_recent_entries, .recent-posts';
 
 export function parseToc(html: string, baseUrl: string, config?: SiteTocConfig): TocChapter[] {
   const $ = cheerio.load(html);
   $('script, style, noscript').remove();
 
-  const anchors = config
-    ? $(config.chapterSelector).filter((_, el) => $(el).is('a[href]'))
-    : $('a[href]').filter((_, el) => {
+  const root = config?.contentSelector ? $(config.contentSelector) : $.root();
+  const raw = config
+    ? root.find(config.chapterSelector).filter((_, el) => $(el).is('a[href]'))
+    : root.find('a[href]').filter((_, el) => {
         const $el = $(el);
         const text = ($el.text().trim() || $el.attr('title') || '').trim();
         return CHAPTER_TEXT.test(text) || CHAPTER_HREF.test($el.attr('href') ?? '');
       });
+
+  // Drop anchors inside page chrome (sidebars/widgets). If that removes everything — a site whose TOC
+  // *is* a widget — fall back to the full set. Single-pass, no re-parse.
+  const inContent = raw.filter((_, el) => $(el).closest(CHROME_SELECTOR).length === 0);
+  const anchors = inContent.length > 0 ? inContent : raw;
 
   const seen = new Set<string>();
   const chapters: TocChapter[] = [];
@@ -82,6 +95,18 @@ export function parseToc(html: string, baseUrl: string, config?: SiteTocConfig):
     chapters.push({ url, title, number, access: locked ? 'LOCKED' : 'FREE' });
   });
 
+  if (config?.slugFamilies && config.slugFamilies.length > 0) {
+    const families = config.slugFamilies;
+    return chapters.filter((c) => {
+      let path: string;
+      try {
+        path = new URL(c.url).pathname;
+      } catch {
+        path = c.url;
+      }
+      return families.some((f) => path.includes(f));
+    });
+  }
   return chapters;
 }
 

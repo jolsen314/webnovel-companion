@@ -78,6 +78,47 @@ describe('parseToc — per-host config override', () => {
   });
 });
 
+describe('parseToc — content scoping (WP-36)', () => {
+  const base = 'https://site.example/toc/';
+  const page = (main: string, sidebar = '') =>
+    `<html><body><div class="entry-content">${main}</div>` +
+    `<aside class="widget-area"><div class="widget_recent_entries">${sidebar}</div></aside></body></html>`;
+
+  test('drops chapter links inside a "recent entries" sidebar (cross-series leak)', () => {
+    const html = page(
+      `<a href="https://site.example/book1-chapter-1/">Chapter 1</a><a href="https://site.example/book1-chapter-2/">Chapter 2</a>`,
+      `<a href="https://site.example/other-series-99/">Chapter 99</a>`,
+    );
+    const out = parseToc(html, base);
+    expect(out.map((c) => c.url)).toEqual(['https://site.example/book1-chapter-1/', 'https://site.example/book1-chapter-2/']);
+  });
+
+  test('empty-fallback: when the ONLY chapters are inside a widget, still return them', () => {
+    const html =
+      `<html><body><aside class="widget-area">` +
+      `<a href="https://site.example/ch-1/">Chapter 1</a></aside></body></html>`;
+    expect(parseToc(html, base).map((c) => c.url)).toEqual(['https://site.example/ch-1/']);
+  });
+
+  test('contentSelector restricts the scan to a container', () => {
+    const html =
+      `<div class="entry-content"><a href="https://site.example/a-1/">Chapter 1</a></div>` +
+      `<div class="other"><a href="https://site.example/b-2/">Chapter 2</a></div>`;
+    const out = parseToc(html, base, { chapterSelector: 'a[href]', contentSelector: '.entry-content' });
+    expect(out.map((c) => c.url)).toEqual(['https://site.example/a-1/']);
+  });
+
+  test('slugFamilies keeps only the series slug prefixes (multi-family Part 1/Part 2)', () => {
+    const html = page(
+      `<a href="https://site.example/book1-chapter-5/">c5</a>` +
+        `<a href="https://site.example/book2-1/">p2c1</a>` +
+        `<a href="https://site.example/rewind-3/">rewind</a>`,
+    );
+    const out = parseToc(html, base, { chapterSelector: 'a[href]', slugFamilies: ['book1-chapter', 'book2-'] });
+    expect(out.map((c) => c.url)).toEqual(['https://site.example/book1-chapter-5/', 'https://site.example/book2-1/']);
+  });
+});
+
 describe('mergeFeedAndToc', () => {
   const feed = (url: string, guid?: string): import('../../../src/lib/feeds/diff').FeedItem => ({ url, title: url, guid, access: undefined });
   const toc = (url: string, access: 'FREE' | 'LOCKED'): import('../../../src/lib/feeds/pageWatch').TocChapter => ({ url, title: url, number: null, access });
