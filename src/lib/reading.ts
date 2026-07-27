@@ -10,3 +10,48 @@ export function unreadCount(orderedChapterIds: string[], lastReadChapterId: stri
   if (index === -1) return orderedChapterIds.length;
   return orderedChapterIds.length - index - 1;
 }
+
+/** Title markers for side-stories / extra content, which sort to the END (word-boundary to avoid
+ *  false positives like "extraordinary" / "beside"). */
+const EXTRA_SIDE = /\bextras?\b|\bside\b/i;
+
+interface OrderableChapter {
+  id: string;
+  number: number | null;
+  title: string;
+  publishedAt: Date | null;
+  discoveredAt: Date;
+}
+
+/** 0 = front (un-numbered prologues), 1 = main (numbered), 2 = end (extra/side content). */
+function readingBucket(c: OrderableChapter): 0 | 1 | 2 {
+  if (EXTRA_SIDE.test(c.title)) return 2;
+  if (c.number == null) return 0;
+  return 1;
+}
+
+/** Order chapters for reading: un-numbered prologues first, then the numbered main sequence,
+ *  then Extra/Side content — per the owner's rule. Pure; returns a new array. */
+export function orderChaptersForReading<T extends OrderableChapter>(chapters: readonly T[]): T[] {
+  return [...chapters].sort((a, b) => {
+    const ba = readingBucket(a);
+    const bb = readingBucket(b);
+    if (ba !== bb) return ba - bb;
+    // Within the main and end buckets, order by number ascending (nulls last).
+    if (ba !== 0) {
+      if (a.number != null && b.number != null && a.number !== b.number) return a.number - b.number;
+      if (a.number == null && b.number != null) return 1;
+      if (a.number != null && b.number == null) return -1;
+    }
+    // Front bucket, or equal/absent numbers: publishedAt asc (nulls last), then discoveredAt, then id.
+    const pa = a.publishedAt?.getTime() ?? null;
+    const pb = b.publishedAt?.getTime() ?? null;
+    if (pa != null && pb != null && pa !== pb) return pa - pb;
+    if (pa == null && pb != null) return 1;
+    if (pa != null && pb == null) return -1;
+    const da = a.discoveredAt.getTime();
+    const dbb = b.discoveredAt.getTime();
+    if (da !== dbb) return da - dbb;
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  });
+}

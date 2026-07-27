@@ -1,18 +1,18 @@
 import { Prisma } from '@prisma/client';
 import { db } from '../db';
 import { getCurrentUserId } from '../user';
-import { unreadCount } from '../../lib/reading';
+import { unreadCount, orderChaptersForReading } from '../../lib/reading';
 import type { SeriesUpdate } from '../api/validation';
 
 /**
  * Series read/write services (Prisma-backed, scoped to the current user). Thin glue;
  * integration-tested at WP-11. The unread math uses the pure `unreadCount` helper.
+ *
+ * Chapters are ordered in app code via `orderChaptersForReading`, not Prisma `orderBy` —
+ * the owner's reading-order rule inspects the chapter title (Extra/Side content sorts to
+ * the end), which Prisma can't express. We fetch in a stable, deterministic order
+ * (discoveredAt asc) and reorder in JS.
  */
-
-const chapterOrder: Prisma.ChapterOrderByWithRelationInput[] = [
-  { publishedAt: { sort: 'asc', nulls: 'last' } },
-  { discoveredAt: 'asc' },
-];
 
 /** The library list: each series with its latest chapter, unread count, and active-source health. */
 export async function listSeries() {
@@ -22,13 +22,17 @@ export async function listSeries() {
     orderBy: { updatedAt: 'desc' },
     include: {
       progress: true,
-      chapters: { orderBy: chapterOrder, select: { id: true, title: true, url: true, number: true, publishedAt: true, discoveredAt: true } },
+      chapters: {
+        orderBy: { discoveredAt: 'asc' },
+        select: { id: true, title: true, url: true, number: true, publishedAt: true, discoveredAt: true },
+      },
       sources: { where: { isActive: true }, take: 1, select: { url: true, host: true, health: true } },
     },
   });
 
   return rows.map((s) => {
-    const latest = s.chapters.at(-1) ?? null;
+    const chapters = orderChaptersForReading(s.chapters);
+    const latest = chapters.at(-1) ?? null;
     return {
       id: s.id,
       title: s.title,
@@ -36,9 +40,9 @@ export async function listSeries() {
       rating: s.rating,
       coverUrl: s.coverUrl,
       language: s.language,
-      chapterCount: s.chapters.length,
+      chapterCount: chapters.length,
       unread: unreadCount(
-        s.chapters.map((c) => c.id),
+        chapters.map((c) => c.id),
         s.progress?.lastReadChapterId ?? null,
       ),
       latestChapter: latest
@@ -52,14 +56,16 @@ export async function listSeries() {
 /** Full detail for one series (chapters in reading order, sources, progress). */
 export async function getSeries(id: string) {
   const userId = getCurrentUserId();
-  return db.series.findFirst({
+  const series = await db.series.findFirst({
     where: { id, userId },
     include: {
       progress: true,
       sources: true,
-      chapters: { orderBy: chapterOrder },
+      chapters: { orderBy: { discoveredAt: 'asc' } },
     },
   });
+  if (!series) return null;
+  return { ...series, chapters: orderChaptersForReading(series.chapters) };
 }
 
 /** Update shelf fields and/or reading progress. Returns null if the series isn't the user's. */

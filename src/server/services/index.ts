@@ -361,6 +361,8 @@ export async function backfillFromToc(
   seriesId: string,
   fetchImpl: FetchImpl = fetchPort,
 ): Promise<{ added: number; reconciled: number }> {
+  const owned = await db.series.findFirst({ where: { id: seriesId, userId: getCurrentUserId() }, select: { id: true } });
+  if (!owned) return { added: 0, reconciled: 0 };
   const source = await db.source.findFirst({ where: { seriesId, isActive: true } });
   if (!source) return { added: 0, reconciled: 0 };
   const res = await fetchImpl(source.url, {});

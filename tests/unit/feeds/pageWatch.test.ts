@@ -106,4 +106,9 @@ describe('mergeFeedAndToc', () => {
     expect(merged).toHaveLength(1);
     expect(merged[0]!.access).toBeUndefined();
   });
+
+  test('two TOC rows that canonicalize equal are merged once (no double-insert)', () => {
+    const merged = mergeFeedAndToc([], [toc('https://x/ch/1', 'FREE'), toc('https://x/ch/1/', 'FREE')]);
+    expect(merged).toHaveLength(1);
+  });
 });

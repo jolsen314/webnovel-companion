@@ -99,7 +99,9 @@ export function mergeFeedAndToc(feedItems: FeedItem[], tocItems: TocChapter[]): 
   });
   for (const t of tocItems) {
     const key = canonicalUrl(t.url);
-    if (!usedToc.has(key)) merged.push({ url: t.url, title: t.title, number: t.number, access: t.access });
+    if (usedToc.has(key)) continue;
+    usedToc.add(key);
+    merged.push({ url: t.url, title: t.title, number: t.number, access: t.access });
   }
   return merged;
 }

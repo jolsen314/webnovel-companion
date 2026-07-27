@@ -445,6 +445,7 @@ describe('backfillFromToc (real DB)', () => {
 
     const chapters = await db.chapter.findMany({ where: { seriesId }, orderBy: { url: 'asc' } });
     expect(chapters.map((c) => c.url)).toEqual([B1, B2, B3]);
+    expect(chapters.find((c) => c.url === B1)!.access).toBe('FREE');
     expect(chapters.find((c) => c.url === B2)!.access).toBe('LOCKED');
     expect(chapters.find((c) => c.url === B3)!.access).toBe('FREE');
     // a-1 went UNKNOWN → FREE via reconciliation, not an unlock — becameFreeAt must stay
