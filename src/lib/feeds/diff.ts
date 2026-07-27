@@ -84,13 +84,11 @@ export function diffChapters(stored: KnownChapter[], fetched: FeedItem[]): DiffR
   // for one series — either recorded key still recognizes the chapter.
   const seenGuids = new Set<string>();
   const seenUrls = new Set<string>();
-  // Stored chapters keyed by identity, so an already-seen fetched item can recover the exact
-  // stored row (and its access) to detect a LOCKED→FREE unlock or access reconciliation.
+  // Stored chapters keyed by identity (every stored chapter, regardless of access), so an
+  // already-seen fetched item can recover the exact stored row (and its access) to detect a
+  // LOCKED→FREE unlock or access reconciliation (including from UNKNOWN access).
   const storedByGuid = new Map<string, KnownChapter>();
   const storedByUrl = new Map<string, KnownChapter>();
-  // Track all stored chapters for reconciliation (including UNKNOWN access).
-  const allStoredByGuid = new Map<string, KnownChapter>();
-  const allStoredByUrl = new Map<string, KnownChapter>();
 
   const remember = (c: KnownChapter | FeedItem): void => {
     if (c.guid !== undefined) seenGuids.add(c.guid);
@@ -101,17 +99,13 @@ export function diffChapters(stored: KnownChapter[], fetched: FeedItem[]): DiffR
 
   for (const c of stored) {
     remember(c);
-    if (c.guid !== undefined) allStoredByGuid.set(c.guid, c);
-    allStoredByUrl.set(canonicalUrl(c.url), c);
-    if (c.access !== undefined) {
-      if (c.guid !== undefined) storedByGuid.set(c.guid, c);
-      storedByUrl.set(canonicalUrl(c.url), c);
-    }
+    if (c.guid !== undefined) storedByGuid.set(c.guid, c);
+    storedByUrl.set(canonicalUrl(c.url), c);
   }
 
   const storedMatch = (c: FeedItem): KnownChapter | undefined => {
-    if (c.guid !== undefined && allStoredByGuid.has(c.guid)) return allStoredByGuid.get(c.guid);
-    return allStoredByUrl.get(canonicalUrl(c.url));
+    if (c.guid !== undefined && storedByGuid.has(c.guid)) return storedByGuid.get(c.guid);
+    return storedByUrl.get(canonicalUrl(c.url));
   };
 
   const fresh: FeedItem[] = [];
