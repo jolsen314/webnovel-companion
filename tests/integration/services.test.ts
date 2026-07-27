@@ -174,6 +174,24 @@ describe('page-watch source (real DB)', () => {
 
     expect((await db.source.findFirstOrThrow({ where: { seriesId } })).fetchMode).toBe('PLAIN');
   });
+
+  test('WP-20: a stored LOCKED chapter turning FREE stamps becameFreeAt and does not re-fire', async () => {
+    // Add with W1 free, W2 locked.
+    const { seriesId } = await addSeries({ url: WATCH_URL }, fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1) + ROW(W2, true))) }));
+
+    // Next poll: W2 is now free.
+    const effects = await pollAllSources(fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1) + ROW(W2))) }));
+    expect(effects[0]!.becameFree.map((c) => c.url)).toEqual([W2]);
+    expect(effects[0]!.newChapters).toEqual([]);
+
+    const w2 = await db.chapter.findFirstOrThrow({ where: { seriesId, url: W2 } });
+    expect(w2.access).toBe('FREE');
+    expect(w2.becameFreeAt).not.toBeNull();
+
+    // A subsequent identical poll must not re-detect it (already FREE in storage).
+    const again = await pollAllSources(fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1) + ROW(W2))) }));
+    expect(again[0]!.becameFree).toEqual([]);
+  });
 });
 
 describe('updateSeries (real DB)', () => {
@@ -323,6 +341,37 @@ describe('notifyForEffects (real DB)', () => {
 
     expect(summary.expired).toBe(1);
     expect(await db.pushSubscription.count()).toBe(0);
+  });
+
+  test('WP-20: becameFree → a "Now free" push; a locked-only new chapter is not pushed', async () => {
+    const seriesId = await addAlpha(); // title "Alpha"
+    const { ports, captured } = captureAll();
+
+    await notifyForEffects(
+      [
+        effect({
+          seriesId,
+          becameFree: [{ url: 'u-unlocked', title: 'C2', access: 'FREE' }],
+          newChapters: [{ url: 'u-locked', title: 'C3', access: 'LOCKED' }],
+        }),
+      ],
+      [],
+      ports,
+    );
+
+    // Only the unlock is pushed; the new *locked* chapter is stored-silently (no new-chapter push).
+    expect(captured.map((m) => ({ title: m.title, body: m.body, tag: m.tag }))).toEqual([
+      { title: 'Now free', body: 'Alpha', tag: `free-${seriesId}` },
+    ]);
+  });
+
+  test('WP-20: a new FREE chapter still pushes as a normal new chapter', async () => {
+    const seriesId = await addAlpha();
+    const { ports, captured } = captureAll();
+
+    await notifyForEffects([effect({ seriesId, newChapters: [{ url: 'u', title: 'C', access: 'FREE' }] })], [], ports);
+
+    expect(captured.map((m) => m.title)).toEqual(['New chapter']);
   });
 });
 

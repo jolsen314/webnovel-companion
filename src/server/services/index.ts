@@ -92,9 +92,10 @@ function pollPorts(
     renderFetch: renderImpl,
     loadActiveSources: async () => (await db.source.findMany({ where: { isActive: true } })).map(rowToPollable),
     loadStoredChapters: async (seriesId) =>
-      (await db.chapter.findMany({ where: { seriesId }, select: { guid: true, url: true } })).map((c) => ({
+      (await db.chapter.findMany({ where: { seriesId }, select: { guid: true, url: true, access: true } })).map((c) => ({
         guid: c.guid ?? undefined,
         url: c.url,
+        access: c.access === 'UNKNOWN' ? undefined : c.access,
       })),
     applyPollEffects: async (e: PollEffects) => {
       const now = new Date();
@@ -130,6 +131,12 @@ function pollPorts(
               }),
             ]
           : []),
+        ...e.becameFree.map((c) =>
+          db.chapter.updateMany({
+            where: { seriesId: e.seriesId, url: c.url, becameFreeAt: null },
+            data: { access: 'FREE' as const, becameFreeAt: now },
+          }),
+        ),
       ]);
     },
   };
@@ -250,8 +257,11 @@ export async function notifyForEffects(
   ports: PushSendPorts = pushSendPorts(),
 ): Promise<SendSummary> {
   const newChapters = pollEffects
-    .filter((e) => e.newChapters.length > 0)
-    .map((e) => ({ seriesId: e.seriesId, count: e.newChapters.length }));
+    .map((e) => ({ seriesId: e.seriesId, count: e.newChapters.filter((c) => c.access !== 'LOCKED').length }))
+    .filter((n) => n.count > 0);
+  const nowFree = pollEffects
+    .filter((e) => e.becameFree.length > 0)
+    .map((e) => ({ seriesId: e.seriesId, count: e.becameFree.length }));
   const scheduledReleases = scheduleEffects.map((e) => ({ seriesId: e.seriesId, eventKind: e.eventKind }));
 
   // Source-down alerts need the host, which lives on the Source row.
@@ -264,6 +274,7 @@ export async function notifyForEffects(
 
   const seriesTitle = await seriesTitleResolver([
     ...newChapters.map((n) => n.seriesId),
+    ...nowFree.map((n) => n.seriesId),
     ...scheduledReleases.map((s) => s.seriesId),
     ...sourcesDown.map((s) => s.seriesId),
   ]);
@@ -272,6 +283,7 @@ export async function notifyForEffects(
   const messages = buildPushMessages({
     seriesTitle,
     newChapters,
+    nowFree,
     scheduledReleases,
     sourcesDown,
     push: {
