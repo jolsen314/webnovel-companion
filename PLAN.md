@@ -41,16 +41,17 @@ To re-prioritize, move rows and update the `NEXT` marker. Don't silently reorder
 
 ## Current focus
 
-> **NEXT: WP-20 (paid→free frontier)** — with page-watch wired (WP-17), the renderer live (WP-17b), and push
-> delivering (WP-09), the remaining paid-site value is detecting the *locked→free* transition on chapters we've already
-> seen (the "now free" event), reading the free frontier off the (now renderable) TOC. It reuses the WP-09 send-path
-> (the `UNLOCKED` event/copy already exist), and for the fully CF-blocked paid sites pairs with WP-29 (manual schedule).
-> This is where `parseToc`'s free-vs-locked access marking gets real (the renderer already returns the full TOC
-> incl. locked chapters). Also open, lower priority: **WP-29's schedule-editor UI** (lib + cron wiring done).
+> **NEXT: WP-29's schedule-editor UI** (lib + schema + cron wiring done; editor UI + push delivery remain). Then the
+> reading-status lifecycle (**WP-27** — status-gated polling; PLANNED+paid fires only when 0 locked remain, which
+> layers on top of WP-20's now-free detection) and **WP-28** (styling/theming). Also queued: **WP-30** (title backfill
+> from the TOC + manual title edit), captured 2026-07-26.
 
 The MVP is **live on Vercel + Neon** — feed pipeline, auth gate, library/detail UI, **Web Push (WP-09, verified on a
-device)**, and the **headless renderer (WP-17b, live-validated)**. Remaining near-term: **WP-20 → WP-29 editor UI**.
-(Real site/series names for testing live in the gitignored `TESTING-NOTES.local.md`.)
+device)**, the **headless renderer (WP-17b, live-validated)**, and **paid→free "now free" detection (WP-20)**. The
+locked→free transition is now caught per-chapter off the TOC (`parseToc`'s access marking → `becameFreeAt` →
+privacy-safe "Now free" push, riding the new-chapter toggle); new *locked* chapters are stored silently and notify only
+on unlock. Remaining near-term: **WP-29 editor UI**. (Real site/series names for testing live in the gitignored
+`TESTING-NOTES.local.md`.)
 
 ---
 
@@ -89,7 +90,7 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | ⭐ WP-17 | Page-watch — **primary** for dense/paid sites (`lib/feeds/pageWatch.ts`; framework adapters + generic) | M1↑ | `DONE` | WP-01, WP-05 |
 | WP-17b | Hard sources: self-run headless renderer (`fetchMode` PLAIN→RENDER) for JS-rendered TOCs — [design](docs/superpowers/specs/2026-07-23-wp17b-hard-sources-design.md). **Live-validated on Vercel** | M1↑ | `DONE` | WP-17 |
 | WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` (INTERVAL + WEEKLY), notify day-after, new/unlocked tag. **Lib + schema + cron wiring DONE; editor UI + push delivery (WP-09) remain** | M1↑ | `WIP` | WP-07, WP-10 |
-| ⭐ WP-20 | Paid→free frontier + "now free" (free frontier off the TOC; **PLANNED+paid → fire only when 0 locked remain**, see WP-27) | M1↑ | `TODO` | WP-07, WP-17 |
+| ⭐ WP-20 | Paid→free frontier + "now free" (per-chapter LOCKED→FREE off the TOC; `becameFreeAt` + "Now free" push) | M1↑ | `DONE` | WP-07, WP-17 |
 | WP-09 | Web Push end-to-end (VAPID, sw handler, subscribe flow, per-type prefs in Settings, privacy copy, test button) — **verified live on a device** | M0 | `DONE` | WP-06, WP-08 |
 | ⭐ WP-10 | Library + series-detail UI (unread counts, mark progress) | M0 | `DONE` | WP-06, WP-08 |
 | ⭐ WP-AUTH | Single-user password gate (scrypt hash + signed cookie + middleware) — **deploy prerequisite** | M0 | `DONE` | WP-06, WP-08 |
@@ -401,6 +402,18 @@ fallback, which derives the title from the URL slug — see "Add-time isolation 
 
 ## Changelog
 
+- **2026-07-26** — **WP-20 DONE: paid→free "now free" per-chapter unlock detection.** The diff now detects an
+  already-seen chapter flipping LOCKED→FREE (`DiffResult.becameFree`, keyed on the *stored* chapter so persistence
+  targets the exact row), `pollSource` threads it through `PollEffects`, the binding stamps `Chapter.becameFreeAt` +
+  `access=FREE` **by primary key** in the poll transaction, and `notifyForEffects` fires a privacy-safe **"Now free"**
+  push (series name in the body only) riding the existing new-chapter toggle. New *locked* chapters are stored silently
+  — the new-chapter push excludes `access==='LOCKED'`, so the unlock is the event that pushes. **No migration** (the
+  `access`/`becameFreeAt` columns pre-existed). Built subagent-driven, test-first (4 tasks); a final whole-branch
+  review caught a real bug — persistence had matched the *fetched* raw url while detection matched canonical-url/guid,
+  which would silently miss (and re-fire every poll) on url drift — fixed by persisting via the stored row id. **219
+  unit + 23 integration green, typecheck clean.** Deferred as designed: **WP-27**'s status rules (PLANNED+paid fires
+  only when 0 locked remain) layer on this; a per-series "notify on new locked chapter" opt-in; and lock-detection
+  tuning against a real locked TOC. Design: `docs/superpowers/specs/2026-07-26-wp20-paid-to-free-design.md`.
 - **2026-07-26** — **Added WP-30 (title backfill + manual edit); starting WP-20.** Owner hit an acronym/URL-derived
   title (from the multi-novel add-time fallback). New **WP-30**: auto-backfill the real series title from the
   page-watch TOC (`parseToc` gains a title extract; only overwrite auto-derived titles, flag manual edits), with a
