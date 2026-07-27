@@ -103,6 +103,8 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-28 | Frontend styling & theming — ordering, feed-page vs library split, theme system (night default + cultivation ancient-scroll, sci-fi holographic-panel) | M1 | `TODO` | WP-10 |
 | WP-19 | Non-destructive re-pointing + "find new source" helper | M1 | `TODO` | WP-16, WP-18 |
 | WP-30 | Series title backfill from TOC (fix acronym/URL-derived titles) + manual title edit | M1 | `TODO` | WP-17, WP-10 |
+| WP-31 | Tab-structured premium TOCs — renderer clicks Free/Premium tabs + tab-membership access marking (unblocks WP-20 "now free" where locked chapters live behind a tab, not row markers) | M1↑ | `TODO` | WP-17b, WP-20 |
+| WP-32 | Split/paginated TOCs across sibling pages — page-watch follows "next chapters" navigation (bounded hops) + stops pagination anchors polluting `parseToc` | M1↑ | `TODO` | WP-17 |
 | WP-RC | Dense-feed miss-detection + TOC reconcile fallback | M1 | `TODO` | WP-05, WP-07, WP-17 |
 | WP-21 | Plan-to-read completion watch (wire WP-13 + notify) — compare **max chapter number** vs target, not post count (split-chapter safe; see CONTEXT.md) | M1 | `TODO` | WP-13, WP-07 |
 | WP-27 | Reading-status lifecycle for poll + store — status-gated polling (skip COMPLETED/DROPPED), PLANNED seeds a **summary** not the full TOC (backfill on →READING), per-status notify rules | M1 | `TODO` | WP-07, WP-17, WP-18 |
@@ -376,6 +378,60 @@ fallback, which derives the title from the URL slug — see "Add-time isolation 
   — extend `parseSeriesUpdate` to accept `title`). A manual edit sets the "user-edited" flag so auto-backfill leaves it
   alone. Ship this half even if auto-backfill lands — it's the escape hatch.
 
+### WP-31 — Tab-structured premium TOCs (renderer tab capture + tab-membership access)
+
+**Motivation (owner testing, 2026-07-26):** on the **JS-rendered Free/Premium-tab source** (Next.js RSC), the
+production renderer both **under-captures** and **mis-classifies**, so WP-20's "now free" can't work there:
+
+- **Renderer captures the FREE tab only.** [`api/render/route.ts`](src/app/api/render/route.ts) does `goto` →
+  settle → loop-click only `load more|show more|more chapters`, with **no tab interaction**. It lands on the default
+  (Free) tab; the **Premium tab** is a **disjoint, lazily-rendered list** that is simply absent from the DOM until the
+  tab is clicked. So the locked side is never seen.
+- **Access is tab membership, not a row marker.** Even in the premium view, `parseToc` labels everything FREE — there
+  are **no per-row lock markers** (`LOCK_CLASS`/`LOCK_TEXT` find nothing; the only "premium" string is the *tab
+  label*). Free-vs-locked is **which tab a chapter is under**.
+- **A real "now free" event was observed** between two tests (a couple of chapters moved premium→free while the total
+  held constant) — exactly the WP-20 signal, but **undetectable as-is** because we never capture the premium side and
+  there's no row marker to flip.
+
+**Two independent gaps → two pieces of work:**
+1. **Renderer reads both tabs.** Implement the `readTabs` interaction from the WP-17b spike vocabulary
+   (`waitForSelector`/`clickWhileVisible`/`readTabs`): click each Free/Premium tab (by visible text — no site names in
+   the repo) and union the disjoint lists. Tab labels embed counts (a near-free-frontier signal). Wants a small
+   **per-host interaction descriptor** rather than the current one-size load-more loop.
+2. **Tab-aware access classification.** A `SiteTocConfig` rule (or tab-scoped parse) marking premium-tab chapters
+   `LOCKED`, free-tab `FREE`, since row markers don't exist. This is the concrete "real locked TOC" that WP-20
+   deferred its lock-detection tuning to.
+
+**Note:** contradicts the WP-17b "validated ~261 links" changelog line — production `route.ts` lands on the Free tab,
+so that figure was free-only or taken differently; re-confirm with a prod `/api/render` curl when picked up. **Gets its
+own brainstorm → spec when prioritized.** Until then, "now free" on tab-structured paid sites is a known non-detection.
+
+### WP-32 — Split/paginated TOCs across sibling pages (follow-next-page in page-watch)
+
+**Motivation (owner testing, 2026-07-26):** the **plain SitePad split-TOC source** hosts one series' chapter list
+across **two sibling slugs** linked by hand-authored anchors — page A (prologue + the early chapters, then a "Next
+Chapters" link) → page B (the newest chapters, with a "Previous Chapters" back-link). A **single fetch of the given URL
+captures only page A; the newest chapters on page B are never seen.** The page is plain-fetchable (no renderer needed);
+there is **no usable pagination or feed** (`…/page/2/` soft-404s to the same page; the site feed is dense/wrong-series;
+per-slug feeds return 0 items). The renderer wouldn't help either — its loop matches in-place "load more", not
+navigation to a *new URL*.
+
+**Work:**
+1. **Follow-next-page in page-watch (the durable fix).** After parsing a TOC, follow anchors whose text matches
+   `next chapters?|older|newer` (case-insensitive), for a **bounded** number of hops, and **union** the chapters
+   across pages. Generic — handles this site and any future split TOCs. (Rejected: watch only the "front" slug — it
+   rolls to a new slug and breaks silently; register both slugs manually — brittle as pages grow.)
+2. **Stop pagination anchors polluting `parseToc`.** "Next/Previous Chapters" text contains "Chapters" →
+   `CHAPTER_TEXT` matches → `parseToc` emits a **phantom chapter row** (url = the sibling page, number = null). Filter
+   navigation anchors out (and feed them to step 1 instead).
+3. **Two parse quirks to handle** (seen on this site): a **slug/label off-by-one** (last link's `href` number is one
+   ahead of its visible "Chapter N" text — decide which to trust or reconcile), and a **non-numeric prologue**
+   ("Chapter α" → `parseChapterNumber` → null; already tolerated, worth a test).
+
+**Overlaps WP-RC** (dense-feed reconcile) — both are page-watch completeness safety nets; coordinate when building.
+**Gets its own brainstorm → spec when prioritized.**
+
 ## Backlog / open questions
 
 - **Notification privacy** *(implemented 2026-07-26)* — the work's name is kept out of the always-visible notification
@@ -402,6 +458,14 @@ fallback, which derives the title from the URL slug — see "Add-time isolation 
 
 ## Changelog
 
+- **2026-07-26** — **Added WP-31 + WP-32 from owner testing (two TOC-capture gaps).** Live testing surfaced behavior
+  the current fetch/parse doesn't handle. **WP-31** — a **tab-structured premium source** (JS-rendered Free/Premium
+  tabs): the renderer captures the Free tab only (the Premium tab is a disjoint, lazily-rendered list, absent until
+  clicked) and access is **tab membership, not a row marker** — so WP-20's "now free" can't fire there (a real unlock
+  was even observed between two tests but is invisible to us). Needs renderer `readTabs` + tab-aware access. **WP-32** —
+  a **split-TOC source** whose chapter list spans sibling slugs via a "Next Chapters" link: one fetch misses the newest
+  page, and the nav anchor pollutes `parseToc` with a phantom row. Needs follow-next-page (bounded hops) in page-watch
+  + nav-anchor filtering. Both `TODO`, M1↑; each gets its own brainstorm→spec when prioritized.
 - **2026-07-26** — **WP-20 DONE: paid→free "now free" per-chapter unlock detection.** The diff now detects an
   already-seen chapter flipping LOCKED→FREE (`DiffResult.becameFree`, keyed on the *stored* chapter so persistence
   targets the exact row), `pollSource` threads it through `PollEffects`, the binding stamps `Chapter.becameFreeAt` +
