@@ -9,6 +9,7 @@ import {
   listSeries,
   updateSeries,
   savePushSubscription,
+  backfillFromToc,
   type FetchImpl,
 } from '../../src/server/services';
 import { db } from '../../src/server/db';
@@ -399,6 +400,39 @@ describe('notification preferences (real DB)', () => {
     // a second partial update only touches its field
     await updateNotificationPrefs({ pushNewChapter: false });
     expect(await getNotificationPrefs()).toEqual({ pushNewChapter: false, pushScheduled: true, pushSourceDown: true });
+  });
+});
+
+describe('backfillFromToc (real DB)', () => {
+  const PAGE = 'https://translator.example/novel/alpha/';
+  const B1 = 'https://translator.example/a-1/';
+  const B2 = 'https://translator.example/a-2/';
+  const B3 = 'https://translator.example/a-3/';
+  const TOC = (rows: string) => `<html><body><ul>${rows}</ul></body></html>`;
+  const ROW = (u: string, locked = false) => `<li${locked ? ' class="premium"' : ''}><a href="${u}">Chapter</a></li>`;
+
+  test('adds older chapters missing from the feed window and reconciles access, without pushing', async () => {
+    // addAlpha() seeds a FEED series with 2 chapters (a-1, a-2) as access UNKNOWN, source.url = the series page.
+    const seriesId = await addAlpha();
+    // Point the source's reading page at our TOC (which shows the full history a-1..a-3, a-2 locked).
+    await db.source.updateMany({ where: { seriesId }, data: { url: PAGE } });
+
+    const result = await backfillFromToc(
+      seriesId,
+      fetchFrom({ [PAGE]: okRes(TOC(ROW(B1) + ROW(B2, true) + ROW(B3))) }),
+    );
+
+    expect(result.added).toBe(1); // a-3 was missing
+    expect(result.reconciled).toBe(2); // a-1 → FREE, a-2 → LOCKED (were UNKNOWN)
+
+    const chapters = await db.chapter.findMany({ where: { seriesId }, orderBy: { url: 'asc' } });
+    expect(chapters.map((c) => c.url)).toEqual([B1, B2, B3]);
+    expect(chapters.find((c) => c.url === B2)!.access).toBe('LOCKED');
+    expect(chapters.find((c) => c.url === B3)!.access).toBe('FREE');
+    // a-1 went UNKNOWN → FREE via reconciliation, not an unlock — becameFreeAt must stay
+    // null, since that's the field a real unlock stamps to trigger a "Now free" push (WP-20).
+    // A set becameFreeAt here would mean this silent backfill created a push-worthy event.
+    expect(chapters.find((c) => c.url === B1)!.becameFreeAt).toBeNull();
   });
 });
 

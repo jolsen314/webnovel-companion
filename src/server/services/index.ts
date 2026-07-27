@@ -4,6 +4,8 @@ import { politeFetch, type PoliteResult } from '../../lib/feeds/fetch';
 import { makeRenderFetch } from '../../lib/feeds/renderFetch';
 import type { SeriesMatch } from '../../lib/feeds/discover';
 import type { FailureType } from '../../lib/health';
+import { diffChapters } from '../../lib/feeds/diff';
+import { parseToc } from '../../lib/feeds/pageWatch';
 import { pollAllSources as pollAllCore, type PollableSource, type PollEffects, type PollPorts } from './poll';
 import { addSeries as addSeriesCore, type AddSeriesInput, type AddSeriesResult } from './addSeries';
 import {
@@ -350,4 +352,50 @@ export function addSeries(input: AddSeriesInput, fetchImpl: FetchImpl = fetchPor
       return { seriesId: series.id };
     },
   });
+}
+
+/** One-time TOC read for a feed (or any) series: add the older tail the feed window never showed and
+ *  reconcile feed-originated UNKNOWN chapters to the TOC's FREE/LOCKED. Silent — never pushes, never
+ *  touches source health/etag (it reads the reading page, not the feed). */
+export async function backfillFromToc(
+  seriesId: string,
+  fetchImpl: FetchImpl = fetchPort,
+): Promise<{ added: number; reconciled: number }> {
+  const source = await db.source.findFirst({ where: { seriesId, isActive: true } });
+  if (!source) return { added: 0, reconciled: 0 };
+  const res = await fetchImpl(source.url, {});
+  if (res.outcome !== 'SUCCESS' || res.notModified) return { added: 0, reconciled: 0 };
+
+  const toc = parseToc(res.body, source.url);
+  const stored = (
+    await db.chapter.findMany({ where: { seriesId }, select: { id: true, guid: true, url: true, access: true } })
+  ).map((c) => ({ id: c.id, guid: c.guid ?? undefined, url: c.url, access: c.access === 'UNKNOWN' ? undefined : c.access }));
+  const diff = diffChapters(stored, toc);
+
+  const now = new Date();
+  await db.$transaction([
+    ...(diff.new.length > 0
+      ? [
+          db.chapter.createMany({
+            data: diff.new.map((c) => ({
+              seriesId,
+              sourceId: source.id,
+              title: c.title,
+              url: c.url,
+              guid: c.guid ?? null,
+              number: c.number ?? null,
+              access: c.access ?? 'UNKNOWN',
+            })),
+            skipDuplicates: true,
+          }),
+        ]
+      : []),
+    ...diff.becameFree.flatMap((c) =>
+      c.id ? [db.chapter.updateMany({ where: { id: c.id, becameFreeAt: null }, data: { access: 'FREE' as const, becameFreeAt: now } })] : [],
+    ),
+    ...diff.accessReconciled.flatMap((c) =>
+      c.id ? [db.chapter.updateMany({ where: { id: c.id }, data: { access: c.access ?? 'UNKNOWN' } })] : [],
+    ),
+  ]);
+  return { added: diff.new.length, reconciled: diff.accessReconciled.length };
 }
