@@ -7,7 +7,7 @@ import {
   filterBySeriesMatch,
   type SeriesMatch,
 } from '../../lib/feeds/discover';
-import { parseToc } from '../../lib/feeds/pageWatch';
+import { parseToc, mergeFeedAndToc } from '../../lib/feeds/pageWatch';
 import type { FeedItem } from '../../lib/feeds/diff';
 import type { PoliteResult } from '../../lib/feeds/fetch';
 
@@ -90,7 +90,8 @@ export async function addSeries(input: AddSeriesInput, ports: AddSeriesPorts): P
     // site-wide feed we can't isolate → a series-scoped guess that captures nothing
     // now but fills in when the series next publishes (WP-RC escalates if it never does).
     const match = positive ?? (usedGuesses ? fallbackSeriesMatch(parsed.items, url) : { type: 'WHOLE_FEED' });
-    const chapters = filterBySeriesMatch(parsed.items, match);
+    const feedChapters = filterBySeriesMatch(parsed.items, match);
+    const chapters = pageOk ? mergeFeedAndToc(feedChapters, parseToc(page.body, url)) : feedChapters;
     const seriesTitle =
       input.title ??
       (positive?.type === 'CATEGORY'

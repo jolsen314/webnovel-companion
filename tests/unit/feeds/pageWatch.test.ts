@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { parseToc } from '../../../src/lib/feeds/pageWatch';
+import { parseToc, mergeFeedAndToc } from '../../../src/lib/feeds/pageWatch';
 
 const base = 'https://site.example/novel/x/';
 
@@ -75,5 +75,35 @@ describe('parseToc — per-host config override', () => {
       ['https://site.example/r/1', 'FREE'],
       ['https://site.example/r/2', 'LOCKED'],
     ]);
+  });
+});
+
+describe('mergeFeedAndToc', () => {
+  const feed = (url: string, guid?: string): import('../../../src/lib/feeds/diff').FeedItem => ({ url, title: url, guid, access: undefined });
+  const toc = (url: string, access: 'FREE' | 'LOCKED'): import('../../../src/lib/feeds/pageWatch').TocChapter => ({ url, title: url, number: null, access });
+
+  test('feed items keep their guid but gain access from the matching TOC item', () => {
+    const merged = mergeFeedAndToc([feed('https://x/a', 'g1')], [toc('https://x/a', 'FREE')]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({ url: 'https://x/a', guid: 'g1', access: 'FREE' });
+  });
+
+  test('TOC items missing from the feed (older tail) are appended with their access', () => {
+    const merged = mergeFeedAndToc([feed('https://x/b', 'g2')], [toc('https://x/a', 'LOCKED'), toc('https://x/b', 'FREE')]);
+    expect(merged.map((c) => c.url).sort()).toEqual(['https://x/a', 'https://x/b']);
+    expect(merged.find((c) => c.url === 'https://x/a')!.access).toBe('LOCKED'); // tail, from TOC
+    expect(merged.find((c) => c.url === 'https://x/b')!.guid).toBe('g2'); // overlap keeps feed guid
+  });
+
+  test('canonical match ignores tracking params / trailing slash', () => {
+    const merged = mergeFeedAndToc([feed('https://x/a?utm_source=rss', 'g1')], [toc('https://x/a/', 'LOCKED')]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({ guid: 'g1', access: 'LOCKED' });
+  });
+
+  test('empty TOC (under-read) → just the feed items, unchanged', () => {
+    const merged = mergeFeedAndToc([feed('https://x/a', 'g1')], []);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]!.access).toBeUndefined();
   });
 });

@@ -1,5 +1,6 @@
 import * as cheerio from 'cheerio';
 import { parseChapterNumber } from './parse';
+import { canonicalUrl, type FeedItem } from './diff';
 
 /**
  * Page-watch: parse a series' TOC page into chapters, for feedless / dense / paid
@@ -82,4 +83,23 @@ export function parseToc(html: string, baseUrl: string, config?: SiteTocConfig):
   });
 
   return chapters;
+}
+
+/** Seed a feed series' full history: feed items (guid preserved) with access upgraded from the TOC where they
+ *  match, plus the TOC's older tail the feed window never showed. Matched by canonical URL. Falls back to just
+ *  the feed items when the TOC under-reads (JS/CF page). */
+export function mergeFeedAndToc(feedItems: FeedItem[], tocItems: TocChapter[]): FeedItem[] {
+  const tocByUrl = new Map(tocItems.map((t) => [canonicalUrl(t.url), t]));
+  const usedToc = new Set<string>();
+  const merged: FeedItem[] = feedItems.map((f) => {
+    const key = canonicalUrl(f.url);
+    const t = tocByUrl.get(key);
+    if (t) usedToc.add(key);
+    return t ? { ...f, access: t.access } : f;
+  });
+  for (const t of tocItems) {
+    const key = canonicalUrl(t.url);
+    if (!usedToc.has(key)) merged.push({ url: t.url, title: t.title, number: t.number, access: t.access });
+  }
+  return merged;
 }

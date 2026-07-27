@@ -63,6 +63,24 @@ describe('addSeries (real DB)', () => {
     expect(series!.sources[0]!.host).toBe('translator.example');
     expect(series!.chapters.map((c) => c.guid).sort()).toEqual(['g1', 'g2']);
   });
+
+  test('WP-33: a feed series seeds its full TOC history at add, with TOC access', async () => {
+    // Page advertises the feed AND lists the full chapter history (feed shows only a-1,a-2; TOC adds a-3 locked).
+    const PAGE_HTML =
+      `<html><head><link rel="alternate" type="application/rss+xml" href="${FEED_URL}"></head>` +
+      `<body><ul>` +
+      `<li><a href="${C1}">Chapter 1</a></li>` +
+      `<li><a href="${C2}">Chapter 2</a></li>` +
+      `<li class="premium"><a href="${C3}">Chapter 3</a></li>` +
+      `</ul></body></html>`;
+    const fetch = fetchFrom({ [PAGE_URL]: okRes(PAGE_HTML), [FEED_URL]: okRes(RSS(ITEM('g1', C1) + ITEM('g2', C2))) });
+    const { seriesId } = await addSeries({ url: PAGE_URL }, fetch);
+
+    const chapters = await db.chapter.findMany({ where: { seriesId }, orderBy: { url: 'asc' } });
+    expect(chapters.map((c) => c.url)).toEqual([C1, C2, C3]); // a-3 backfilled from the TOC
+    expect(chapters.find((c) => c.url === C3)!.access).toBe('LOCKED');
+    expect(chapters.find((c) => c.url === C1)!.guid).toBe('g1'); // overlap kept the feed guid
+  });
 });
 
 describe('listSeries (real DB)', () => {
