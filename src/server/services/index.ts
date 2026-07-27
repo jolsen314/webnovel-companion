@@ -92,7 +92,8 @@ function pollPorts(
     renderFetch: renderImpl,
     loadActiveSources: async () => (await db.source.findMany({ where: { isActive: true } })).map(rowToPollable),
     loadStoredChapters: async (seriesId) =>
-      (await db.chapter.findMany({ where: { seriesId }, select: { guid: true, url: true, access: true } })).map((c) => ({
+      (await db.chapter.findMany({ where: { seriesId }, select: { id: true, guid: true, url: true, access: true } })).map((c) => ({
+        id: c.id,
         guid: c.guid ?? undefined,
         url: c.url,
         access: c.access === 'UNKNOWN' ? undefined : c.access,
@@ -131,11 +132,15 @@ function pollPorts(
               }),
             ]
           : []),
-        ...e.becameFree.map((c) =>
-          db.chapter.updateMany({
-            where: { seriesId: e.seriesId, url: c.url, becameFreeAt: null },
-            data: { access: 'FREE' as const, becameFreeAt: now },
-          }),
+        ...e.becameFree.flatMap((c) =>
+          c.id
+            ? [
+                db.chapter.updateMany({
+                  where: { id: c.id, becameFreeAt: null },
+                  data: { access: 'FREE' as const, becameFreeAt: now },
+                }),
+              ]
+            : [],
         ),
       ]);
     },

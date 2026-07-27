@@ -85,6 +85,15 @@ describe('pollSource', () => {
     expect(effects.etag).toBe('"old"');
   });
 
+  test('becameFree stays empty on a 304 and on a failure', async () => {
+    const notMod: PoliteResult = {
+      outcome: 'SUCCESS', status: 304, notModified: true, body: '', etag: null, lastModified: null,
+      finalUrl: 'https://feed.example/rss',
+    };
+    expect((await pollSource(source(), ports(notMod))).becameFree).toEqual([]);
+    expect((await pollSource(source(), ports({ outcome: 'DNS' }))).becameFree).toEqual([]);
+  });
+
   test('a failure escalates health and yields no chapters (DNS from healthy → DEGRADED)', async () => {
     const effects = await pollSource(source(), ports({ outcome: 'DNS' }));
 

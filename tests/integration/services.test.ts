@@ -351,7 +351,7 @@ describe('notifyForEffects (real DB)', () => {
       [
         effect({
           seriesId,
-          becameFree: [{ url: 'u-unlocked', title: 'C2', access: 'FREE' }],
+          becameFree: [{ url: 'u-unlocked', access: 'FREE' }],
           newChapters: [{ url: 'u-locked', title: 'C3', access: 'LOCKED' }],
         }),
       ],

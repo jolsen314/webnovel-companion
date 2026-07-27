@@ -23,6 +23,8 @@ export interface FeedItem {
 
 /** The minimum needed to recognize an already-seen chapter. */
 export interface KnownChapter {
+  /** DB row id, when known (from the store). Lets the unlock update target the exact row. */
+  id?: string;
   guid?: string;
   url: string;
   /** Stored access state (page-watch sources). Undefined for feed sources that never tracked locks. */
@@ -32,8 +34,10 @@ export interface KnownChapter {
 export interface DiffResult {
   /** Chapters present in the fetch but not yet stored, in fetched order. */
   new: FeedItem[];
-  /** Already-seen chapters whose stored access was LOCKED and is now FREE (the "now free" event). */
-  becameFree: FeedItem[];
+  /** Stored chapters whose access was LOCKED and is now FREE (the "now free" event). Carries the
+   *  stored identity (id/url) so persistence targets the exact row, matching the diff's own
+   *  canonical-url/guid detection. */
+  becameFree: KnownChapter[];
   // Extension point: keep this an object so future diff dimensions attach as new
   // fields without breaking callers — e.g. `disappeared` (for source-health / removal).
 }
@@ -77,9 +81,10 @@ export function diffChapters(stored: KnownChapter[], fetched: FeedItem[]): DiffR
   // for one series — either recorded key still recognizes the chapter.
   const seenGuids = new Set<string>();
   const seenUrls = new Set<string>();
-  // Stored access, so we can spot a LOCKED→FREE unlock on an already-seen chapter.
-  const storedAccessByGuid = new Map<string, 'FREE' | 'LOCKED'>();
-  const storedAccessByUrl = new Map<string, 'FREE' | 'LOCKED'>();
+  // Stored chapters keyed by identity, so an already-seen fetched item can recover the exact
+  // stored row (and its access) to detect a LOCKED→FREE unlock.
+  const storedByGuid = new Map<string, KnownChapter>();
+  const storedByUrl = new Map<string, KnownChapter>();
 
   const remember = (c: KnownChapter | FeedItem): void => {
     if (c.guid !== undefined) seenGuids.add(c.guid);
@@ -91,25 +96,26 @@ export function diffChapters(stored: KnownChapter[], fetched: FeedItem[]): DiffR
   for (const c of stored) {
     remember(c);
     if (c.access !== undefined) {
-      if (c.guid !== undefined) storedAccessByGuid.set(c.guid, c.access);
-      storedAccessByUrl.set(canonicalUrl(c.url), c.access);
+      if (c.guid !== undefined) storedByGuid.set(c.guid, c);
+      storedByUrl.set(canonicalUrl(c.url), c);
     }
   }
 
-  const storedAccessOf = (c: FeedItem): 'FREE' | 'LOCKED' | undefined => {
-    if (c.guid !== undefined && storedAccessByGuid.has(c.guid)) return storedAccessByGuid.get(c.guid);
-    return storedAccessByUrl.get(canonicalUrl(c.url));
+  const storedMatch = (c: FeedItem): KnownChapter | undefined => {
+    if (c.guid !== undefined && storedByGuid.has(c.guid)) return storedByGuid.get(c.guid);
+    return storedByUrl.get(canonicalUrl(c.url));
   };
 
   const fresh: FeedItem[] = [];
-  const becameFree: FeedItem[] = [];
+  const becameFree: KnownChapter[] = [];
   const unlockedUrls = new Set<string>(); // guard against a duplicated fetched row double-counting
   for (const item of fetched) {
     if (isSeen(item)) {
       const key = canonicalUrl(item.url);
-      if (item.access === 'FREE' && storedAccessOf(item) === 'LOCKED' && !unlockedUrls.has(key)) {
+      const match = storedMatch(item);
+      if (item.access === 'FREE' && match?.access === 'LOCKED' && !unlockedUrls.has(key)) {
         unlockedUrls.add(key);
-        becameFree.push(item);
+        becameFree.push(match); // the STORED chapter — carries id/url for exact-row persistence
       }
       continue; // already stored, or a duplicate earlier in this batch
     }

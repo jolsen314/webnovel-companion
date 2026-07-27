@@ -41,7 +41,7 @@ export interface PollEffects {
   notModified: boolean;
   newChapters: FeedItem[];
   /** Already-seen chapters that flipped LOCKED→FREE this poll (the "now free" event). */
-  becameFree: FeedItem[];
+  becameFree: KnownChapter[];
   etag: string | null;
   lastModified: string | null;
   /** Health transitioned INTO LIKELY_DOWN on this poll → fire a "source may be down" alert. */
@@ -77,7 +77,7 @@ export async function pollSource(src: PollableSource, ports: PollPorts): Promise
   const health = step(toHealthState(src), res.outcome);
 
   let newChapters: FeedItem[] = [];
-  let becameFree: FeedItem[] = [];
+  let becameFree: KnownChapter[] = [];
   let notModified = false;
   let escalateToRender = false;
   let etag = src.etag;

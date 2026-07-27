@@ -195,4 +195,12 @@ describe('diffChapters — becameFree (locked→free unlocks)', () => {
     const r = diffChapters([stored('https://x/a', 'FREE')], [fetchedItem('https://x/a', 'FREE')]);
     expect(r.becameFree).toEqual([]);
   });
+
+  test('a duplicated unlocked row in one fetch is counted once', () => {
+    const r = diffChapters(
+      [stored('https://x/a', 'LOCKED')],
+      [fetchedItem('https://x/a', 'FREE'), fetchedItem('https://x/a', 'FREE')],
+    );
+    expect(r.becameFree).toHaveLength(1);
+  });
 });
