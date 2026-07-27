@@ -15,7 +15,11 @@ import {
   type SchedulePorts,
 } from './scheduleNotify';
 import type { ReleaseSchedule } from '../../lib/schedule';
-import { setVapidDetails, sendNotification } from 'web-push';
+// Default import (not named): web-push is CJS-only and node's ESM loader only
+// partially detects its dynamically-assigned named exports via cjs-module-lexer,
+// which breaks `tsx`-run scripts (e.g. scripts/cleanup-series.ts) even though
+// bundlers (webpack/Vite) paper over it. `webPush.<fn>` always resolves.
+import webPush from 'web-push';
 import { buildPushMessages } from '../../lib/notify';
 import { sendPushMessages, type PushSendPorts, type SendSummary } from './pushSend';
 import { getNotificationPrefs } from './notificationPrefs';
@@ -221,7 +225,7 @@ function ensureVapid(): boolean {
   const publicKey = process.env.VAPID_PUBLIC_KEY;
   const privateKey = process.env.VAPID_PRIVATE_KEY;
   if (publicKey && privateKey) {
-    setVapidDetails(process.env.VAPID_SUBJECT ?? 'mailto:admin@example.com', publicKey, privateKey);
+    webPush.setVapidDetails(process.env.VAPID_SUBJECT ?? 'mailto:admin@example.com', publicKey, privateKey);
     vapidReady = true;
   } else {
     vapidReady = false;
@@ -236,7 +240,7 @@ function pushSendPorts(): PushSendPorts {
     send: async (target, message) => {
       if (!ensureVapid()) return 'FAILED'; // no keys configured → don't crash the cron
       try {
-        await sendNotification(
+        await webPush.sendNotification(
           { endpoint: target.endpoint, keys: { p256dh: target.p256dh, auth: target.auth } },
           JSON.stringify(message),
         );
