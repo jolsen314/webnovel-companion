@@ -41,11 +41,11 @@ To re-prioritize, move rows and update the `NEXT` marker. Don't silently reorder
 
 ## Current focus
 
-> **NEXT: WP-29's schedule-editor UI** (lib + schema + cron wiring done; editor UI + push delivery remain). Then the
-> reading-status lifecycle (**WP-27** — status-gated polling; PLANNED+paid fires only when 0 locked remain, which
-> layers on top of WP-20's now-free detection) and **WP-28** (styling/theming). Also queued: **WP-30** (title backfill
-> from the TOC + manual title edit) and **WP-34** (feed→TOC switch to lock-monitoring — mechanism buildable, end-to-end
-> CF-gated). All captured 2026-07-26.
+> **NEXT: WP-35** (TOC-order chapters + display toggle) — deferred while WP-36/WP-38 fixed the backfill contamination;
+> now unblocked. Then **WP-29's schedule-editor UI** (lib + schema + cron wiring done; editor UI + push delivery
+> remain), the reading-status lifecycle (**WP-27**), and **WP-28** (styling/theming). Also queued: **WP-30** (title
+> backfill + manual edit), **WP-34** (feed→TOC switch, CF-gated), **WP-37** (auto-discover the chapter-TOC URL), and
+> **WP-39** (add-time dedup). WP-35/36/38 designs captured 2026-07-27.
 
 The MVP is **live on Vercel + Neon** — feed pipeline, auth gate, library/detail UI, **Web Push (WP-09, verified on a
 device)**, the **headless renderer (WP-17b, live-validated)**, and **paid→free "now free" detection (WP-20)**. The
@@ -109,9 +109,9 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-33 | Full-TOC backfill (feed series seed whole history at add + on-demand action) + silent `accessReconciled` diff dimension (`UNKNOWN`→`FREE`/`LOCKED`) — [design](docs/superpowers/specs/2026-07-26-feed-toc-transition-design.md) | M1 | `DONE` | WP-07, WP-17, WP-20 |
 | WP-34 | Feed→TOC switch to lock-monitoring — add-time lock detect (prefer PAGE_WATCH) + per-series "Track unlocks" switch + transition identity reconcile — **mechanism buildable; end-to-end "now free" CF-gated** | M1↑ | `TODO` | WP-33, WP-19 |
 | WP-35 | TOC-order chapters (`Chapter.position` from TOC DOM order, direction-normalized) + detail-page display toggle (oldest/newest/unread-first, canonical read-state) — [design](docs/superpowers/specs/2026-07-27-wp35-toc-order-display-design.md) | M1 | `TODO` | WP-17, WP-33, WP-10 |
-| ⭐ WP-36 | `parseToc` series scoping — restrict to main content (drop sidebar/"recent entries" widgets, nav/footer) + optional slug-family filter, so backfill/page-watch stop ingesting **cross-series phantom chapters**. **Data-correctness fix** | M1 | `TODO` | WP-17 |
+| ⭐ WP-36 | `parseToc` series scoping — restrict to main content (drop sidebar/"recent entries" widgets, nav/footer) + optional slug-family filter, so backfill/page-watch stop ingesting **cross-series phantom chapters**. **Data-correctness fix** | M1 | `DONE` | WP-17 |
 | WP-37 | Per-series chapter-TOC URL (landing page ≠ chapter TOC) — resolve/store a dedicated TOC URL distinct from the reading `url`; discovery follows an on-page "table of contents" link or the user sets it | M1 | `TODO` | WP-17, WP-33 |
-| WP-38 | Recover contaminated series (maintenance script) — prune phantom/cross-series chapters, **merge/delete duplicate series**, reset+re-seed, correct the source TOC URL + clean re-backfill (owner has bad production listings + a dup from the WP-33 button) | M1 | `TODO` | WP-36 |
+| WP-38 | Recover contaminated series (maintenance script) — prune phantom/cross-series chapters, **merge/delete duplicate series**, reset+re-seed, correct the source TOC URL + clean re-backfill (owner has bad production listings + a dup from the WP-33 button) | M1 | `DONE` | WP-36 |
 | WP-39 | Prevent duplicate series on add — wire `canonicalId` (normalized-URL/NU-id) dedup into `addSeries` so the same series can't be added twice (home URL vs TOC URL → one series); consumes WP-14's pure dedup | M1 | `TODO` | WP-07, WP-14 |
 | WP-RC | Dense-feed miss-detection + TOC reconcile fallback | M1 | `TODO` | WP-05, WP-07, WP-17 |
 | WP-21 | Plan-to-read completion watch (wire WP-13 + notify) — compare **max chapter number** vs target, not post count (split-chapter safe; see CONTEXT.md) | M1 | `TODO` | WP-13, WP-07 |
@@ -485,8 +485,11 @@ numbers/titles (WP-33's `orderChaptersForReading`), and make the on-screen direc
 
 > WP-36 + WP-38 design: [wp36-38-toc-scoping-cleanup-design](docs/superpowers/specs/2026-07-27-wp36-38-toc-scoping-cleanup-design.md) (owner-approved).
 
-> ⚠️ **Caution — the WP-33 "Backfill from TOC" button can contaminate data** on two classes of site (below). Don't
-> use it broadly until WP-36 (+ WP-37 where the landing page isn't the TOC). WP-38 recovers what it already corrupted.
+> ✅ **WP-36 landed — the sidebar/"recent entries" leak is fixed;** the backfill button no longer ingests cross-series
+> chapters from page chrome. **WP-37 still open:** where the landing page isn't the chapter TOC, point the source at the
+> real TOC by hand (`db:cleanup set-source-url …`) before backfilling. **WP-38 landed** — the `db:cleanup` maintenance
+> script (dry-run default, `--apply` to commit) recovers already-contaminated listings: `list` / `prune-chapters` /
+> `merge-series` / `delete-series` / `reset-chapters` / `set-source-url` / `backfill`.
 
 **What happened (real backfill test):** pressing "Backfill from TOC" on a single series added **3 chapters, each from
 a *different* series**. Root cause = two independent bugs on a **dense-feed WordPress site** where the series landing
@@ -557,6 +560,18 @@ or the WP-37 TOC-URL resolution to map both to one identity. (WP-38 cleans up th
 
 ## Changelog
 
+- **2026-07-27** — **WP-36 + WP-38 DONE: TOC content scoping + contaminated-series recovery.** **WP-36:** `parseToc`
+  now filters out chapter anchors inside page chrome (`aside`/`.widget_recent_entries`/`#secondary`/nav/footer/…) in a
+  single pass, with an **empty-fallback** (widget-TOC sites still parse) — so backfill/page-watch stop ingesting the
+  cross-series "recent entries" sidebar; plus optional `SiteTocConfig.contentSelector`/`slugFamilies` (multi-family).
+  **WP-38:** a pure `chaptersToMove` (canonical-URL union) + user-scoped cleanup services (prune/delete/reset/
+  set-source-url/merge, `mergeSeries` guards self-merge and re-derives `host` on a domain change) behind a
+  **dry-run-default `db:cleanup` CLI** (tsx; `--apply` to commit) — recovers the owner's phantom-chapter listings and
+  the duplicate series. Built subagent-driven, test-first; the final whole-branch review verified **no** unscoped or
+  un-`--apply`-gated destructive path, atomic merge, and no parseToc regression, and caught a stale-`host` bug (fixed).
+  Incidental: switched the `web-push` import to default (CJS/ESM compat for tsx; `next build` confirmed). **245 unit +
+  42 integration green, typecheck + build clean.** New devDep `tsx`. *Recovery runbook: `DATABASE_URL=<prod> npm run
+  db:cleanup -- <cmd>` (dry-run), review, re-run with `--apply`.* `NEXT` → WP-35.
 - **2026-07-27** — **Added WP-36/37/38 from production backfill testing (TOC contamination + cleanup).** The WP-33
   "Backfill from TOC" button, on a dense-feed WordPress site, added phantom **cross-series** chapters. Two bugs:
   **WP-37** — the series landing page isn't the chapter TOC (the real TOC is a separate linked URL; `source.url` was
