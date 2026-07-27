@@ -109,6 +109,9 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-33 | Full-TOC backfill (feed series seed whole history at add + on-demand action) + silent `accessReconciled` diff dimension (`UNKNOWN`→`FREE`/`LOCKED`) — [design](docs/superpowers/specs/2026-07-26-feed-toc-transition-design.md) | M1 | `DONE` | WP-07, WP-17, WP-20 |
 | WP-34 | Feed→TOC switch to lock-monitoring — add-time lock detect (prefer PAGE_WATCH) + per-series "Track unlocks" switch + transition identity reconcile — **mechanism buildable; end-to-end "now free" CF-gated** | M1↑ | `TODO` | WP-33, WP-19 |
 | WP-35 | TOC-order chapters (`Chapter.position` from TOC DOM order, direction-normalized) + detail-page display toggle (oldest/newest/unread-first, canonical read-state) — [design](docs/superpowers/specs/2026-07-27-wp35-toc-order-display-design.md) | M1 | `TODO` | WP-17, WP-33, WP-10 |
+| ⭐ WP-36 | `parseToc` series scoping — restrict to main content (drop sidebar/"recent entries" widgets, nav/footer) + optional slug-family filter, so backfill/page-watch stop ingesting **cross-series phantom chapters**. **Data-correctness fix** | M1 | `TODO` | WP-17 |
+| WP-37 | Per-series chapter-TOC URL (landing page ≠ chapter TOC) — resolve/store a dedicated TOC URL distinct from the reading `url`; discovery follows an on-page "table of contents" link or the user sets it | M1 | `TODO` | WP-17, WP-33 |
+| WP-38 | Recover contaminated series — prune phantom/cross-series chapters, reset+re-seed, re-point to the correct TOC + clean re-backfill (owner has bad production listings from the WP-33 button) | M1 | `TODO` | WP-36, WP-37 |
 | WP-RC | Dense-feed miss-detection + TOC reconcile fallback | M1 | `TODO` | WP-05, WP-07, WP-17 |
 | WP-21 | Plan-to-read completion watch (wire WP-13 + notify) — compare **max chapter number** vs target, not post count (split-chapter safe; see CONTEXT.md) | M1 | `TODO` | WP-13, WP-07 |
 | WP-27 | Reading-status lifecycle for poll + store — status-gated polling (skip COMPLETED/DROPPED), PLANNED seeds a **summary** not the full TOC (backfill on →READING), per-status notify rules | M1 | `TODO` | WP-07, WP-17, WP-18 |
@@ -477,6 +480,39 @@ numbers/titles (WP-33's `orderChaptersForReading`), and make the on-screen direc
   is **global, localStorage, per-device** (default oldest-first → no SSR flash).
 - **Migration** (unlike WP-33). Interacts with WP-32 (split TOC → position spans unioned pages).
 
+### WP-36 / WP-37 / WP-38 — TOC backfill correctness + cleanup (found in production testing, 2026-07-27)
+
+> ⚠️ **Caution — the WP-33 "Backfill from TOC" button can contaminate data** on two classes of site (below). Don't
+> use it broadly until WP-36 (+ WP-37 where the landing page isn't the TOC). WP-38 recovers what it already corrupted.
+
+**What happened (real backfill test):** pressing "Backfill from TOC" on a single series added **3 chapters, each from
+a *different* series**. Root cause = two independent bugs on a **dense-feed WordPress site** where the series landing
+page is not the chapter list:
+
+- **Wrong page (WP-37).** `backfillFromToc` fetches `source.url` — but here that's the series **landing/overview**
+  page, which has **no chapter list**. The real TOC is a **separate URL** the landing page links to (a "table of
+  contents" page). Nothing auto-discovers it; the series was registered with the home URL. So `parseToc` ran on a
+  page with no chapters. **Fix:** resolve/store a dedicated chapter-TOC URL per source (distinct from the reading
+  `url`) — discovery follows the on-page "table of contents"/"chapter list" link, or the user sets it. Backfill/
+  page-watch fetch that URL. (Relates to WP-19 re-pointing, WP-34 which also stores a TOC URL.)
+
+- **`parseToc` has no series scoping (WP-36, latent — bites even with the right URL).** It scans *every* chapter-ish
+  `<a>` on the page, **including a global sidebar "recent entries" widget** present on every page that lists the
+  newest chapters **across all series**. So even pointed at the correct TOC, ~3–5 cross-series widget links get
+  ingested as phantom chapters. **Fix:** restrict `parseToc` to the **main content** (exclude `aside` /
+  `.widget-area` / `.widget_recent_entries` / `#secondary` / nav / footer) and/or scope to the series' **URL slug
+  family** — supporting **multiple families** (this series' TOC spans two slug prefixes, a Part 1 / Part 2 split).
+  Extends the per-site `SiteTocConfig`. The **feed path is immune** (items are per-post and the poller maps them to
+  the series); backfill-via-TOC has no equivalent scoping — this is its own gap. **WP-36 is the higher-priority fix**
+  (data correctness; also helps any multi-widget site independently of WP-37).
+
+- **Cleanup (WP-38).** The owner has **bad production listings** already (phantom cross-series chapters merged into
+  real series). Need: (a) **prune** wrong chapters — identify phantoms (URL outside the series' slug family / not
+  matching) and delete them; (b) optional **reset** a series' chapters and re-seed; (c) **re-point** the source to the
+  correct TOC URL (WP-37) and **clean re-backfill** (after WP-36 scoping). Can start as a maintenance script/API and
+  graduate to a small UI. **Near-term** — depends on WP-36 + WP-37 for a clean re-backfill, but the destructive prune
+  can land first.
+
 ## Backlog / open questions
 
 - **Notification privacy** *(implemented 2026-07-26)* — the work's name is kept out of the always-visible notification
@@ -503,6 +539,14 @@ numbers/titles (WP-33's `orderChaptersForReading`), and make the on-screen direc
 
 ## Changelog
 
+- **2026-07-27** — **Added WP-36/37/38 from production backfill testing (TOC contamination + cleanup).** The WP-33
+  "Backfill from TOC" button, on a dense-feed WordPress site, added phantom **cross-series** chapters. Two bugs:
+  **WP-37** — the series landing page isn't the chapter TOC (the real TOC is a separate linked URL; `source.url` was
+  the wrong page); **WP-36** — `parseToc` scans the whole page including a global "recent entries" sidebar that lists
+  other series' chapters (needs main-content restriction + slug-family scoping; supports multi-family Part 1/Part 2
+  TOCs). **WP-38** — recover the owner's already-contaminated production listings (prune phantoms, reset+re-seed,
+  re-point + clean re-backfill). Added a caution against broad use of the backfill button until WP-36/37. WP-36 is
+  the higher-priority data-correctness fix. (Real-site detail in the gitignored `TESTING-NOTES.local.md`.)
 - **2026-07-27** — **Designed WP-35 (TOC-order chapters + display toggle).** Follow-up to WP-33's number-based
   `orderChaptersForReading`: instead of inferring reading order from numbers/titles (prologue/Extra/Side edge cases),
   follow the **site's own TOC order** — persist `Chapter.position` from `parseToc`'s DOM order (direction-normalized via
