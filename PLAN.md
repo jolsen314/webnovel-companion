@@ -483,6 +483,8 @@ numbers/titles (WP-33's `orderChaptersForReading`), and make the on-screen direc
 
 ### WP-36 / WP-37 / WP-38 — TOC backfill correctness + cleanup (found in production testing, 2026-07-27)
 
+> WP-36 + WP-38 design: [wp36-38-toc-scoping-cleanup-design](docs/superpowers/specs/2026-07-27-wp36-38-toc-scoping-cleanup-design.md) (owner-approved).
+
 > ⚠️ **Caution — the WP-33 "Backfill from TOC" button can contaminate data** on two classes of site (below). Don't
 > use it broadly until WP-36 (+ WP-37 where the landing page isn't the TOC). WP-38 recovers what it already corrupted.
 
