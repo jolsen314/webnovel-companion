@@ -23,6 +23,7 @@ import { getNotificationPrefs } from './notificationPrefs';
 export { listSeries, getSeries, updateSeries } from './series';
 export { savePushSubscription } from './push';
 export { getNotificationPrefs, updateNotificationPrefs, type NotificationPrefsView } from './notificationPrefs';
+export { pruneChapters, deleteSeries, resetChapters, setSourceUrl, mergeSeries, listSeriesForCleanup } from './cleanup';
 
 /**
  * Prisma/HTTP bindings for the poll + add-series orchestration. The logic lives in
