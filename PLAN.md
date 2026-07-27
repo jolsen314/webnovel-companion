@@ -44,7 +44,8 @@ To re-prioritize, move rows and update the `NEXT` marker. Don't silently reorder
 > **NEXT: WP-29's schedule-editor UI** (lib + schema + cron wiring done; editor UI + push delivery remain). Then the
 > reading-status lifecycle (**WP-27** — status-gated polling; PLANNED+paid fires only when 0 locked remain, which
 > layers on top of WP-20's now-free detection) and **WP-28** (styling/theming). Also queued: **WP-30** (title backfill
-> from the TOC + manual title edit), captured 2026-07-26.
+> from the TOC + manual title edit) and **WP-34** (feed→TOC switch to lock-monitoring — mechanism buildable, end-to-end
+> CF-gated). All captured 2026-07-26.
 
 The MVP is **live on Vercel + Neon** — feed pipeline, auth gate, library/detail UI, **Web Push (WP-09, verified on a
 device)**, the **headless renderer (WP-17b, live-validated)**, and **paid→free "now free" detection (WP-20)**. The
@@ -105,7 +106,7 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-30 | Series title backfill from TOC (fix acronym/URL-derived titles) + manual title edit | M1 | `TODO` | WP-17, WP-10 |
 | WP-31 | Tab-structured premium TOCs — renderer clicks Free/Premium tabs + tab-membership access marking (unblocks WP-20 "now free" where locked chapters live behind a tab, not row markers) | M1↑ | `TODO` | WP-17b, WP-20 |
 | WP-32 | Split/paginated TOCs across sibling pages — page-watch follows "next chapters" navigation (bounded hops) + stops pagination anchors polluting `parseToc` | M1↑ | `TODO` | WP-17 |
-| WP-33 | Full-TOC backfill (feed series seed whole history at add + on-demand action) + silent `accessReconciled` diff dimension (`UNKNOWN`→`FREE`/`LOCKED`) — [design](docs/superpowers/specs/2026-07-26-feed-toc-transition-design.md) — **buildable now** | M1 | `TODO` | WP-07, WP-17, WP-20 |
+| WP-33 | Full-TOC backfill (feed series seed whole history at add + on-demand action) + silent `accessReconciled` diff dimension (`UNKNOWN`→`FREE`/`LOCKED`) — [design](docs/superpowers/specs/2026-07-26-feed-toc-transition-design.md) | M1 | `DONE` | WP-07, WP-17, WP-20 |
 | WP-34 | Feed→TOC switch to lock-monitoring — add-time lock detect (prefer PAGE_WATCH) + per-series "Track unlocks" switch + transition identity reconcile — **mechanism buildable; end-to-end "now free" CF-gated** | M1↑ | `TODO` | WP-33, WP-19 |
 | WP-RC | Dense-feed miss-detection + TOC reconcile fallback | M1 | `TODO` | WP-05, WP-07, WP-17 |
 | WP-21 | Plan-to-read completion watch (wire WP-13 + notify) — compare **max chapter number** vs target, not post count (split-chapter safe; see CONTEXT.md) | M1 | `TODO` | WP-13, WP-07 |
@@ -483,6 +484,21 @@ Full design + rationale: [feed-toc-transition-design](docs/superpowers/specs/202
 
 ## Changelog
 
+- **2026-07-27** — **WP-33 DONE: full-TOC backfill + silent access-reconcile.** Feed series now recover their whole
+  history from the TOC and learn access on feed-originated chapters. New pure `accessReconciled` diff dimension
+  (already-seen chapter, stored `UNKNOWN` → TOC `FREE`/`LOCKED`) — silent (access updated by stored id, **no
+  `becameFreeAt`, no push**), disjoint from WP-20's `becameFree`; this **arms** now-free for feed series (a chapter
+  must be known-`LOCKED` before its unlock can fire). On-demand `backfillFromToc` service + `POST /api/series/[id]/
+  backfill` (reads the source's reading page, adds the older tail + reconciles access in one transaction, never pushes,
+  never touches source health/etag, user-scoped) + a **"Backfill from TOC"** button on series detail. At-add: a pure
+  `mergeFeedAndToc` seeds the full history (feed guids kept, TOC access, older tail appended), gated on a reachable TOC.
+  URL identity spike-validated coherent across a WordPress and a custom site. **No migration.** Built subagent-driven,
+  test-first (5 tasks); the final whole-branch review caught two real issues — backfilled (date-less) chapters sorted
+  after the feed window (fixed by ordering on **chapter number**: un-numbered first, **Extra/Side content last**, per
+  owner) and a canonical-duplicate double-insert in `mergeFeedAndToc` (fixed). **238 unit + 26 integration green,
+  typecheck clean.** *Deploy note: the `/api/series/[id]/backfill` route ships on the next push; no env/migration
+  change. UI button not yet browser-clicked — worth a quick tap.* Next feed↔TOC step is **WP-34** (the switch), still
+  CF-gated.
 - **2026-07-26** — **Designed feed↔TOC transition; added WP-33 + WP-34.** Discussed how feed series backfill and
   how/when they move to the TOC (where lock state lives). Decisions: **backfill** = one-time TOC union (at add for
   READING + on-demand action), feed stays default; **switch to lock-monitoring** = full flip to `PAGE_WATCH`, triggered
