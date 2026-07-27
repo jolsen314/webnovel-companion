@@ -25,6 +25,7 @@ export function SeriesDetail(props: {
   const [rating, setRating] = useState<number | null>(props.rating);
   const [lastRead, setLastRead] = useState<string | null>(props.lastReadChapterId);
   const [busy, setBusy] = useState(false);
+  const [backfillMessage, setBackfillMessage] = useState<string | null>(null);
 
   async function patch(body: Record<string, unknown>) {
     setBusy(true);
@@ -35,6 +36,22 @@ export function SeriesDetail(props: {
     }).catch(() => {});
     setBusy(false);
     router.refresh();
+  }
+
+  async function backfill() {
+    setBusy(true);
+    setBackfillMessage(null);
+    try {
+      const res = await fetch(`/api/series/${props.id}/backfill`, { method: 'POST' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const result = (await res.json()) as { added: number; reconciled: number };
+      setBackfillMessage(`Added ${result.added} · updated ${result.reconciled}`);
+      router.refresh();
+    } catch {
+      setBackfillMessage('Backfill failed');
+    } finally {
+      setBusy(false);
+    }
   }
 
   const lastReadIdx = props.chapters.findIndex((c) => c.id === lastRead);
@@ -80,6 +97,18 @@ export function SeriesDetail(props: {
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="control">
+          <span className="control__label">Chapters</span>
+          <button type="button" className="control__action" disabled={busy} onClick={() => void backfill()}>
+            Backfill from TOC
+          </button>
+          {backfillMessage && (
+            <span className="control__hint" role="status">
+              {backfillMessage}
+            </span>
+          )}
         </div>
       </div>
 

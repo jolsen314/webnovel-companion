@@ -263,6 +263,29 @@ body {
   border-radius: 8px;
   padding: 0.4rem 0.6rem;
 }
+.control__action {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--color-paper);
+  background: var(--color-ink);
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+}
+.control__action:hover:not(:disabled) {
+  border-color: var(--color-glow);
+  color: var(--color-glow);
+}
+.control__action:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.control__hint {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--color-muted);
+}
 .stars {
   display: flex;
   gap: 0.15rem;
