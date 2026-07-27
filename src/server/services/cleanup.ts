@@ -35,12 +35,23 @@ export async function resetChapters(seriesId: string): Promise<{ deleted: number
   return { deleted: count };
 }
 
-/** Repoint a source's reading-page url (e.g. after a translator site move). */
+/**
+ * Repoint a source's reading-page url (e.g. after a translator site move). `host` is
+ * re-derived from the new url so host-level health aggregation (`@@index([host])`)
+ * doesn't roll a cross-domain move up under the stale host; an unparseable url leaves
+ * `host` untouched.
+ */
 export async function setSourceUrl(sourceId: string, url: string): Promise<{ updated: boolean }> {
   const userId = getCurrentUserId();
   const owned = await db.source.findFirst({ where: { id: sourceId, series: { userId } }, select: { id: true } });
   if (!owned) return { updated: false };
-  await db.source.update({ where: { id: sourceId }, data: { url } });
+  let host: string | undefined;
+  try {
+    host = new URL(url).host;
+  } catch {
+    host = undefined;
+  }
+  await db.source.update({ where: { id: sourceId }, data: { url, ...(host !== undefined ? { host } : {}) } });
   return { updated: true };
 }
 
@@ -50,6 +61,9 @@ export async function setSourceUrl(sourceId: string, url: string): Promise<{ upd
  * cascading its remaining chapters/sources/progress. `into` adopts `from`'s reading
  * progress only if it had none of its own; a moved-away lastReadChapterId falls back to
  * null rather than pointing at a row that no longer exists.
+ *
+ * `into` should have an active source — otherwise moved chapters land with
+ * `sourceId: null` and the merged series has nothing to poll.
  */
 export async function mergeSeries(fromId: string, intoId: string): Promise<{ movedChapters: number; deleted: boolean }> {
   if (fromId === intoId) throw new Error('mergeSeries: cannot merge a series into itself');

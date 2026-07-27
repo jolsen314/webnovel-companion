@@ -136,6 +136,19 @@ describe('setSourceUrl (real DB)', () => {
     expect(updated.feedUrl).toBe(source.feedUrl);
   });
 
+  test('updates host too when the new url is on a different domain', async () => {
+    const seriesId = await addAlpha();
+    const source = await db.source.findFirstOrThrow({ where: { seriesId } });
+    const newUrl = 'https://new-host.example/novel/alpha/';
+
+    const result = await setSourceUrl(source.id, newUrl);
+    expect(result).toEqual({ updated: true });
+
+    const updated = await db.source.findUniqueOrThrow({ where: { id: source.id } });
+    expect(updated.url).toBe(newUrl);
+    expect(updated.host).toBe('new-host.example');
+  });
+
   test('returns updated: false for a source not owned by the current user', async () => {
     const otherSeries = await db.series.create({ data: { userId: 'someone-else', title: 'Other' } });
     const otherSource = await db.source.create({
