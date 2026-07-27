@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { diffChapters, type FeedItem, type KnownChapter } from '../../../src/lib/feeds/diff';
+import { diffChapters, canonicalUrl, type FeedItem, type KnownChapter } from '../../../src/lib/feeds/diff';
 
 // Small helper so tests read as intent, not boilerplate.
 function item(partial: Partial<FeedItem> & { url: string }): FeedItem {
@@ -7,6 +7,10 @@ function item(partial: Partial<FeedItem> & { url: string }): FeedItem {
 }
 
 describe('diffChapters', () => {
+  test('canonicalUrl is exported and normalizes a tracking/fragment variant', () => {
+    expect(canonicalUrl('https://x/a/?utm_source=rss#c1')).toBe(canonicalUrl('https://x/a'));
+  });
+
   test('first run: with nothing stored, every fetched item is new', () => {
     const fetched = [item({ url: 'https://site/ch/1' }), item({ url: 'https://site/ch/2' })];
 
@@ -202,5 +206,47 @@ describe('diffChapters — becameFree (locked→free unlocks)', () => {
       [fetchedItem('https://x/a', 'FREE'), fetchedItem('https://x/a', 'FREE')],
     );
     expect(r.becameFree).toHaveLength(1);
+  });
+});
+
+describe('diffChapters — accessReconciled (learning access on UNKNOWN chapters)', () => {
+  const stored = (url: string, access?: 'FREE' | 'LOCKED', guid?: string) => ({ url, access, guid });
+  const fetchedItem = (url: string, access?: 'FREE' | 'LOCKED', guid?: string): FeedItem => ({ url, title: url, access, guid });
+
+  test('a stored UNKNOWN chapter the TOC marks LOCKED is reconciled (not new, not becameFree)', () => {
+    const r = diffChapters([stored('https://x/a', undefined)], [fetchedItem('https://x/a', 'LOCKED')]);
+    expect(r.new).toEqual([]);
+    expect(r.becameFree).toEqual([]);
+    expect(r.accessReconciled.map((c) => c.url)).toEqual(['https://x/a']);
+  });
+
+  test('a stored UNKNOWN chapter the TOC marks FREE is reconciled', () => {
+    const r = diffChapters([stored('https://x/a', undefined)], [fetchedItem('https://x/a', 'FREE')]);
+    expect(r.accessReconciled.map((c) => c.url)).toEqual(['https://x/a']);
+    expect(r.becameFree).toEqual([]); // UNKNOWN→FREE is learning, not an unlock
+  });
+
+  test('a stored LOCKED→FREE is becameFree, NOT accessReconciled (disjoint)', () => {
+    const r = diffChapters([stored('https://x/a', 'LOCKED')], [fetchedItem('https://x/a', 'FREE')]);
+    expect(r.becameFree.map((c) => c.url)).toEqual(['https://x/a']);
+    expect(r.accessReconciled).toEqual([]);
+  });
+
+  test('a known FREE/LOCKED chapter with unchanged access is not reconciled', () => {
+    const r = diffChapters(
+      [stored('https://x/a', 'FREE'), stored('https://x/b', 'LOCKED')],
+      [fetchedItem('https://x/a', 'FREE'), fetchedItem('https://x/b', 'LOCKED')],
+    );
+    expect(r.accessReconciled).toEqual([]);
+  });
+
+  test('an UNKNOWN stored chapter still UNKNOWN in the fetch (feed poll) is not reconciled', () => {
+    const r = diffChapters([stored('https://x/a', undefined)], [fetchedItem('https://x/a', undefined)]);
+    expect(r.accessReconciled).toEqual([]);
+  });
+
+  test('reconciled carries the stored chapter identity (id) for by-id persistence', () => {
+    const r = diffChapters([{ id: 'c1', url: 'https://x/a', access: undefined }], [fetchedItem('https://x/a', 'LOCKED')]);
+    expect(r.accessReconciled[0]!.id).toBe('c1');
   });
 });
