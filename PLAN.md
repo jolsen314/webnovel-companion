@@ -105,6 +105,8 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-30 | Series title backfill from TOC (fix acronym/URL-derived titles) + manual title edit | M1 | `TODO` | WP-17, WP-10 |
 | WP-31 | Tab-structured premium TOCs — renderer clicks Free/Premium tabs + tab-membership access marking (unblocks WP-20 "now free" where locked chapters live behind a tab, not row markers) | M1↑ | `TODO` | WP-17b, WP-20 |
 | WP-32 | Split/paginated TOCs across sibling pages — page-watch follows "next chapters" navigation (bounded hops) + stops pagination anchors polluting `parseToc` | M1↑ | `TODO` | WP-17 |
+| WP-33 | Full-TOC backfill (feed series seed whole history at add + on-demand action) + silent `accessReconciled` diff dimension (`UNKNOWN`→`FREE`/`LOCKED`) — [design](docs/superpowers/specs/2026-07-26-feed-toc-transition-design.md) — **buildable now** | M1 | `TODO` | WP-07, WP-17, WP-20 |
+| WP-34 | Feed→TOC switch to lock-monitoring — add-time lock detect (prefer PAGE_WATCH) + per-series "Track unlocks" switch + transition identity reconcile — **mechanism buildable; end-to-end "now free" CF-gated** | M1↑ | `TODO` | WP-33, WP-19 |
 | WP-RC | Dense-feed miss-detection + TOC reconcile fallback | M1 | `TODO` | WP-05, WP-07, WP-17 |
 | WP-21 | Plan-to-read completion watch (wire WP-13 + notify) — compare **max chapter number** vs target, not post count (split-chapter safe; see CONTEXT.md) | M1 | `TODO` | WP-13, WP-07 |
 | WP-27 | Reading-status lifecycle for poll + store — status-gated polling (skip COMPLETED/DROPPED), PLANNED seeds a **summary** not the full TOC (backfill on →READING), per-status notify rules | M1 | `TODO` | WP-07, WP-17, WP-18 |
@@ -432,6 +434,29 @@ navigation to a *new URL*.
 **Overlaps WP-RC** (dense-feed reconcile) — both are page-watch completeness safety nets; coordinate when building.
 **Gets its own brainstorm → spec when prioritized.**
 
+### WP-33 / WP-34 — Feed ↔ TOC: backfill + switch to lock-monitoring
+
+Full design + rationale: [feed-toc-transition-design](docs/superpowers/specs/2026-07-26-feed-toc-transition-design.md)
+(owner-approved 2026-07-26). Summary of the decisions:
+
+- **A feed can't report lock state** (lives only in the TOC) → two operations, both "fetch TOC → `parseToc` → diff →
+  persist": **backfill** (one-time TOC union, feed stays the ongoing source) and **switch** (flip to `PAGE_WATCH`,
+  feed deactivated) for the subset needing "now free".
+- **Backfill (WP-33):** seed the full chapter list at add for READING series (the page `addSeries` already fetched is
+  the TOC), + a per-series **"Backfill from TOC"** action (explicit, not re-add). PLANNED still seeds a summary (WP-27).
+- **Switch trigger (WP-34):** **add-time** — if `parseToc(page.body)` shows `LOCKED`, choose `PAGE_WATCH` even when a
+  feed exists — **plus a manual per-series "Track unlocks" override** for the JS/CF/tab misses.
+- **Building block (WP-33):** a **silent `accessReconciled`** diff dimension — an already-seen chapter whose stored
+  access was `UNKNOWN` and whose TOC access is now `FREE`/`LOCKED` gets updated **with no push** (it's *learning*, not
+  an unlock). This **arms** WP-20 (a chapter must be known-`LOCKED` before its unlock can fire) and prevents a
+  notification storm on the first post-switch poll.
+- **Main risk:** feed-url ↔ TOC-url identity coherence (structural permalink differences → duplicate chapters). Needs a
+  transition-time reconcile + validation against a real dual-source series.
+- **Cloudflare gating (owner, 2026-07-26):** the owner's only feed-with-locked sites are **also CF-challenged** (TOC
+  unreachable) → **WP-33 (backfill + reconcile) is buildable/testable now** on non-CF feed sites; **WP-34's end-to-end
+  "now free on a switched feed series" is dormant** until a *non-CF* locked+feed site appears or the CF-unblock story
+  lands (those sites stay WP-29 manual-schedule territory meanwhile).
+
 ## Backlog / open questions
 
 - **Notification privacy** *(implemented 2026-07-26)* — the work's name is kept out of the always-visible notification
@@ -458,6 +483,14 @@ navigation to a *new URL*.
 
 ## Changelog
 
+- **2026-07-26** — **Designed feed↔TOC transition; added WP-33 + WP-34.** Discussed how feed series backfill and
+  how/when they move to the TOC (where lock state lives). Decisions: **backfill** = one-time TOC union (at add for
+  READING + on-demand action), feed stays default; **switch to lock-monitoring** = full flip to `PAGE_WATCH`, triggered
+  add-time (TOC shows locks) with a manual per-series override. New building block: a **silent `accessReconciled`** diff
+  dimension (`UNKNOWN`→`FREE`/`LOCKED`, no push) that arms WP-20's now-free for feed-originated chapters. **WP-33**
+  (backfill + reconcile) is buildable now; **WP-34** (the switch) is mechanism-buildable but end-to-end CF-gated — the
+  owner's only feed-with-locked sites are also Cloudflare-challenged (TOC unreachable). Design:
+  `docs/superpowers/specs/2026-07-26-feed-toc-transition-design.md`.
 - **2026-07-26** — **Added WP-31 + WP-32 from owner testing (two TOC-capture gaps).** Live testing surfaced behavior
   the current fetch/parse doesn't handle. **WP-31** — a **tab-structured premium source** (JS-rendered Free/Premium
   tabs): the renderer captures the Free tab only (the Premium tab is a disjoint, lazily-rendered list, absent until
