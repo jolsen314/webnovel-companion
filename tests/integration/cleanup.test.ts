@@ -106,6 +106,19 @@ describe('resetChapters (real DB)', () => {
     expect(await db.chapter.count({ where: { seriesId } })).toBe(0);
     expect(await db.series.findUnique({ where: { id: seriesId } })).not.toBeNull();
   });
+
+  test('is a no-op for a series that is not the current user’s', async () => {
+    const otherSeries = await db.series.create({ data: { userId: 'someone-else', title: 'Other' } });
+    const otherChapter = await db.chapter.create({
+      data: { seriesId: otherSeries.id, title: 'Foreign', url: 'https://other.example/c1' },
+    });
+
+    const result = await resetChapters(otherSeries.id);
+    expect(result).toEqual({ deleted: 0 });
+
+    expect(await db.chapter.findUnique({ where: { id: otherChapter.id } })).not.toBeNull();
+    expect(await db.chapter.count({ where: { seriesId: otherSeries.id } })).toBe(1);
+  });
 });
 
 describe('setSourceUrl (real DB)', () => {
@@ -201,6 +214,15 @@ describe('mergeSeries (real DB)', () => {
 
     await expect(mergeSeries(otherSeries.id, intoId)).rejects.toBeTruthy();
     expect(await db.series.findUnique({ where: { id: otherSeries.id } })).not.toBeNull();
+  });
+
+  test('rejects a self-merge instead of silently deleting the series', async () => {
+    const seriesId = await addAlpha();
+
+    await expect(mergeSeries(seriesId, seriesId)).rejects.toThrow();
+
+    expect(await db.series.findUnique({ where: { id: seriesId } })).not.toBeNull();
+    expect(await db.chapter.count({ where: { seriesId } })).toBe(2);
   });
 });
 

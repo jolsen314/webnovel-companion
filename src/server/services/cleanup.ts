@@ -52,6 +52,7 @@ export async function setSourceUrl(sourceId: string, url: string): Promise<{ upd
  * null rather than pointing at a row that no longer exists.
  */
 export async function mergeSeries(fromId: string, intoId: string): Promise<{ movedChapters: number; deleted: boolean }> {
+  if (fromId === intoId) throw new Error('mergeSeries: cannot merge a series into itself');
   const userId = getCurrentUserId();
   const [from, into] = await Promise.all([
     db.series.findFirst({ where: { id: fromId, userId }, select: { id: true } }),
