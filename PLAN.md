@@ -108,6 +108,7 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-32 | Split/paginated TOCs across sibling pages — page-watch follows "next chapters" navigation (bounded hops) + stops pagination anchors polluting `parseToc` | M1↑ | `TODO` | WP-17 |
 | WP-33 | Full-TOC backfill (feed series seed whole history at add + on-demand action) + silent `accessReconciled` diff dimension (`UNKNOWN`→`FREE`/`LOCKED`) — [design](docs/superpowers/specs/2026-07-26-feed-toc-transition-design.md) | M1 | `DONE` | WP-07, WP-17, WP-20 |
 | WP-34 | Feed→TOC switch to lock-monitoring — add-time lock detect (prefer PAGE_WATCH) + per-series "Track unlocks" switch + transition identity reconcile — **mechanism buildable; end-to-end "now free" CF-gated** | M1↑ | `TODO` | WP-33, WP-19 |
+| WP-35 | TOC-order chapters (`Chapter.position` from TOC DOM order, direction-normalized) + detail-page display toggle (oldest/newest/unread-first, canonical read-state) — [design](docs/superpowers/specs/2026-07-27-wp35-toc-order-display-design.md) | M1 | `TODO` | WP-17, WP-33, WP-10 |
 | WP-RC | Dense-feed miss-detection + TOC reconcile fallback | M1 | `TODO` | WP-05, WP-07, WP-17 |
 | WP-21 | Plan-to-read completion watch (wire WP-13 + notify) — compare **max chapter number** vs target, not post count (split-chapter safe; see CONTEXT.md) | M1 | `TODO` | WP-13, WP-07 |
 | WP-27 | Reading-status lifecycle for poll + store — status-gated polling (skip COMPLETED/DROPPED), PLANNED seeds a **summary** not the full TOC (backfill on →READING), per-status notify rules | M1 | `TODO` | WP-07, WP-17, WP-18 |
@@ -458,6 +459,24 @@ Full design + rationale: [feed-toc-transition-design](docs/superpowers/specs/202
   "now free on a switched feed series" is dormant** until a *non-CF* locked+feed site appears or the CF-unblock story
   lands (those sites stay WP-29 manual-schedule territory meanwhile).
 
+### WP-35 — TOC-order chapters + display toggle
+
+Full design: [wp35-toc-order-display-design](docs/superpowers/specs/2026-07-27-wp35-toc-order-display-design.md)
+(owner-approved 2026-07-27). Follow the **site's own TOC order** instead of inferring reading order from chapter
+numbers/titles (WP-33's `orderChaptersForReading`), and make the on-screen direction a user choice.
+
+- **Part A (backend):** additive migration `Chapter.position Int?`; assign from `parseToc`'s DOM order on every TOC
+  read (backfill / at-add seed / page-watch poll — **re-index each full read** so site re-sorts self-heal).
+  **Direction-normalize** to reading order (oldest = 0) using the chapter-number *trend* as one global bit (skip
+  positioning if the signal's too weak → comparator fallback). Feed-discovered chapters append at `max+1`.
+  `getSeries`/`listSeries` order by `position` when positioned, else `orderChaptersForReading` (**kept as fallback**).
+- **Part B (frontend):** **read-state anchored to canonical position**, not array index (retires the fragile
+  `i <= lastReadIdx`); the reading-progress **high-water-mark pointer model is unchanged** (mark N read → all ≤ N in
+  canonical order read; earlier chapter rewinds the boundary). **Three display modes** — oldest→newest (default),
+  newest→oldest, unread-first (`[unread asc]++[read asc]`) — as a segmented control in `detail__controls`. Preference
+  is **global, localStorage, per-device** (default oldest-first → no SSR flash).
+- **Migration** (unlike WP-33). Interacts with WP-32 (split TOC → position spans unioned pages).
+
 ## Backlog / open questions
 
 - **Notification privacy** *(implemented 2026-07-26)* — the work's name is kept out of the always-visible notification
@@ -484,6 +503,14 @@ Full design + rationale: [feed-toc-transition-design](docs/superpowers/specs/202
 
 ## Changelog
 
+- **2026-07-27** — **Designed WP-35 (TOC-order chapters + display toggle).** Follow-up to WP-33's number-based
+  `orderChaptersForReading`: instead of inferring reading order from numbers/titles (prologue/Extra/Side edge cases),
+  follow the **site's own TOC order** — persist `Chapter.position` from `parseToc`'s DOM order (direction-normalized via
+  the number trend; skip if ambiguous), re-indexed on each full TOC read, with the WP-33 comparator kept as the
+  pure-feed **fallback**. Plus a detail-page **display toggle** (oldest / newest / unread-first) with read-state
+  **anchored to canonical position** (retires the array-index logic; pointer model unchanged), preference global in
+  localStorage. One additive migration. Design:
+  `docs/superpowers/specs/2026-07-27-wp35-toc-order-display-design.md`.
 - **2026-07-27** — **WP-33 DONE: full-TOC backfill + silent access-reconcile.** Feed series now recover their whole
   history from the TOC and learn access on feed-originated chapters. New pure `accessReconciled` diff dimension
   (already-seen chapter, stored `UNKNOWN` → TOC `FREE`/`LOCKED`) — silent (access updated by stored id, **no
