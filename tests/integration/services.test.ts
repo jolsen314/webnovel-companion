@@ -235,6 +235,7 @@ describe('notifyForEffects (real DB)', () => {
     succeeded: true,
     notModified: false,
     newChapters: [],
+    becameFree: [],
     etag: null,
     lastModified: null,
     crossedDown: false,

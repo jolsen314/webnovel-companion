@@ -199,4 +199,20 @@ describe('pollSource', () => {
 
     expect(effects.newChapters.map((c) => c.guid)).toEqual(['g2']);
   });
+
+  test('PAGE_WATCH: a stored LOCKED chapter now FREE in the TOC is reported in becameFree', async () => {
+    const tocHtml = `<ul>
+      <li><a href="https://x.example/novel/a/chapter-1/">Chapter 1</a></li>
+      <li><a href="https://x.example/novel/a/chapter-2/">Chapter 2</a></li>
+    </ul>`;
+    const p = ports(ok(tocHtml), [{ url: 'https://x.example/novel/a/chapter-2/', access: 'LOCKED' }]);
+
+    const effects = await pollSource(
+      source({ type: 'PAGE_WATCH', fetchUrl: 'https://x.example/novel/a/', match: { type: 'WHOLE_FEED' } }),
+      p,
+    );
+
+    expect(effects.newChapters.map((c) => c.url)).toEqual(['https://x.example/novel/a/chapter-1/']);
+    expect(effects.becameFree.map((c) => c.url)).toEqual(['https://x.example/novel/a/chapter-2/']);
+  });
 });

@@ -40,6 +40,8 @@ export interface PollEffects {
   succeeded: boolean;
   notModified: boolean;
   newChapters: FeedItem[];
+  /** Already-seen chapters that flipped LOCKED→FREE this poll (the "now free" event). */
+  becameFree: FeedItem[];
   etag: string | null;
   lastModified: string | null;
   /** Health transitioned INTO LIKELY_DOWN on this poll → fire a "source may be down" alert. */
@@ -75,6 +77,7 @@ export async function pollSource(src: PollableSource, ports: PollPorts): Promise
   const health = step(toHealthState(src), res.outcome);
 
   let newChapters: FeedItem[] = [];
+  let becameFree: FeedItem[] = [];
   let notModified = false;
   let escalateToRender = false;
   let etag = src.etag;
@@ -101,7 +104,9 @@ export async function pollSource(src: PollableSource, ports: PollPorts): Promise
         mine = filterBySeriesMatch(parsed.items, src.match);
       }
       const stored = await ports.loadStoredChapters(src.seriesId);
-      newChapters = diffChapters(stored, mine).new;
+      const diff = diffChapters(stored, mine);
+      newChapters = diff.new;
+      becameFree = diff.becameFree;
     }
   }
 
@@ -112,6 +117,7 @@ export async function pollSource(src: PollableSource, ports: PollPorts): Promise
     succeeded: res.outcome === 'SUCCESS',
     notModified,
     newChapters,
+    becameFree,
     etag,
     lastModified,
     crossedDown: src.health !== 'LIKELY_DOWN' && health.health === 'LIKELY_DOWN',
