@@ -101,6 +101,7 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-18 | Completed shelf + backfill + "Move to Completed?" | M1 | `TODO` | WP-10 |
 | WP-28 | Frontend styling & theming — ordering, feed-page vs library split, theme system (night default + cultivation ancient-scroll, sci-fi holographic-panel) | M1 | `TODO` | WP-10 |
 | WP-19 | Non-destructive re-pointing + "find new source" helper | M1 | `TODO` | WP-16, WP-18 |
+| WP-30 | Series title backfill from TOC (fix acronym/URL-derived titles) + manual title edit | M1 | `TODO` | WP-17, WP-10 |
 | WP-RC | Dense-feed miss-detection + TOC reconcile fallback | M1 | `TODO` | WP-05, WP-07, WP-17 |
 | WP-21 | Plan-to-read completion watch (wire WP-13 + notify) — compare **max chapter number** vs target, not post count (split-chapter safe; see CONTEXT.md) | M1 | `TODO` | WP-13, WP-07 |
 | WP-27 | Reading-status lifecycle for poll + store — status-gated polling (skip COMPLETED/DROPPED), PLANNED seeds a **summary** not the full TOC (backfill on →READING), per-status notify rules | M1 | `TODO` | WP-07, WP-17, WP-18 |
@@ -358,6 +359,22 @@ system** beyond the current "night reading" identity — pluggable themes such a
 *sci-fi holographic-panel*, selectable by the user. Uses `frontend-design` (primary) + `ai-toolkit:design-workflow`
 for tokens; gets its own brainstorm → spec when prioritized. Depends on WP-10 (done).
 
+### WP-30 — Series title backfill from TOC + manual title edit
+
+**Motivation (owner, 2026-07-26):** a series shows its title as an **acronym** (from the multi-novel add-time
+fallback, which derives the title from the URL slug — see "Add-time isolation fallback"), not the human title.
+
+- **Primary — auto-backfill from the page-watch TOC.** When a series is (or reverts to) the **page-watch** path, the
+  TOC page carries the real series title (page `<h1>` / `og:title` / `<title>`), which `parseToc` doesn't extract
+  today. Add a `parseTocTitle(html)` (or extend `parseToc` to return `{ title, chapters }`) and have the page-watch
+  poll/backfill update a **URL-derived/placeholder** stored title to the real one — **only overwrite an auto-derived
+  title**, never a user-edited one (needs a flag distinguishing auto vs. manual titles so we don't clobber a manual
+  fix). Feasible: `pageWatch.ts` already loads the TOC with cheerio.
+- **Fallback — manual title edit on the client.** If auto-backfill can't get a clean title (JS-rendered/CF TOC with no
+  usable heading), let the user edit the series title in the detail UI (WP-10) and persist it (PATCH `/api/series/[id]`
+  — extend `parseSeriesUpdate` to accept `title`). A manual edit sets the "user-edited" flag so auto-backfill leaves it
+  alone. Ship this half even if auto-backfill lands — it's the escape hatch.
+
 ## Backlog / open questions
 
 - **Notification privacy** *(implemented 2026-07-26)* — the work's name is kept out of the always-visible notification
@@ -384,6 +401,10 @@ for tokens; gets its own brainstorm → spec when prioritized. Depends on WP-10 
 
 ## Changelog
 
+- **2026-07-26** — **Added WP-30 (title backfill + manual edit); starting WP-20.** Owner hit an acronym/URL-derived
+  title (from the multi-novel add-time fallback). New **WP-30**: auto-backfill the real series title from the
+  page-watch TOC (`parseToc` gains a title extract; only overwrite auto-derived titles, flag manual edits), with a
+  **manual title edit** in the detail UI as the fallback/escape hatch. Then picked up **WP-20** (paid→free frontier).
 - **2026-07-26** — **WP-17b DONE: renderer live-validated on Vercel.** Fixed the deploy (`outputFileTracingIncludes`
   ships the `@sparticuz/chromium` `bin/**` binary, which the file-tracer otherwise prunes → the "bin does not exist"
   runtime error). Direct `/api/render` curls against the two hard JS categories: the **Next.js tab site** rendered a
