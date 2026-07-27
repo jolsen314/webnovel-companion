@@ -100,3 +100,45 @@ describe('buildPushMessages', () => {
     expect(msgs.map((m) => m.tag)).toEqual(['new-s1', 'sched-s2', 'down-s3']);
   });
 });
+
+describe('buildPushMessages — now free (WP-20)', () => {
+  test('a single unlock: "Now free" title, work name only in the body', () => {
+    const msgs = buildPushMessages(base({ nowFree: [{ seriesId: 's1', count: 1 }] }));
+    expect(msgs).toEqual([
+      { title: 'Now free', body: 'Silver Moon Saga', url: '/series/s1', tag: 'free-s1' },
+    ]);
+  });
+
+  test('multiple unlocks digest the count in the body', () => {
+    const msgs = buildPushMessages(base({ nowFree: [{ seriesId: 's2', count: 3 }] }));
+    expect(msgs[0]!.body).toBe('Cannon Fodder — 3 now free');
+  });
+
+  test('a zero/negative count produces no now-free message', () => {
+    expect(buildPushMessages(base({ nowFree: [{ seriesId: 's1', count: 0 }] }))).toEqual([]);
+  });
+
+  test('now-free rides the newChapters toggle — off suppresses it', () => {
+    const msgs = buildPushMessages(
+      base({ nowFree: [{ seriesId: 's1', count: 1 }], push: { newChapters: false, scheduledReleases: true, sourcesDown: true } }),
+    );
+    expect(msgs).toEqual([]);
+  });
+
+  test('privacy: the work title never appears in a now-free title', () => {
+    const msgs = buildPushMessages(base({ nowFree: [{ seriesId: 's1', count: 2 }] }));
+    for (const m of msgs) expect(m.title).not.toContain('Silver Moon Saga');
+  });
+
+  test('category order: new chapters → now free → scheduled → down', () => {
+    const msgs = buildPushMessages(
+      base({
+        sourcesDown: [{ seriesId: 's3', host: 'reader.example' }],
+        scheduledReleases: [{ seriesId: 's2', eventKind: 'UNLOCKED' }],
+        nowFree: [{ seriesId: 's2', count: 1 }],
+        newChapters: [{ seriesId: 's1', count: 2 }],
+      }),
+    );
+    expect(msgs.map((m) => m.tag)).toEqual(['new-s1', 'free-s2', 'sched-s2', 'down-s3']);
+  });
+});

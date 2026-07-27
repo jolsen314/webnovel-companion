@@ -41,6 +41,8 @@ export interface NotifyInput {
   /** Resolve a series id to its display title (binding preloads these). */
   seriesTitle: (seriesId: string) => string;
   newChapters: { seriesId: string; count: number }[];
+  /** Chapters that just became free (WP-20). Rides the newChapters push toggle. */
+  nowFree?: { seriesId: string; count: number }[];
   scheduledReleases: { seriesId: string; eventKind: ReleaseEventKind }[];
   sourcesDown: { seriesId: string; host: string }[];
   /** Which categories to actually push. Omitted → all enabled. */
@@ -62,6 +64,18 @@ export function buildPushMessages(input: NotifyInput): PushMessage[] {
       body: count === 1 ? seriesTitle(seriesId) : `${seriesTitle(seriesId)} — ${count} new`,
       url: `/series/${seriesId}`,
       tag: `new-${seriesId}`,
+    });
+  }
+
+  // "Now free": a confirmed locked→free unlock (distinct from the predicted scheduled UNLOCKED).
+  // Rides the newChapters toggle — it's new readable content. Series name stays in the body only.
+  for (const { seriesId, count } of push.newChapters ? (input.nowFree ?? []) : []) {
+    if (count <= 0) continue;
+    messages.push({
+      title: 'Now free',
+      body: count === 1 ? seriesTitle(seriesId) : `${seriesTitle(seriesId)} — ${count} now free`,
+      url: `/series/${seriesId}`,
+      tag: `free-${seriesId}`,
     });
   }
 
