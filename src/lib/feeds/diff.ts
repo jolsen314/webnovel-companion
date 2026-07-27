@@ -25,14 +25,17 @@ export interface FeedItem {
 export interface KnownChapter {
   guid?: string;
   url: string;
+  /** Stored access state (page-watch sources). Undefined for feed sources that never tracked locks. */
+  access?: 'FREE' | 'LOCKED';
 }
 
 export interface DiffResult {
   /** Chapters present in the fetch but not yet stored, in fetched order. */
   new: FeedItem[];
+  /** Already-seen chapters whose stored access was LOCKED and is now FREE (the "now free" event). */
+  becameFree: FeedItem[];
   // Extension point: keep this an object so future diff dimensions attach as new
-  // fields without breaking callers — e.g. `becameFree` (locked→free transitions
-  // on already-seen chapters) and `disappeared` (for source-health / removal).
+  // fields without breaking callers — e.g. `disappeared` (for source-health / removal).
 }
 
 /** Query keys that never identify a chapter — analytics/referral noise. */
@@ -74,6 +77,10 @@ export function diffChapters(stored: KnownChapter[], fetched: FeedItem[]): DiffR
   // for one series — either recorded key still recognizes the chapter.
   const seenGuids = new Set<string>();
   const seenUrls = new Set<string>();
+  // Stored access, so we can spot a LOCKED→FREE unlock on an already-seen chapter.
+  const storedAccessByGuid = new Map<string, 'FREE' | 'LOCKED'>();
+  const storedAccessByUrl = new Map<string, 'FREE' | 'LOCKED'>();
+
   const remember = (c: KnownChapter | FeedItem): void => {
     if (c.guid !== undefined) seenGuids.add(c.guid);
     seenUrls.add(canonicalUrl(c.url));
@@ -81,13 +88,33 @@ export function diffChapters(stored: KnownChapter[], fetched: FeedItem[]): DiffR
   const isSeen = (c: FeedItem): boolean =>
     (c.guid !== undefined && seenGuids.has(c.guid)) || seenUrls.has(canonicalUrl(c.url));
 
-  for (const c of stored) remember(c);
+  for (const c of stored) {
+    remember(c);
+    if (c.access !== undefined) {
+      if (c.guid !== undefined) storedAccessByGuid.set(c.guid, c.access);
+      storedAccessByUrl.set(canonicalUrl(c.url), c.access);
+    }
+  }
+
+  const storedAccessOf = (c: FeedItem): 'FREE' | 'LOCKED' | undefined => {
+    if (c.guid !== undefined && storedAccessByGuid.has(c.guid)) return storedAccessByGuid.get(c.guid);
+    return storedAccessByUrl.get(canonicalUrl(c.url));
+  };
 
   const fresh: FeedItem[] = [];
+  const becameFree: FeedItem[] = [];
+  const unlockedUrls = new Set<string>(); // guard against a duplicated fetched row double-counting
   for (const item of fetched) {
-    if (isSeen(item)) continue; // already stored, or a duplicate earlier in this batch
+    if (isSeen(item)) {
+      const key = canonicalUrl(item.url);
+      if (item.access === 'FREE' && storedAccessOf(item) === 'LOCKED' && !unlockedUrls.has(key)) {
+        unlockedUrls.add(key);
+        becameFree.push(item);
+      }
+      continue; // already stored, or a duplicate earlier in this batch
+    }
     remember(item);
     fresh.push(item);
   }
-  return { new: fresh };
+  return { new: fresh, becameFree };
 }

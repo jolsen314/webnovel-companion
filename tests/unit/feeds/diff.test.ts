@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { diffChapters, type FeedItem } from '../../../src/lib/feeds/diff';
+import { diffChapters, type FeedItem, type KnownChapter } from '../../../src/lib/feeds/diff';
 
 // Small helper so tests read as intent, not boilerplate.
 function item(partial: Partial<FeedItem> & { url: string }): FeedItem {
@@ -146,5 +146,53 @@ describe('diffChapters', () => {
     const b = item({ url: 'https://site/ch/12-part-2', title: 'Chapter 12 (Part 2)' });
 
     expect(diffChapters([], [a, b]).new).toEqual([a, b]);
+  });
+});
+
+describe('diffChapters — becameFree (locked→free unlocks)', () => {
+  const stored = (url: string, access?: 'FREE' | 'LOCKED', guid?: string): KnownChapter => ({ url, access, guid });
+  const fetchedItem = (url: string, access?: 'FREE' | 'LOCKED', guid?: string): FeedItem => ({ url, title: url, access, guid });
+
+  test('a stored LOCKED chapter now FREE is reported in becameFree (not new)', () => {
+    const r = diffChapters([stored('https://x/ch-2', 'LOCKED')], [fetchedItem('https://x/ch-2', 'FREE')]);
+    expect(r.new).toEqual([]);
+    expect(r.becameFree.map((c) => c.url)).toEqual(['https://x/ch-2']);
+  });
+
+  test('unchanged access produces no becameFree (FREE→FREE, LOCKED→LOCKED)', () => {
+    const r = diffChapters(
+      [stored('https://x/a', 'FREE'), stored('https://x/b', 'LOCKED')],
+      [fetchedItem('https://x/a', 'FREE'), fetchedItem('https://x/b', 'LOCKED')],
+    );
+    expect(r.becameFree).toEqual([]);
+  });
+
+  test('UNKNOWN (feed) stored access never counts as an unlock', () => {
+    const r = diffChapters([stored('https://x/a', undefined)], [fetchedItem('https://x/a', 'FREE')]);
+    expect(r.becameFree).toEqual([]);
+  });
+
+  test('a re-lock (stored FREE, fetched LOCKED) is ignored', () => {
+    const r = diffChapters([stored('https://x/a', 'FREE')], [fetchedItem('https://x/a', 'LOCKED')]);
+    expect(r.becameFree).toEqual([]);
+  });
+
+  test('a brand-new locked chapter lands in new, not becameFree', () => {
+    const r = diffChapters([], [fetchedItem('https://x/a', 'LOCKED')]);
+    expect(r.new.map((c) => c.url)).toEqual(['https://x/a']);
+    expect(r.becameFree).toEqual([]);
+  });
+
+  test('stored access resolves by guid when the url differs', () => {
+    const r = diffChapters(
+      [stored('https://x/old', 'LOCKED', 'g1')],
+      [fetchedItem('https://x/new', 'FREE', 'g1')],
+    );
+    expect(r.becameFree.map((c) => c.guid)).toEqual(['g1']);
+  });
+
+  test('idempotent: once stored FREE, re-diff yields no becameFree', () => {
+    const r = diffChapters([stored('https://x/a', 'FREE')], [fetchedItem('https://x/a', 'FREE')]);
+    expect(r.becameFree).toEqual([]);
   });
 });
