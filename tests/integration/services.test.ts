@@ -192,6 +192,18 @@ describe('page-watch source (real DB)', () => {
     const again = await pollAllSources(fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1) + ROW(W2))) }));
     expect(again[0]!.becameFree).toEqual([]);
   });
+
+  test('WP-33: a page-watch poll reconciles a stored UNKNOWN chapter to LOCKED, silently', async () => {
+    const { seriesId } = await addSeries({ url: WATCH_URL }, fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1))) }));
+    // Force the seeded chapter to UNKNOWN (simulate a feed-originated row).
+    await db.chapter.updateMany({ where: { seriesId }, data: { access: 'UNKNOWN' } });
+
+    await pollAllSources(fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1, true))) })); // now marked locked
+
+    const w1 = await db.chapter.findFirstOrThrow({ where: { seriesId, url: W1 } });
+    expect(w1.access).toBe('LOCKED');
+    expect(w1.becameFreeAt).toBeNull(); // reconcile is silent — not an unlock
+  });
 });
 
 describe('updateSeries (real DB)', () => {
@@ -254,6 +266,7 @@ describe('notifyForEffects (real DB)', () => {
     notModified: false,
     newChapters: [],
     becameFree: [],
+    accessReconciled: [],
     etag: null,
     lastModified: null,
     crossedDown: false,

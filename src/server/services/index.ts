@@ -142,6 +142,11 @@ function pollPorts(
               ]
             : [],
         ),
+        ...e.accessReconciled.flatMap((c) =>
+          c.id
+            ? [db.chapter.updateMany({ where: { id: c.id }, data: { access: c.access ?? 'UNKNOWN' } })]
+            : [],
+        ),
       ]);
     },
   };

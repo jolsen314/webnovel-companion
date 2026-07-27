@@ -224,4 +224,15 @@ describe('pollSource', () => {
     expect(effects.newChapters.map((c) => c.url)).toEqual(['https://x.example/novel/a/chapter-1/']);
     expect(effects.becameFree.map((c) => c.url)).toEqual(['https://x.example/novel/a/chapter-2/']);
   });
+
+  test('PAGE_WATCH: a stored UNKNOWN chapter the TOC marks LOCKED surfaces in accessReconciled', async () => {
+    const tocHtml = `<ul><li class="premium"><a href="https://x.example/novel/a/chapter-1/">Chapter 1</a></li></ul>`;
+    const p = ports(ok(tocHtml), [{ url: 'https://x.example/novel/a/chapter-1/', access: undefined }]);
+    const effects = await pollSource(
+      source({ type: 'PAGE_WATCH', fetchUrl: 'https://x.example/novel/a/', match: { type: 'WHOLE_FEED' } }),
+      p,
+    );
+    expect(effects.newChapters).toEqual([]);
+    expect(effects.accessReconciled.map((c) => c.url)).toEqual(['https://x.example/novel/a/chapter-1/']);
+  });
 });

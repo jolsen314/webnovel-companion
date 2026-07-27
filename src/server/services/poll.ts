@@ -42,6 +42,8 @@ export interface PollEffects {
   newChapters: FeedItem[];
   /** Already-seen chapters that flipped LOCKED→FREE this poll (the "now free" event). */
   becameFree: KnownChapter[];
+  /** Already-seen chapters whose access was learned (UNKNOWN→FREE/LOCKED) from a TOC read. Silent. */
+  accessReconciled: KnownChapter[];
   etag: string | null;
   lastModified: string | null;
   /** Health transitioned INTO LIKELY_DOWN on this poll → fire a "source may be down" alert. */
@@ -78,6 +80,7 @@ export async function pollSource(src: PollableSource, ports: PollPorts): Promise
 
   let newChapters: FeedItem[] = [];
   let becameFree: KnownChapter[] = [];
+  let accessReconciled: KnownChapter[] = [];
   let notModified = false;
   let escalateToRender = false;
   let etag = src.etag;
@@ -107,6 +110,7 @@ export async function pollSource(src: PollableSource, ports: PollPorts): Promise
       const diff = diffChapters(stored, mine);
       newChapters = diff.new;
       becameFree = diff.becameFree;
+      accessReconciled = diff.accessReconciled;
     }
   }
 
@@ -118,6 +122,7 @@ export async function pollSource(src: PollableSource, ports: PollPorts): Promise
     notModified,
     newChapters,
     becameFree,
+    accessReconciled,
     etag,
     lastModified,
     crossedDown: src.health !== 'LIKELY_DOWN' && health.health === 'LIKELY_DOWN',
