@@ -111,7 +111,8 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-35 | TOC-order chapters (`Chapter.position` from TOC DOM order, direction-normalized) + detail-page display toggle (oldest/newest/unread-first, canonical read-state) — [design](docs/superpowers/specs/2026-07-27-wp35-toc-order-display-design.md) | M1 | `TODO` | WP-17, WP-33, WP-10 |
 | ⭐ WP-36 | `parseToc` series scoping — restrict to main content (drop sidebar/"recent entries" widgets, nav/footer) + optional slug-family filter, so backfill/page-watch stop ingesting **cross-series phantom chapters**. **Data-correctness fix** | M1 | `TODO` | WP-17 |
 | WP-37 | Per-series chapter-TOC URL (landing page ≠ chapter TOC) — resolve/store a dedicated TOC URL distinct from the reading `url`; discovery follows an on-page "table of contents" link or the user sets it | M1 | `TODO` | WP-17, WP-33 |
-| WP-38 | Recover contaminated series — prune phantom/cross-series chapters, reset+re-seed, re-point to the correct TOC + clean re-backfill (owner has bad production listings from the WP-33 button) | M1 | `TODO` | WP-36, WP-37 |
+| WP-38 | Recover contaminated series (maintenance script) — prune phantom/cross-series chapters, **merge/delete duplicate series**, reset+re-seed, correct the source TOC URL + clean re-backfill (owner has bad production listings + a dup from the WP-33 button) | M1 | `TODO` | WP-36 |
+| WP-39 | Prevent duplicate series on add — wire `canonicalId` (normalized-URL/NU-id) dedup into `addSeries` so the same series can't be added twice (home URL vs TOC URL → one series); consumes WP-14's pure dedup | M1 | `TODO` | WP-07, WP-14 |
 | WP-RC | Dense-feed miss-detection + TOC reconcile fallback | M1 | `TODO` | WP-05, WP-07, WP-17 |
 | WP-21 | Plan-to-read completion watch (wire WP-13 + notify) — compare **max chapter number** vs target, not post count (split-chapter safe; see CONTEXT.md) | M1 | `TODO` | WP-13, WP-07 |
 | WP-27 | Reading-status lifecycle for poll + store — status-gated polling (skip COMPLETED/DROPPED), PLANNED seeds a **summary** not the full TOC (backfill on →READING), per-status notify rules | M1 | `TODO` | WP-07, WP-17, WP-18 |
@@ -506,12 +507,27 @@ page is not the chapter list:
   the series); backfill-via-TOC has no equivalent scoping — this is its own gap. **WP-36 is the higher-priority fix**
   (data correctness; also helps any multi-widget site independently of WP-37).
 
-- **Cleanup (WP-38).** The owner has **bad production listings** already (phantom cross-series chapters merged into
-  real series). Need: (a) **prune** wrong chapters — identify phantoms (URL outside the series' slug family / not
-  matching) and delete them; (b) optional **reset** a series' chapters and re-seed; (c) **re-point** the source to the
-  correct TOC URL (WP-37) and **clean re-backfill** (after WP-36 scoping). Can start as a maintenance script/API and
-  graduate to a small UI. **Near-term** — depends on WP-36 + WP-37 for a clean re-backfill, but the destructive prune
-  can land first.
+- **Cleanup (WP-38) — maintenance script now, UI later.** The owner has **bad production listings** already: phantom
+  cross-series chapters merged into real series, **and a duplicate series** (the same work added twice — once with the
+  home URL, once with the TOC URL). A one-shot script (run locally against the prod DB) that: (a) lists a series'
+  chapters and **prunes** the ones the owner picks (phantoms — URL outside the series' slug family); (b) **merges or
+  deletes a duplicate series** (fold chapters/progress/source from one into the other by canonical-URL union, or just
+  delete the redundant copy); (c) optional **reset** a series' chapters and re-seed; (d) **correct the source's TOC
+  URL** (manual — the WP-37 concern, done by hand here) and **clean re-backfill** (clean once WP-36 lands). Destructive
+  prune/delete can land first; the clean re-backfill wants WP-36. A small detail-page UI (delete-chapter / reset /
+  edit-source-URL) is a **follow-up** once the fixes settle.
+
+### WP-39 — Prevent duplicate series on add
+
+**Motivation (owner, 2026-07-27):** the same work got added twice (home URL and TOC URL → two `Series` rows). Add-time
+dedup **doesn't exist** — the schema *has* a `Series.canonicalId` field ("NovelUpdates id / normalized URL — de-dup
+key") + `@@index([userId, canonicalId])`, but `addSeries`/`createSeries` never set or check it. **Work:** compute a
+`canonicalId` at add (normalized series URL — strip scheme/`www`/trailing slash/tracking, or a NU id when available),
+set it on create, and **check for an existing series with the same `canonicalId`** before inserting — if found, don't
+create a second; surface "already tracking this" (and optionally add the new URL as an alternate source). Consumes
+WP-14's pure `lib/dedup.ts`. Note the URL forms to reconcile: a **landing/home URL vs a chapter-TOC URL** for the same
+series are *different* URLs — canonicalization alone won't unify them, so dedup also needs a title/known-source match
+or the WP-37 TOC-URL resolution to map both to one identity. (WP-38 cleans up the dup that already exists.)
 
 ## Backlog / open questions
 
@@ -546,7 +562,10 @@ page is not the chapter list:
   other series' chapters (needs main-content restriction + slug-family scoping; supports multi-family Part 1/Part 2
   TOCs). **WP-38** — recover the owner's already-contaminated production listings (prune phantoms, reset+re-seed,
   re-point + clean re-backfill). Added a caution against broad use of the backfill button until WP-36/37. WP-36 is
-  the higher-priority data-correctness fix. (Real-site detail in the gitignored `TESTING-NOTES.local.md`.)
+  the higher-priority data-correctness fix. Also surfaced: a **duplicate series** (same work added via home URL and
+  TOC URL) → folded merge/delete-dup into WP-38's script, and added **WP-39** (add-time dedup via the unused
+  `canonicalId` field). **Owner chose to do WP-36 + WP-38 before WP-35.** (Real-site detail in the gitignored
+  `TESTING-NOTES.local.md`.)
 - **2026-07-27** — **Designed WP-35 (TOC-order chapters + display toggle).** Follow-up to WP-33's number-based
   `orderChaptersForReading`: instead of inferring reading order from numbers/titles (prologue/Extra/Side edge cases),
   follow the **site's own TOC order** — persist `Chapter.position` from `parseToc`'s DOM order (direction-normalized via
