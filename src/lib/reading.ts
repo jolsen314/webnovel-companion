@@ -11,6 +11,21 @@ export function unreadCount(orderedChapterIds: string[], lastReadChapterId: stri
   return orderedChapterIds.length - index - 1;
 }
 
+export type ChapterDisplayMode = 'oldest' | 'newest' | 'unread';
+
+/** Compute read-state by canonical position (the pointer's index), then reorder for display. Pure. */
+export function arrangeChapters<T extends { id: string }>(
+  canonical: readonly T[],
+  lastReadId: string | null,
+  mode: ChapterDisplayMode,
+): (T & { read: boolean })[] {
+  const lastIdx = lastReadId ? canonical.findIndex((c) => c.id === lastReadId) : -1;
+  const flagged = canonical.map((c, i) => ({ ...c, read: lastIdx >= 0 && i <= lastIdx }));
+  if (mode === 'newest') return [...flagged].reverse();
+  if (mode === 'unread') return [...flagged.filter((c) => !c.read), ...flagged.filter((c) => c.read)];
+  return flagged;
+}
+
 /** Title markers for side-stories / extra content, which sort to the END (word-boundary to avoid
  *  false positives like "extraordinary" / "beside"). */
 const EXTRA_SIDE = /\bextras?\b|\bside\b/i;

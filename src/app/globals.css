@@ -286,6 +286,29 @@ body {
   font-size: 0.68rem;
   color: var(--color-muted);
 }
+.segmented {
+  display: flex;
+  gap: 0.3rem;
+}
+.segmented__option {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--color-muted);
+  background: var(--color-ink);
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+}
+.segmented__option:hover {
+  border-color: var(--color-glow);
+  color: var(--color-glow);
+}
+.segmented__option[aria-pressed='true'] {
+  background: var(--color-glow);
+  border-color: var(--color-glow);
+  color: var(--color-ink);
+}
 .stars {
   display: flex;
   gap: 0.15rem;

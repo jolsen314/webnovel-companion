@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { unreadCount, orderChaptersForReading } from '../../src/lib/reading';
+import { unreadCount, orderChaptersForReading, arrangeChapters } from '../../src/lib/reading';
 
 describe('unreadCount', () => {
   const chapters = ['a', 'b', 'c', 'd'];
@@ -97,5 +97,28 @@ describe('orderChaptersForReading — position-aware (WP-35)', () => {
   test('all-null (pure-feed) falls back to the existing comparator behavior', () => {
     const out = orderChaptersForReading([ch({ id: '2', number: 2 }), ch({ id: '1', number: 1 })]);
     expect(out.map((c) => c.id)).toEqual(['1', '2']);
+  });
+});
+
+describe('arrangeChapters', () => {
+  const cs = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }]; // canonical oldest→newest
+  test('oldest: identity order, read = up to and including the pointer', () => {
+    const out = arrangeChapters(cs, 'b', 'oldest');
+    expect(out.map((c) => c.id)).toEqual(['a', 'b', 'c', 'd']);
+    expect(out.map((c) => c.read)).toEqual([true, true, false, false]);
+  });
+  test('newest: reversed, read flags follow the same chapters', () => {
+    const out = arrangeChapters(cs, 'b', 'newest');
+    expect(out.map((c) => c.id)).toEqual(['d', 'c', 'b', 'a']);
+    expect(out.find((c) => c.id === 'a')!.read).toBe(true);
+    expect(out.find((c) => c.id === 'c')!.read).toBe(false);
+  });
+  test('unread: [unread asc] then [read asc]', () => {
+    const out = arrangeChapters(cs, 'b', 'unread');
+    expect(out.map((c) => c.id)).toEqual(['c', 'd', 'a', 'b']);
+  });
+  test('no/stale pointer → everything unread', () => {
+    expect(arrangeChapters(cs, null, 'oldest').every((c) => !c.read)).toBe(true);
+    expect(arrangeChapters(cs, 'zzz', 'oldest').every((c) => !c.read)).toBe(true);
   });
 });

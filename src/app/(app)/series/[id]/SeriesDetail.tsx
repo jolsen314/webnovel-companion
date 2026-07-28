@@ -1,10 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { arrangeChapters, type ChapterDisplayMode } from '../../../../lib/reading';
 
 const STATUSES = ['READING', 'COMPLETED', 'PAUSED', 'DROPPED', 'PLANNED'] as const;
 type Status = (typeof STATUSES)[number];
+
+const DISPLAY_MODES: { mode: ChapterDisplayMode; label: string }[] = [
+  { mode: 'oldest', label: 'Oldest' },
+  { mode: 'newest', label: 'Newest' },
+  { mode: 'unread', label: 'Unread-first' },
+];
+const DISPLAY_MODE_STORAGE_KEY = 'chapterDisplayMode';
 
 export interface ChapterLite {
   id: string;
@@ -26,6 +34,19 @@ export function SeriesDetail(props: {
   const [lastRead, setLastRead] = useState<string | null>(props.lastReadChapterId);
   const [busy, setBusy] = useState(false);
   const [backfillMessage, setBackfillMessage] = useState<string | null>(null);
+  // Initialized to 'oldest' to match the server render; the stored preference (if any) is
+  // applied in an effect after mount, so there's no hydration mismatch.
+  const [mode, setMode] = useState<ChapterDisplayMode>('oldest');
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem(DISPLAY_MODE_STORAGE_KEY);
+    if (stored === 'oldest' || stored === 'newest' || stored === 'unread') setMode(stored);
+  }, []);
+
+  function chooseMode(next: ChapterDisplayMode) {
+    setMode(next);
+    window.localStorage.setItem(DISPLAY_MODE_STORAGE_KEY, next);
+  }
 
   async function patch(body: Record<string, unknown>) {
     setBusy(true);
@@ -54,7 +75,7 @@ export function SeriesDetail(props: {
     }
   }
 
-  const lastReadIdx = props.chapters.findIndex((c) => c.id === lastRead);
+  const arranged = arrangeChapters(props.chapters, lastRead, mode);
 
   return (
     <>
@@ -110,11 +131,28 @@ export function SeriesDetail(props: {
             </span>
           )}
         </div>
+
+        <div className="control">
+          <span className="control__label">Show</span>
+          <div className="segmented" role="group" aria-label="Chapter display order">
+            {DISPLAY_MODES.map(({ mode: m, label }) => (
+              <button
+                key={m}
+                type="button"
+                className="segmented__option"
+                aria-pressed={mode === m}
+                onClick={() => chooseMode(m)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       <ol className="chapters">
-        {props.chapters.map((c, i) => {
-          const read = lastReadIdx >= 0 && i <= lastReadIdx;
+        {arranged.map((c) => {
+          const read = c.read;
           return (
             <li key={c.id} className={`chapter ${read ? 'chapter--read' : ''}`}>
               {c.number != null && <span className="chapter__num">#{c.number}</span>}
