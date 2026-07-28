@@ -7,7 +7,7 @@ import {
   filterBySeriesMatch,
   type SeriesMatch,
 } from '../../lib/feeds/discover';
-import { parseToc, mergeFeedAndToc } from '../../lib/feeds/pageWatch';
+import { parseToc, mergeFeedAndToc, withReadingPositions } from '../../lib/feeds/pageWatch';
 import type { FeedItem } from '../../lib/feeds/diff';
 import type { PoliteResult } from '../../lib/feeds/fetch';
 
@@ -91,7 +91,8 @@ export async function addSeries(input: AddSeriesInput, ports: AddSeriesPorts): P
     // now but fills in when the series next publishes (WP-RC escalates if it never does).
     const match = positive ?? (usedGuesses ? fallbackSeriesMatch(parsed.items, url) : { type: 'WHOLE_FEED' });
     const feedChapters = filterBySeriesMatch(parsed.items, match);
-    const chapters = pageOk ? mergeFeedAndToc(feedChapters, parseToc(page.body, url)) : feedChapters;
+    const toc = pageOk ? parseToc(page.body, url) : [];
+    const chapters = pageOk ? withReadingPositions(mergeFeedAndToc(feedChapters, toc), toc) : feedChapters;
     const seriesTitle =
       input.title ??
       (positive?.type === 'CATEGORY'
@@ -107,6 +108,7 @@ export async function addSeries(input: AddSeriesInput, ports: AddSeriesPorts): P
   // No feed, but the page loads → page-watch mode. Seed from the TOC so the first
   // poll diffs against a known set instead of re-reporting the whole backlog.
   if (pageOk) {
+    const toc = parseToc(page.body, url);
     const resolved: ResolvedSource = {
       seriesTitle: input.title ?? titleFromUrl(url),
       sourceUrl: url,
@@ -114,7 +116,7 @@ export async function addSeries(input: AddSeriesInput, ports: AddSeriesPorts): P
       feedUrl: null,
       type: 'PAGE_WATCH',
       match: { type: 'WHOLE_FEED' },
-      chapters: parseToc(page.body, url),
+      chapters: withReadingPositions(toc, toc),
     };
     const { seriesId } = await ports.createSeries(resolved);
     return { seriesId, resolved };

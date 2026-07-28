@@ -24,7 +24,7 @@ export async function listSeries() {
       progress: true,
       chapters: {
         orderBy: { discoveredAt: 'asc' },
-        select: { id: true, title: true, url: true, number: true, publishedAt: true, discoveredAt: true },
+        select: { id: true, title: true, url: true, number: true, position: true, publishedAt: true, discoveredAt: true },
       },
       sources: { where: { isActive: true }, take: 1, select: { url: true, host: true, health: true } },
     },

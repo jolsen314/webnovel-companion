@@ -131,6 +131,17 @@ export function mergeFeedAndToc(feedItems: FeedItem[], tocItems: TocChapter[]): 
   return merged;
 }
 
+/** Stamp each chapter's `position` from the TOC's reading order (WP-35). Pure; unchanged (chapters returned
+ *  as-is) when the TOC's numeric signal is too weak to trust a direction (`tocReadingOrder` → null). */
+export function withReadingPositions(
+  chapters: FeedItem[],
+  toc: readonly { url: string; number: number | null }[],
+): FeedItem[] {
+  const order = tocReadingOrder(toc);
+  if (!order) return chapters;
+  return chapters.map((c) => ({ ...c, position: order.get(canonicalUrl(c.url)) ?? null }));
+}
+
 const MIN_NUMBERED = 3;
 const DIRECTION_MAJORITY = 0.7;
 

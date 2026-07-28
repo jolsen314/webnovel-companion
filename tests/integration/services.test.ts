@@ -7,6 +7,7 @@ import {
   getNotificationPrefs,
   updateNotificationPrefs,
   listSeries,
+  getSeries,
   updateSeries,
   savePushSubscription,
   backfillFromToc,
@@ -452,6 +453,69 @@ describe('backfillFromToc (real DB)', () => {
     // null, since that's the field a real unlock stamps to trigger a "Now free" push (WP-20).
     // A set becameFreeAt here would mean this silent backfill created a push-worthy event.
     expect(chapters.find((c) => c.url === B1)!.becameFreeAt).toBeNull();
+  });
+});
+
+describe('WP-35: chapter positions (real DB)', () => {
+  const WATCH = 'https://reader.example/series/omega/';
+  const rows = ['chapter-1', 'chapter-2', 'chapter-3']
+    .map((s) => `<li><a href="${WATCH}${s}/">${s}</a></li>`)
+    .join('');
+
+  test('add seeds chapter positions from the TOC order', async () => {
+    const { seriesId } = await addSeries(
+      { url: WATCH },
+      fetchFrom({ [WATCH]: okRes(`<html><body><ul>${rows}</ul></body></html>`) }),
+    );
+    const chapters = await db.chapter.findMany({ where: { seriesId }, orderBy: { url: 'asc' } });
+    expect(chapters.find((c) => c.url.endsWith('chapter-1/'))!.position).toBe(0);
+    expect(chapters.find((c) => c.url.endsWith('chapter-2/'))!.position).toBe(1);
+    expect(chapters.find((c) => c.url.endsWith('chapter-3/'))!.position).toBe(2);
+  });
+
+  // getSeries/listSeries return chapters in position order (not number/date), for a positioned series.
+  // Build the series with a position order that DIFFERS from number/discovery order to prove position wins:
+  // direct db inserts, chapter "1" at position 2 (last) and chapter "3" at position 0 (first).
+  test('getSeries and listSeries order by position', async () => {
+    const { seriesId } = await addSeries({ url: WATCH }, fetchFrom({ [WATCH]: okRes('<html><body></body></html>') }));
+    const source = await db.source.findFirstOrThrow({ where: { seriesId } });
+    await db.chapter.createMany({
+      data: [
+        { seriesId, sourceId: source.id, title: 'Chapter 1', url: `${WATCH}chapter-1/`, number: 1, position: 2 },
+        { seriesId, sourceId: source.id, title: 'Chapter 2', url: `${WATCH}chapter-2/`, number: 2, position: 1 },
+        { seriesId, sourceId: source.id, title: 'Chapter 3', url: `${WATCH}chapter-3/`, number: 3, position: 0 },
+      ],
+    });
+
+    const series = await getSeries(seriesId);
+    expect(series!.chapters.map((c) => c.url)).toEqual([`${WATCH}chapter-3/`, `${WATCH}chapter-2/`, `${WATCH}chapter-1/`]);
+
+    const list = await listSeries();
+    const entry = list.find((s) => s.id === seriesId)!;
+    expect(entry.latestChapter?.url).toBe(`${WATCH}chapter-1/`); // last in position order = highest position
+  });
+
+  // backfillFromToc re-indexes positions of existing chapters + sets them on the newly-added tail.
+  test('backfill assigns/re-indexes positions from the TOC', async () => {
+    const seriesId = await addAlpha(); // feed series a-1, a-2, positions null
+    const PAGE = 'https://translator.example/novel/alpha/';
+    await db.source.updateMany({ where: { seriesId }, data: { url: PAGE } });
+
+    // Descending TOC (newest-first, well-formed trend) with a-3 added as the oldest, so the resulting
+    // reading-order position differs from insertion/number order and proves the re-index actually ran.
+    const TOC =
+      `<html><body><ul>` +
+      `<li><a href="${C3}">Chapter 3</a></li>` +
+      `<li><a href="${C2}">Chapter 2</a></li>` +
+      `<li><a href="${C1}">Chapter 1</a></li>` +
+      `</ul></body></html>`;
+    const result = await backfillFromToc(seriesId, fetchFrom({ [PAGE]: okRes(TOC) }));
+    expect(result.added).toBe(1); // a-3 was missing
+
+    const chapters = await db.chapter.findMany({ where: { seriesId }, orderBy: { url: 'asc' } });
+    expect(chapters.find((c) => c.url === C1)!.position).toBe(0);
+    expect(chapters.find((c) => c.url === C2)!.position).toBe(1);
+    expect(chapters.find((c) => c.url === C3)!.position).toBe(2);
   });
 });
 

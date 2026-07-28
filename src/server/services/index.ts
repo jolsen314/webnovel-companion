@@ -4,8 +4,8 @@ import { politeFetch, type PoliteResult } from '../../lib/feeds/fetch';
 import { makeRenderFetch } from '../../lib/feeds/renderFetch';
 import type { SeriesMatch } from '../../lib/feeds/discover';
 import type { FailureType } from '../../lib/health';
-import { diffChapters } from '../../lib/feeds/diff';
-import { parseToc } from '../../lib/feeds/pageWatch';
+import { diffChapters, canonicalUrl } from '../../lib/feeds/diff';
+import { parseToc, tocReadingOrder } from '../../lib/feeds/pageWatch';
 import { pollAllSources as pollAllCore, type PollableSource, type PollEffects, type PollPorts } from './poll';
 import { addSeries as addSeriesCore, type AddSeriesInput, type AddSeriesResult } from './addSeries';
 import {
@@ -349,6 +349,7 @@ export function addSeries(input: AddSeriesInput, fetchImpl: FetchImpl = fetchPor
                     number: c.number ?? null,
                     publishedAt: c.publishedAt ?? null,
                     access: c.access ?? 'UNKNOWN',
+                    position: c.position ?? null,
                   })),
                 }
               : undefined,
@@ -374,6 +375,7 @@ export async function backfillFromToc(
   if (res.outcome !== 'SUCCESS' || res.notModified) return { added: 0, reconciled: 0 };
 
   const toc = parseToc(res.body, source.url);
+  const order = tocReadingOrder(toc);
   const stored = (
     await db.chapter.findMany({ where: { seriesId }, select: { id: true, guid: true, url: true, access: true } })
   ).map((c) => ({ id: c.id, guid: c.guid ?? undefined, url: c.url, access: c.access === 'UNKNOWN' ? undefined : c.access }));
@@ -392,6 +394,7 @@ export async function backfillFromToc(
               guid: c.guid ?? null,
               number: c.number ?? null,
               access: c.access ?? 'UNKNOWN',
+              position: order?.get(canonicalUrl(c.url)) ?? null,
             })),
             skipDuplicates: true,
           }),
@@ -403,6 +406,12 @@ export async function backfillFromToc(
     ...diff.accessReconciled.flatMap((c) =>
       c.id ? [db.chapter.updateMany({ where: { id: c.id }, data: { access: c.access ?? 'UNKNOWN' } })] : [],
     ),
+    ...(order
+      ? stored.flatMap((s) => {
+          const pos = order.get(canonicalUrl(s.url));
+          return pos != null ? [db.chapter.updateMany({ where: { id: s.id }, data: { position: pos } })] : [];
+        })
+      : []),
   ]);
   return { added: diff.new.length, reconciled: diff.accessReconciled.length };
 }
