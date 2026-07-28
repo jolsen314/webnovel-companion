@@ -380,6 +380,11 @@ export async function backfillFromToc(
     await db.chapter.findMany({ where: { seriesId }, select: { id: true, guid: true, url: true, access: true } })
   ).map((c) => ({ id: c.id, guid: c.guid ?? undefined, url: c.url, access: c.access === 'UNKNOWN' ? undefined : c.access }));
   const diff = diffChapters(stored, toc);
+  // Only a TOC that lists EVERY already-stored chapter is authoritative for the whole series'
+  // reading order. A partial/windowed TOC (e.g. a site trimming to its recent chapters) must not
+  // (re)assign positions: doing so would re-index the TOC-present chapters into a fresh 0..N-1
+  // block while chapters absent from this TOC keep their old (now colliding) positions.
+  const tocComplete = order != null && stored.every((s) => order.has(canonicalUrl(s.url)));
 
   const now = new Date();
   await db.$transaction([
@@ -394,7 +399,7 @@ export async function backfillFromToc(
               guid: c.guid ?? null,
               number: c.number ?? null,
               access: c.access ?? 'UNKNOWN',
-              position: order?.get(canonicalUrl(c.url)) ?? null,
+              position: tocComplete ? (order!.get(canonicalUrl(c.url)) ?? null) : null,
             })),
             skipDuplicates: true,
           }),
@@ -406,9 +411,9 @@ export async function backfillFromToc(
     ...diff.accessReconciled.flatMap((c) =>
       c.id ? [db.chapter.updateMany({ where: { id: c.id }, data: { access: c.access ?? 'UNKNOWN' } })] : [],
     ),
-    ...(order
+    ...(tocComplete
       ? stored.flatMap((s) => {
-          const pos = order.get(canonicalUrl(s.url));
+          const pos = order!.get(canonicalUrl(s.url));
           return pos != null ? [db.chapter.updateMany({ where: { id: s.id }, data: { position: pos } })] : [];
         })
       : []),

@@ -517,6 +517,50 @@ describe('WP-35: chapter positions (real DB)', () => {
     expect(chapters.find((c) => c.url === C2)!.position).toBe(1);
     expect(chapters.find((c) => c.url === C3)!.position).toBe(2);
   });
+
+  // A partial/windowed TOC (missing a chapter the store already has, e.g. a site trimming to its
+  // recent window) must NOT re-index — that would collide the TOC-present chapters' fresh 0..N-1
+  // block with the untouched position of the chapter the TOC dropped. Positions must stay as-is,
+  // and any newly-discovered chapter must get position: null (sorts last = newest).
+  test('backfill leaves positions untouched when the TOC is missing a stored chapter', async () => {
+    const seriesId = await addAlpha(); // feed series a-1, a-2, positions null
+    const PAGE = 'https://translator.example/novel/alpha/';
+    await db.source.updateMany({ where: { seriesId }, data: { url: PAGE } });
+
+    // Step 1: a full TOC (a-3, a-2, a-1, descending) backfills a-3 and re-indexes all three to
+    // a-1=0, a-2=1, a-3=2 — same as the "re-indexes positions from the TOC" case above.
+    const FULL_TOC =
+      `<html><body><ul>` +
+      `<li><a href="${C3}">Chapter 3</a></li>` +
+      `<li><a href="${C2}">Chapter 2</a></li>` +
+      `<li><a href="${C1}">Chapter 1</a></li>` +
+      `</ul></body></html>`;
+    await backfillFromToc(seriesId, fetchFrom({ [PAGE]: okRes(FULL_TOC) }));
+    const afterFull = await db.chapter.findMany({ where: { seriesId }, orderBy: { url: 'asc' } });
+    expect(afterFull.find((c) => c.url === C1)!.position).toBe(0);
+    expect(afterFull.find((c) => c.url === C2)!.position).toBe(1);
+    expect(afterFull.find((c) => c.url === C3)!.position).toBe(2);
+
+    // Step 2: the site trims its TOC to a recent window that drops a-1 and adds a new a-4
+    // (a-4, a-3, a-2, descending). a-1 is stored but absent from this TOC → partial → no re-index.
+    const C4 = 'https://translator.example/a-4/';
+    const PARTIAL_TOC =
+      `<html><body><ul>` +
+      `<li><a href="${C4}">Chapter 4</a></li>` +
+      `<li><a href="${C3}">Chapter 3</a></li>` +
+      `<li><a href="${C2}">Chapter 2</a></li>` +
+      `</ul></body></html>`;
+    const result = await backfillFromToc(seriesId, fetchFrom({ [PAGE]: okRes(PARTIAL_TOC) }));
+    expect(result.added).toBe(1); // a-4 was missing
+
+    const afterPartial = await db.chapter.findMany({ where: { seriesId }, orderBy: { url: 'asc' } });
+    // Existing chapters keep their step-1 positions — untouched, no collision.
+    expect(afterPartial.find((c) => c.url === C1)!.position).toBe(0);
+    expect(afterPartial.find((c) => c.url === C2)!.position).toBe(1);
+    expect(afterPartial.find((c) => c.url === C3)!.position).toBe(2);
+    // The newly-added chapter gets no position (sorts last = newest), not a colliding re-index.
+    expect(afterPartial.find((c) => c.url === C4)!.position).toBeNull();
+  });
 });
 
 describe('savePushSubscription (real DB)', () => {
