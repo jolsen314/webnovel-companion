@@ -561,6 +561,43 @@ describe('WP-35: chapter positions (real DB)', () => {
     // The newly-added chapter gets no position (sorts last = newest), not a colliding re-index.
     expect(afterPartial.find((c) => c.url === C4)!.position).toBeNull();
   });
+
+  // A feed-ahead chapter (newest, published to the feed but not yet on the hand-maintained TOC
+  // page) is stored with position: null. Unlike the windowed case above, it must NOT block the
+  // re-index: it's unpositioned, so leaving it null (sorts last = newest) collides with nothing.
+  // The TOC-covered chapters still get their positions. This is the dense-feed-source TCF case — Part 2's
+  // newest chapter arrives via feed before the TOC index page lists it, leaving the whole series
+  // unpositioned and falling back to the (two-part-colliding) number order.
+  test('backfill re-indexes when the only absent-from-TOC chapter is unpositioned (feed-ahead)', async () => {
+    const seriesId = await addAlpha(); // feed series a-1, a-2, positions null
+    const PAGE = 'https://translator.example/novel/alpha/';
+    await db.source.updateMany({ where: { seriesId }, data: { url: PAGE } });
+
+    // A feed-ahead chapter: newest, stored (null position), and NOT on the TOC yet.
+    const source = await db.source.findFirstOrThrow({ where: { seriesId } });
+    const C9 = 'https://translator.example/a-9/';
+    await db.chapter.create({
+      data: { seriesId, sourceId: source.id, title: 'Chapter 9', url: C9, number: 9, position: null },
+    });
+
+    // Full-history TOC (a-3, a-2, a-1 descending): covers a-1/a-2, adds a-3, omits the feed-ahead a-9.
+    const TOC =
+      `<html><body><ul>` +
+      `<li><a href="${C3}">Chapter 3</a></li>` +
+      `<li><a href="${C2}">Chapter 2</a></li>` +
+      `<li><a href="${C1}">Chapter 1</a></li>` +
+      `</ul></body></html>`;
+    const result = await backfillFromToc(seriesId, fetchFrom({ [PAGE]: okRes(TOC) }));
+    expect(result.added).toBe(1); // a-3
+
+    const chapters = await db.chapter.findMany({ where: { seriesId }, orderBy: { url: 'asc' } });
+    // TOC-covered chapters get re-indexed — the feed-ahead a-9 did not block it.
+    expect(chapters.find((c) => c.url === C1)!.position).toBe(0);
+    expect(chapters.find((c) => c.url === C2)!.position).toBe(1);
+    expect(chapters.find((c) => c.url === C3)!.position).toBe(2);
+    // The feed-ahead chapter stays null → sorts last (newest).
+    expect(chapters.find((c) => c.url === C9)!.position).toBeNull();
+  });
 });
 
 describe('savePushSubscription (real DB)', () => {

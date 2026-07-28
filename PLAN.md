@@ -623,6 +623,25 @@ gating trims the daily set) and WP-40 (making CF-static cheap/304 shrinks per-so
 
 ## Changelog
 
+- **2026-07-28** — **Fix (WP-35 follow-up): `backfillFromToc` now positions feed-ahead series instead of skipping.**
+  **Where it was missing:** the WP-35 spec says a full TOC read positions *every* stored chapter — matched rows get
+  their normalized index, any absent chapter is appended after the TOC block (kept, ordered last). The implementation
+  instead gated on a strict `tocComplete` (order known **and** *every* stored chapter present in the TOC) and, when
+  false, wrote **no** positions at all. That guard was added in WP-35 review to stop a real **windowed-TOC collision**
+  (a site trimming its TOC to a recent window drops an *old* chapter; re-indexing the present rows into a fresh 0..N-1
+  block collides with the dropped chapter's retained position). But it was **too broad**: it also fired for the benign
+  **feed-ahead** case — a dual-source (feed + hand-maintained TOC) series whose newest chapter has arrived via the feed
+  but isn't on the TOC page yet. One such chapter left the *entire* series unpositioned, so ordering fell back to
+  `orderChaptersForReading`'s number comparator — which **interleaves a two-part series** (Part 1 and Part 2 share a
+  chapter-number space). Surfaced on a real dual-source series after the prod cleanup: 1209 chapters, all `position`
+  null, Part 1/Part 2 mixed. **The fix:** replace `tocComplete` with **`tocReindexable`** — re-index when every stored
+  chapter is *either* in the TOC *or still unpositioned* (`position == null`). A feed-ahead chapter is unpositioned, so
+  it's safely left null (nulls sort last = newest, colliding with nothing) while the rest re-index; the guard now blocks
+  **only** when an absent chapter *already holds* a position (the genuine windowed-TOC danger), preserving that
+  protection. Test-first: a new integration test reproduces the feed-ahead case (was red: covered chapters stayed null);
+  the windowed-TOC test stays green. **257 unit + 47 integration green, typecheck clean.** Prod data repaired in place by
+  re-running the `db:cleanup backfill` (fixed code, local, against prod) — the affected series now orders all of Part 1
+  before Part 2, newest feed-ahead chapter last.
 - **2026-07-28** — **Added WP-40/41 + extended WP-27 (poll scale/cost, from an owner design discussion).** Working
   through the render/CF story surfaced two structural facts: **RENDER sources can't use conditional GET** (`renderFetch`
   sends no validators, always `notModified:false` → every RENDER poll is a full ~5–15s headless render), and the daily

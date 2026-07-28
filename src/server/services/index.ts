@@ -376,15 +376,27 @@ export async function backfillFromToc(
 
   const toc = parseToc(res.body, source.url);
   const order = tocReadingOrder(toc);
-  const stored = (
-    await db.chapter.findMany({ where: { seriesId }, select: { id: true, guid: true, url: true, access: true } })
-  ).map((c) => ({ id: c.id, guid: c.guid ?? undefined, url: c.url, access: c.access === 'UNKNOWN' ? undefined : c.access }));
+  const storedRows = await db.chapter.findMany({
+    where: { seriesId },
+    select: { id: true, guid: true, url: true, access: true, position: true },
+  });
+  const stored = storedRows.map((c) => ({
+    id: c.id,
+    guid: c.guid ?? undefined,
+    url: c.url,
+    access: c.access === 'UNKNOWN' ? undefined : c.access,
+  }));
   const diff = diffChapters(stored, toc);
-  // Only a TOC that lists EVERY already-stored chapter is authoritative for the whole series'
-  // reading order. A partial/windowed TOC (e.g. a site trimming to its recent chapters) must not
-  // (re)assign positions: doing so would re-index the TOC-present chapters into a fresh 0..N-1
-  // block while chapters absent from this TOC keep their old (now colliding) positions.
-  const tocComplete = order != null && stored.every((s) => order.has(canonicalUrl(s.url)));
+  // Re-index positions only when this TOC read is authoritative for the whole reading order.
+  // Safe when every already-stored chapter is either listed in the TOC OR still unpositioned:
+  //   - listed → gets its normalized index;
+  //   - absent but unpositioned → a feed-ahead chapter (published to the feed before the
+  //     hand-maintained TOC lists it); left null, it sorts last (= newest), colliding with nothing.
+  // Blocked only when an absent chapter already HAS a position — a windowed/trimmed TOC (site
+  // dropped an old chapter), where re-indexing the present chapters into a fresh 0..N-1 block
+  // would collide with the dropped chapter's retained position. Then we leave positions as-is.
+  const tocReindexable =
+    order != null && storedRows.every((s) => order.has(canonicalUrl(s.url)) || s.position == null);
 
   const now = new Date();
   await db.$transaction([
@@ -399,7 +411,7 @@ export async function backfillFromToc(
               guid: c.guid ?? null,
               number: c.number ?? null,
               access: c.access ?? 'UNKNOWN',
-              position: tocComplete ? (order!.get(canonicalUrl(c.url)) ?? null) : null,
+              position: tocReindexable ? (order!.get(canonicalUrl(c.url)) ?? null) : null,
             })),
             skipDuplicates: true,
           }),
@@ -411,7 +423,7 @@ export async function backfillFromToc(
     ...diff.accessReconciled.flatMap((c) =>
       c.id ? [db.chapter.updateMany({ where: { id: c.id }, data: { access: c.access ?? 'UNKNOWN' } })] : [],
     ),
-    ...(tocComplete
+    ...(tocReindexable
       ? stored.flatMap((s) => {
           const pos = order!.get(canonicalUrl(s.url));
           return pos != null ? [db.chapter.updateMany({ where: { id: s.id }, data: { position: pos } })] : [];
