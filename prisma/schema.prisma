@@ -186,6 +186,7 @@ model Chapter {
 
   access       AccessState @default(UNKNOWN) // FREE/LOCKED on advance-chapter sites
   becameFreeAt DateTime? // set when a locked chapter unlocks
+  position     Int? // reading-order index from the TOC (null = not positioned → comparator fallback)
 
   @@unique([seriesId, url]) // soft DB guard; primary de-dup is diff (guid/canonical-url)
   @@index([seriesId])
