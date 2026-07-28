@@ -103,7 +103,7 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-15 | `lib/search.ts` (pure) — filter/query building | M1 | `TODO` | WP-00 |
 | WP-16 | Host-level health aggregation (site-down vs novel-moved) | M1 | `TODO` | WP-03, WP-07 |
 | WP-18 | Completed shelf + backfill + "Move to Completed?" | M1 | `TODO` | WP-10 |
-| WP-28 | Frontend styling & theming — ordering, feed-page vs library split, theme system (night default + cultivation ancient-scroll, sci-fi holographic-panel) | M1 | `TODO` | WP-10 |
+| WP-28 | Frontend styling & theming — ordering, feed-page vs library split, theme system (night default + cultivation ancient-scroll, sci-fi holographic-panel), long-title readability (wrap/clamp vs ellipsis) | M1 | `TODO` | WP-10 |
 | WP-19 | Non-destructive re-pointing + "find new source" helper | M1 | `TODO` | WP-16, WP-18 |
 | WP-30 | Series title backfill from TOC (fix acronym/URL-derived titles) + manual title edit | M1 | `TODO` | WP-17, WP-10 |
 | WP-31 | Tab-structured premium TOCs — renderer clicks Free/Premium tabs + tab-membership access marking (unblocks WP-20 "now free" where locked chapters live behind a tab, not row markers) | M1↑ | `TODO` | WP-17b, WP-20 |
@@ -378,8 +378,19 @@ UX-polish pass on the shipped library/detail UI (WP-10). Scope to design when pi
 sorts — recent-activity, unread-first, alphabetical, manual); **feed page vs library** (a separate "what's new across
 everything" river distinct from the per-series library grid — decide whether they're one view or two); a **theme
 system** beyond the current "night reading" identity — pluggable themes such as *cultivation ancient-scroll* and
-*sci-fi holographic-panel*, selectable by the user. Uses `frontend-design` (primary) + `ai-toolkit:design-workflow`
-for tokens; gets its own brainstorm → spec when prioritized. Depends on WP-10 (done).
+*sci-fi holographic-panel*, selectable by the user; and **long chapter titles** (below). Uses `frontend-design`
+(primary) + `ai-toolkit:design-workflow` for tokens; gets its own brainstorm → spec when prioritized. Depends on WP-10
+(done).
+
+**Long chapter titles must be fully readable (owner, 2026-07-28).** Today the chapter row (`[num] [title] [mark]`)
+truncates the title to a single line: `.chapter__title` is `overflow:hidden; text-overflow:ellipsis; white-space:nowrap`
+([`globals.css`](src/app/globals.css) ~L349), so a long title (e.g. split-chapter names like "…Part 2 Chapter 407:
+Night and Light (3)") is cut off with "…" and the reader can't see the rest. Give some way to read the whole title —
+decide the mechanism in the design pass: **wrap by default** (drop `nowrap`; let the row grow — simplest, and titles
+are the primary content), a **multi-line clamp** (`-webkit-line-clamp: 2` + full text on tap/hover), an
+**expand-on-tap** disclosure, or at minimum a **`title=`/tooltip** fallback (weak on touch). Leaning wrap-by-default
+unless the row rhythm suffers. Keep the num + mark-read control aligned to the top of a wrapped row, not vertically
+centered on a tall one.
 
 ### WP-30 — Series title backfill from TOC + manual title edit
 
