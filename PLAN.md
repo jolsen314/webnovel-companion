@@ -41,11 +41,11 @@ To re-prioritize, move rows and update the `NEXT` marker. Don't silently reorder
 
 ## Current focus
 
-> **NEXT: WP-35** (TOC-order chapters + display toggle) — deferred while WP-36/WP-38 fixed the backfill contamination;
-> now unblocked. Then **WP-29's schedule-editor UI** (lib + schema + cron wiring done; editor UI + push delivery
-> remain), the reading-status lifecycle (**WP-27**), and **WP-28** (styling/theming). Also queued: **WP-30** (title
-> backfill + manual edit), **WP-34** (feed→TOC switch, CF-gated), **WP-37** (auto-discover the chapter-TOC URL), and
-> **WP-39** (add-time dedup). WP-35/36/38 designs captured 2026-07-27.
+> **NEXT: WP-29's schedule-editor UI** (lib + schema + cron wiring done; editor UI + push delivery remain), then the
+> reading-status lifecycle (**WP-27**) and **WP-28** (styling/theming). Also queued: **WP-30** (title backfill + manual
+> edit), **WP-34** (feed→TOC switch, CF-gated), **WP-37** (auto-discover the chapter-TOC URL), and **WP-39** (add-time
+> dedup). **Owner has a pending cleanup** to run: the `db:cleanup` CLI (WP-38) against prod to recover the
+> phantom-chapter listings + the duplicate series.
 
 The MVP is **live on Vercel + Neon** — feed pipeline, auth gate, library/detail UI, **Web Push (WP-09, verified on a
 device)**, the **headless renderer (WP-17b, live-validated)**, and **paid→free "now free" detection (WP-20)**. The
@@ -108,7 +108,7 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-32 | Split/paginated TOCs across sibling pages — page-watch follows "next chapters" navigation (bounded hops) + stops pagination anchors polluting `parseToc` | M1↑ | `TODO` | WP-17 |
 | WP-33 | Full-TOC backfill (feed series seed whole history at add + on-demand action) + silent `accessReconciled` diff dimension (`UNKNOWN`→`FREE`/`LOCKED`) — [design](docs/superpowers/specs/2026-07-26-feed-toc-transition-design.md) | M1 | `DONE` | WP-07, WP-17, WP-20 |
 | WP-34 | Feed→TOC switch to lock-monitoring — add-time lock detect (prefer PAGE_WATCH) + per-series "Track unlocks" switch + transition identity reconcile — **mechanism buildable; end-to-end "now free" CF-gated** | M1↑ | `TODO` | WP-33, WP-19 |
-| WP-35 | TOC-order chapters (`Chapter.position` from TOC DOM order, direction-normalized) + detail-page display toggle (oldest/newest/unread-first, canonical read-state) — [design](docs/superpowers/specs/2026-07-27-wp35-toc-order-display-design.md) | M1 | `TODO` | WP-17, WP-33, WP-10 |
+| WP-35 | TOC-order chapters (`Chapter.position` from TOC DOM order, direction-normalized) + detail-page display toggle (oldest/newest/unread-first, canonical read-state) — [design](docs/superpowers/specs/2026-07-27-wp35-toc-order-display-design.md) | M1 | `DONE` | WP-17, WP-33, WP-10 |
 | ⭐ WP-36 | `parseToc` series scoping — restrict to main content (drop sidebar/"recent entries" widgets, nav/footer) + optional slug-family filter, so backfill/page-watch stop ingesting **cross-series phantom chapters**. **Data-correctness fix** | M1 | `DONE` | WP-17 |
 | WP-37 | Per-series chapter-TOC URL (landing page ≠ chapter TOC) — resolve/store a dedicated TOC URL distinct from the reading `url`; discovery follows an on-page "table of contents" link or the user sets it | M1 | `TODO` | WP-17, WP-33 |
 | WP-38 | Recover contaminated series (maintenance script) — prune phantom/cross-series chapters, **merge/delete duplicate series**, reset+re-seed, correct the source TOC URL + clean re-backfill (owner has bad production listings + a dup from the WP-33 button) | M1 | `DONE` | WP-36 |
@@ -560,6 +560,20 @@ or the WP-37 TOC-URL resolution to map both to one identity. (WP-38 cleans up th
 
 ## Changelog
 
+- **2026-07-28** — **WP-35 DONE: TOC-order chapters + display toggle.** Chapters now display in the site's own TOC
+  order instead of an inferred number/title order. Additive migration `Chapter.position Int?`. Pure `tocReadingOrder`
+  infers the TOC's direction from the chapter-number *trend* (skips when ambiguous) and maps each chapter's canonical
+  URL to a 0-based oldest-first position; `orderChaptersForReading` is now **position-aware** (position primary, nulls
+  last, the WP-33 number/Extra-Side comparator kept as the pure-feed fallback). Positions are assigned at add (both
+  branches, via `withReadingPositions`) and on backfill — **re-indexed only from a *complete* TOC** (a partial/windowed
+  TOC leaves positions untouched, new chapters null → sort last, avoiding collisions; owner-approved: polls don't
+  re-index, so a TOC re-sort needs a re-backfill). Frontend: pure `arrangeChapters` computes read-state by **canonical
+  position** (retiring the array-index logic — read-state is now correct in any display order) driving a
+  localStorage-persisted **3-mode toggle** (oldest / newest / unread-first) on the detail page. Built subagent-driven,
+  test-first (6 tasks); the final whole-branch review caught a partial-TOC re-index collision (fixed). **257 unit + 46
+  integration green, typecheck + build clean.** *Deploy note: `prisma migrate deploy` (vercel-build) adds `position`
+  to prod on the next push; existing rows are null → comparator fallback until re-backfilled. Toggle not yet
+  browser-clicked — worth a look.* `NEXT` → WP-29 editor UI.
 - **2026-07-27** — **WP-36 + WP-38 DONE: TOC content scoping + contaminated-series recovery.** **WP-36:** `parseToc`
   now filters out chapter anchors inside page chrome (`aside`/`.widget_recent_entries`/`#secondary`/nav/footer/…) in a
   single pass, with an **empty-fallback** (widget-TOC sites still parse) — so backfill/page-watch stop ingesting the
