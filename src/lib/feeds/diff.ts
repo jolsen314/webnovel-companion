@@ -15,6 +15,8 @@ export interface FeedItem {
   title: string;
   number?: number | null;
   publishedAt?: Date | null;
+  /** Reading-order index from the TOC (WP-35), when known. */
+  position?: number | null;
   /** Feed `<category>` values — used to isolate a series in a multi-novel feed (see match logic). */
   categories?: string[];
   /** Free/locked state, populated by page-watch (`parseToc`) for paid/advance sites. */

@@ -19,6 +19,7 @@ interface OrderableChapter {
   id: string;
   number: number | null;
   title: string;
+  position?: number | null;
   publishedAt: Date | null;
   discoveredAt: Date;
 }
@@ -34,6 +35,10 @@ function readingBucket(c: OrderableChapter): 0 | 1 | 2 {
  *  then Extra/Side content — per the owner's rule. Pure; returns a new array. */
 export function orderChaptersForReading<T extends OrderableChapter>(chapters: readonly T[]): T[] {
   return [...chapters].sort((a, b) => {
+    // Position (the site's own TOC order) wins when known; nulls sort last and fall to the comparator.
+    if (a.position != null && b.position != null && a.position !== b.position) return a.position - b.position;
+    if (a.position == null && b.position != null) return 1;
+    if (a.position != null && b.position == null) return -1;
     const ba = readingBucket(a);
     const bb = readingBucket(b);
     if (ba !== bb) return ba - bb;

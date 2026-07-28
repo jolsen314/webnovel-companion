@@ -24,8 +24,8 @@ describe('unreadCount', () => {
   });
 });
 
-const ch = (over: Partial<{ id: string; number: number | null; title: string; publishedAt: Date | null; discoveredAt: Date }>) => ({
-  id: 'x', number: null, title: 't', publishedAt: null, discoveredAt: new Date('2026-01-01T00:00:00Z'), ...over,
+const ch = (over: Partial<{ id: string; number: number | null; title: string; position: number | null; publishedAt: Date | null; discoveredAt: Date }>) => ({
+  id: 'x', number: null, title: 't', position: null, publishedAt: null, discoveredAt: new Date('2026-01-01T00:00:00Z'), ...over,
 });
 
 describe('orderChaptersForReading', () => {
@@ -72,5 +72,30 @@ describe('orderChaptersForReading', () => {
     const input = [ch({ id: '2', number: 2 }), ch({ id: '1', number: 1 })];
     orderChaptersForReading(input);
     expect(input.map((c) => c.id)).toEqual(['2', '1']);
+  });
+});
+
+describe('orderChaptersForReading — position-aware (WP-35)', () => {
+  const ch = (over: Partial<{ id: string; number: number | null; title: string; position: number | null; publishedAt: Date | null; discoveredAt: Date }>) => ({
+    id: 'x', number: null, title: 't', position: null, publishedAt: null, discoveredAt: new Date('2026-01-01T00:00:00Z'), ...over,
+  });
+
+  test('positioned chapters sort by position (overriding the number comparator)', () => {
+    const out = orderChaptersForReading([ch({ id: 'b', position: 1, number: 99 }), ch({ id: 'a', position: 0, number: 1 })]);
+    expect(out.map((c) => c.id)).toEqual(['a', 'b']);
+  });
+
+  test('null-position chapters sort AFTER positioned ones, by the number comparator among themselves', () => {
+    const out = orderChaptersForReading([
+      ch({ id: 'new2', position: null, number: 6 }),
+      ch({ id: 'p0', position: 0, number: 1 }),
+      ch({ id: 'new1', position: null, number: 5 }),
+    ]);
+    expect(out.map((c) => c.id)).toEqual(['p0', 'new1', 'new2']); // positioned first, then nulls by number
+  });
+
+  test('all-null (pure-feed) falls back to the existing comparator behavior', () => {
+    const out = orderChaptersForReading([ch({ id: '2', number: 2 }), ch({ id: '1', number: 1 })]);
+    expect(out.map((c) => c.id)).toEqual(['1', '2']);
   });
 });
