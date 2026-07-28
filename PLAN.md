@@ -42,7 +42,9 @@ To re-prioritize, move rows and update the `NEXT` marker. Don't silently reorder
 ## Current focus
 
 > **NEXT: WP-29's schedule-editor UI** (lib + schema + cron wiring done; editor UI + push delivery remain), then the
-> reading-status lifecycle (**WP-27**) and **WP-28** (styling/theming). Also queued: **WP-30** (title backfill + manual
+> reading-status lifecycle (**WP-27**) and **WP-28** (styling/theming). **Elevated (owner wants soon): WP-40** — cheap
+> local CF-static bypass (browser-TLS-impersonation, 304-capable) so CF-fronted-but-static hosts (e.g.
+> cf-wordpress-source) fetch reliably without the uncacheable render. Also queued: **WP-30** (title backfill + manual
 > edit), **WP-34** (feed→TOC switch, CF-gated), **WP-37** (auto-discover the chapter-TOC URL), and **WP-39** (add-time
 > dedup). **Owner has a pending cleanup** to run: the `db:cleanup` CLI (WP-38) against prod to recover the
 > phantom-chapter listings + the duplicate series.
@@ -115,7 +117,9 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-39 | Prevent duplicate series on add — wire `canonicalId` (normalized-URL/NU-id) dedup into `addSeries` so the same series can't be added twice (home URL vs TOC URL → one series); consumes WP-14's pure dedup | M1 | `TODO` | WP-07, WP-14 |
 | WP-RC | Dense-feed miss-detection + TOC reconcile fallback | M1 | `TODO` | WP-05, WP-07, WP-17 |
 | WP-21 | Plan-to-read completion watch (wire WP-13 + notify) — compare **max chapter number** vs target, not post count (split-chapter safe; see CONTEXT.md) | M1 | `TODO` | WP-13, WP-07 |
-| WP-27 | Reading-status lifecycle for poll + store — status-gated polling (skip COMPLETED/DROPPED), PLANNED seeds a **summary** not the full TOC (backfill on →READING), per-status notify rules | M1 | `TODO` | WP-07, WP-17, WP-18 |
+| WP-27 | Reading-status lifecycle for poll + store — status→**cadence** gating (skip COMPLETED/DROPPED; PLANNED/backlog polled rarely, not daily — matters because RENDER can't 304), PLANNED seeds a **summary** not the full TOC (backfill on →READING), per-status notify rules | M1 | `TODO` | WP-07, WP-17, WP-18 |
+| WP-40 | Cheap CF bypass for **static** CF-blocked hosts — a **local** browser-TLS-impersonation GET (304-capable) so CF-static sites (server-rendered, just IP-challenged) skip the uncacheable headless render; reserve RENDER for genuinely JS TOCs. *Not* a third-party unblocker (keeps WP-17b privacy stance) | M1↑ | `TODO` | WP-17b |
+| WP-41 | Poll time-budget guard + rotation — the sequential `pollAllSources` loop has no deadline under the 60s ceiling; stop before it and rotate the start offset so the tail (esp. RENDER sources) degrades gracefully instead of being silently dropped daily | M1 | `TODO` | WP-07 |
 | WP-22 | MV3 browser extension (progress capture + "track this") | M2 | `TODO` | WP-08 |
 | WP-23 | Chinese mining: `tokenize/zh.ts` + `dict/cedict.ts` | M3 | `TODO` | WP-04 |
 | WP-02 | `lib/srs/sm2.ts` (pure, test-first) — SM-2 scheduler | M3 | `TODO` | WP-00 |
@@ -349,6 +353,13 @@ Keyed on **reading status** (`SeriesStatus`: READING / PLANNED / PAUSED / DROPPE
   COMPLETED and DROPPED** (no new chapters wanted). Motivation is **compute + politeness**, not storage — see the
   free-tier note in the backlog. Cheap: filter the active-sources query by the parent series' status. *(Open:
   PAUSED — poll-but-suppress-notify, or skip? Leaning poll-quietly so the backlog is there on resume.)*
+- **Status→cadence, not just skip (owner, 2026-07-28).** Beyond skip/poll, **PLANNED/backlog should poll *rarely*
+  (slow cadence or on-demand), not daily.** This sharpened once we confirmed **RENDER sources can't 304** (every poll
+  is a full ~5–15s headless render — `renderFetch` sends no validators): a pile of PLANNED reads on a CF/JS host (e.g.
+  many cf-wordpress-source novels) would otherwise cost a full daily render *each*. Gate cadence by status — READING
+  daily; PLANNED/PAUSED slow or on-promote. This also caps the RENDER load **WP-41**'s time-budget guard must absorb,
+  and pairs with **WP-40** (make CF-static hosts cheap/304). PLANNED already seeds a summary not the TOC (next bullet),
+  so it has little to poll anyway — the win is *not paying to render a backlog you're not reading yet*.
 - **PLANNED seeds a summary, not the full TOC.** For a plan-to-read series, seeding the whole TOC of a finished
   ~1,000-chapter translation at add-time is a large insert for something you may never open, and the PLANNED signal is
   a **milestone**, not per-chapter. Seed a summary (max chapter number, total vs `targetChapterCount`, free/locked
@@ -534,6 +545,55 @@ WP-14's pure `lib/dedup.ts`. Note the URL forms to reconcile: a **landing/home U
 series are *different* URLs — canonicalization alone won't unify them, so dedup also needs a title/known-source match
 or the WP-37 TOC-URL resolution to map both to one identity. (WP-38 cleans up the dup that already exists.)
 
+### WP-40 — Cheap CF bypass for static CF-blocked hosts (browser-fingerprint GET, not render)
+
+**Motivation (owner testing, 2026-07-27/28):** some hosts (e.g. the dense-feed WordPress translator behind Cloudflare)
+serve a **static, server-rendered TOC** but **challenge our plain `fetch` from Vercel's datacenter IP** — a
+*network-access* problem, not a *rendering* one. Proven: a bare `curl` from a residential IP returns the full chapter
+list (no JS needed), and `/api/render` **from Vercel** also returns it (200, real title, all chapters) — so Vercel's IP
+isn't hard-blocked; only our plain bot `fetch` is challenged. Today the only bypass we have is the **headless renderer**
+(WP-17b), which works but is the wrong-sized tool: Chromium is expensive and — critically — **can't do conditional GET**
+(`renderFetch` sends no validators, always `notModified:false`), so every poll is a full ~5–15s render. A backlog of
+such novels blows the poll budget (**WP-41**) for no reason.
+
+**Second driver, harsher (owner testing, 2026-07-28): cf-static-source.org.** Also CF-fronted + Vercel-blocked, but with **no
+usable feed** (advertises none; per-series `/feed/` 404s; site `/feed/` is empty) — so a CF-blocked page fetch can't
+fall back to page-watch *or* a feed and `addSeries` **hard-throws** ("may be blocking automated requests"). The series
+is **unaddable** today, not just empty. This makes WP-40 a *correctness/blocker* fix for some sites, not only an
+efficiency one. (Open: whether cf-static-source is rescued by the fingerprint GET or is the harder 403 set — confirm via a
+Vercel `/api/render` curl, same as chrys.)
+
+**Work:** add a lighter fetch rung for **CF-static** hosts — a single GET with a **browser TLS/JA3 + header
+fingerprint** (e.g. a `curl-impersonate` binary or an impersonation-capable HTTP client) that clears CF's bot challenge
+**and supports `If-None-Match`/`If-Modified-Since` → 304**. This is a **local** fetch (request goes straight from our
+server to the target, just with a browser-like handshake) — **not** a third-party unblocker/proxy, so it keeps the
+**WP-17b privacy stance** (that decision declined *third-party* unblockers, not local impersonation). Wire it as a
+`fetchMode`/host-policy rung between PLAIN and RENDER: CF-static hosts use it; **reserve real RENDER (Chromium) for
+genuinely JS-rendered TOCs** (the tab / load-more sites — WP-31). **Must cover the add path, not just poll:** today's
+render escalation is **poll-only** (`pollSource` PLAIN→RENDER at ≤5 chapters), while **`addSeries` uses the plain
+`fetch` only** — so a CF-blocked host like cf-static-source **can't be added at all** (it never reaches the poll to escalate).
+The bypass rung has to be reachable from `addSeries` (or `addSeries` needs a render/bypass fallback on page-fetch
+failure for CF hosts). Caveat: a browser *UA alone* likely won't pass (CF keys on the TLS fingerprint), so verify the
+impersonation actually clears the challenge from Vercel before relying on it. Relates to WP-17b (escalation ladder),
+WP-34/WP-29 (CF-gated sites), and the harder **403 `cf-mitigated`** set (render-clearable-source/cf-blocked-source) which may still
+need more than a fingerprint. **Confirmed WP-40 hosts (render works from Vercel, only plain fetch blocked):
+cf-wordpress-source, cf-static-source.**
+
+### WP-41 — Poll time-budget guard + rotation
+
+**Motivation (owner, 2026-07-28):** `pollAllSources` is a **strictly sequential** loop (`for … await pollSource`) with
+**no deadline**, under a **60s function ceiling**. Plain sources are cheap (mostly 304s), but **RENDER sources can't
+304** and cost ~5–15s each, so as the active set grows (especially RENDER/CF sources) the run can exceed 60s and be
+**killed mid-loop** — and because the source order is stable, the **same tail is silently dropped every day** (no error
+surfaced; those series just never poll).
+
+**Work:** track elapsed time in `pollAllSources` and **stop before the ceiling** (leave headroom for the push/schedule
+steps), and **rotate the starting point** across runs (persist a cursor or order by a last-polled timestamp) so no
+source is perpetually starved — the backlog drains fairly instead of the tail never polling. Optionally split RENDER
+sources into their own bounded pass. Cheap, and it's a **latent correctness** issue (silent non-polling) that arrives
+the moment there are more sources than fit in 60s — worth doing before it bites, not after. Pairs with WP-27 (cadence
+gating trims the daily set) and WP-40 (making CF-static cheap/304 shrinks per-source cost).
+
 ## Backlog / open questions
 
 - **Notification privacy** *(implemented 2026-07-26)* — the work's name is kept out of the always-visible notification
@@ -546,6 +606,9 @@ or the WP-37 TOC-URL resolution to map both to one identity. (WP-38 cleans up th
   1,000-chapter series ≈ ~0.4 MB and a *heavy* library (200 series × 300 ch ≈ 60k rows) ≈ ~20–30 MB against Neon
   free's **0.5 GB**. The binding free-tier limit is **compute hours** (~192/mo, autosuspend) → the reason to skip
   polling COMPLETED/DROPPED (WP-27) is compute + politeness, and pruning stored chapters for space is a non-goal.
+  *Update (2026-07-28): the tighter compute ceiling is actually the **60s sequential-poll budget** (WP-41), and since
+  **RENDER sources can't 304** the **RENDER/CF source count** — not raw novel count — is the real driver (WP-40 makes
+  CF-static cheap; WP-27 cadence-gating keeps a PLANNED backlog from rendering daily).*
 - **Auth & multi-device** — README scopes to single-user, but Web Push targets multiple subscribed devices per user.
   Decide the minimal identity story for MVP (single hardcoded user? a token?). Affects WP-08/WP-09.
 - **Cron cadence** — README suggests every 10–15 min; make it configurable (freshness vs. politeness). WP-07/WP-11.
@@ -560,6 +623,19 @@ or the WP-37 TOC-URL resolution to map both to one identity. (WP-38 cleans up th
 
 ## Changelog
 
+- **2026-07-28** — **Added WP-40/41 + extended WP-27 (poll scale/cost, from an owner design discussion).** Working
+  through the render/CF story surfaced two structural facts: **RENDER sources can't use conditional GET** (`renderFetch`
+  sends no validators, always `notModified:false` → every RENDER poll is a full ~5–15s headless render), and the daily
+  cron is a **sequential loop with no time budget** under the 60s ceiling — so a pile of RENDER/CF sources (e.g. many
+  PLANNED cf-wordpress-source reads) blows the budget and **silently drops the tail**. Three tracked responses:
+  **WP-27 extended** to status→*cadence* gating (PLANNED/backlog polled rarely/on-demand, not just skip-COMPLETED —
+  motivated by the render cost); **WP-40** — a cheap, 304-capable **local browser-TLS-impersonation** GET for
+  CF-**static** hosts (server-rendered but IP-challenged, like cf-wordpress-source), so they skip the uncacheable
+  render, reserving Chromium for genuinely JS TOCs, and explicitly **not** a third-party unblocker (keeps the WP-17b
+  privacy stance); **WP-41** — a poll time-budget guard + rotating start offset so the run degrades gracefully instead
+  of starving a fixed tail. All `TODO`, "if scale bites" priority; WP-41 is also a latent-correctness safeguard. Also
+  clarified in `TESTING-NOTES.local.md`: cf-wordpress-source is CF-**static** (needs bypass, not render) and the
+  render path can't 304. (Real-site detail stays in that gitignored file.)
 - **2026-07-28** — **WP-35 DONE: TOC-order chapters + display toggle.** Chapters now display in the site's own TOC
   order instead of an inferred number/title order. Additive migration `Chapter.position Int?`. Pure `tocReadingOrder`
   infers the TOC's direction from the chapter-number *trend* (skips when ambiguous) and maps each chapter's canonical

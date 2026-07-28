@@ -7,6 +7,7 @@ coverage/
 *.log
 .env
 .env.local
+.env.prod
 .DS_Store
 
 # Claude Code local (machine-specific) settings — keep out of git
