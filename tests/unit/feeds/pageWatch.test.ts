@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { parseToc, mergeFeedAndToc } from '../../../src/lib/feeds/pageWatch';
+import { parseToc, mergeFeedAndToc, tocReadingOrder } from '../../../src/lib/feeds/pageWatch';
 
 const base = 'https://site.example/novel/x/';
 
@@ -151,5 +151,36 @@ describe('mergeFeedAndToc', () => {
   test('two TOC rows that canonicalize equal are merged once (no double-insert)', () => {
     const merged = mergeFeedAndToc([], [toc('https://x/ch/1', 'FREE'), toc('https://x/ch/1/', 'FREE')]);
     expect(merged).toHaveLength(1);
+  });
+});
+
+describe('tocReadingOrder', () => {
+  const c = (url: string, number: number | null) => ({ url, number });
+
+  test('ascending TOC (ch1,ch2,ch3 in DOM order) → positions 0,1,2', () => {
+    const m = tocReadingOrder([c('https://x/1', 1), c('https://x/2', 2), c('https://x/3', 3)]);
+    expect(m).not.toBeNull();
+    expect(m!.get('https://x/1')).toBe(0);
+    expect(m!.get('https://x/3')).toBe(2);
+  });
+
+  test('descending TOC (newest-first) is normalized so the oldest gets position 0', () => {
+    const m = tocReadingOrder([c('https://x/3', 3), c('https://x/2', 2), c('https://x/1', 1)]);
+    expect(m!.get('https://x/1')).toBe(0);
+    expect(m!.get('https://x/3')).toBe(2);
+  });
+
+  test('canonical-URL keys (tracking/slash ignored)', () => {
+    const m = tocReadingOrder([c('https://x/1/?utm_source=rss', 1), c('https://x/2', 2), c('https://x/3', 3)]);
+    expect(m!.get('https://x/1')).toBe(0);
+  });
+
+  test('too few numbered chapters → null (skip positioning)', () => {
+    expect(tocReadingOrder([c('https://x/a', null), c('https://x/b', 1)])).toBeNull();
+  });
+
+  test('ambiguous number trend → null', () => {
+    const m = tocReadingOrder([c('https://x/a', 1), c('https://x/b', 5), c('https://x/c', 2), c('https://x/d', 4), c('https://x/e', 3)]);
+    expect(m).toBeNull();
   });
 });

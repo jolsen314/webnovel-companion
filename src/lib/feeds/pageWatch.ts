@@ -130,3 +130,29 @@ export function mergeFeedAndToc(feedItems: FeedItem[], tocItems: TocChapter[]): 
   }
   return merged;
 }
+
+const MIN_NUMBERED = 3;
+const DIRECTION_MAJORITY = 0.7;
+
+/** Map each TOC chapter's canonical URL to a 0-based reading-order position (oldest = 0), inferring the
+ *  TOC's direction from the chapter-number trend and reversing when it lists newest-first. Returns null
+ *  when the numeric signal is too weak to trust (→ caller skips positioning). Pure. */
+export function tocReadingOrder(toc: readonly { url: string; number: number | null }[]): Map<string, number> | null {
+  const nums = toc.map((c) => c.number).filter((n): n is number => n != null);
+  if (nums.length < MIN_NUMBERED) return null;
+  let up = 0;
+  let down = 0;
+  for (let i = 1; i < nums.length; i++) {
+    if (nums[i]! > nums[i - 1]!) up++;
+    else if (nums[i]! < nums[i - 1]!) down++;
+  }
+  const total = up + down;
+  if (total === 0) return null;
+  const ascending = up / total >= DIRECTION_MAJORITY ? true : down / total >= DIRECTION_MAJORITY ? false : null;
+  if (ascending === null) return null;
+
+  const map = new Map<string, number>();
+  const n = toc.length;
+  toc.forEach((chapter, i) => map.set(canonicalUrl(chapter.url), ascending ? i : n - 1 - i));
+  return map;
+}
