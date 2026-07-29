@@ -84,13 +84,51 @@ describe('chooseSeriesMatch', () => {
     });
   });
 
-  test('series not identifiable in the current window (no category or path tie) → null', () => {
+  // A multi-novel feed whose current window doesn't include the series must ISOLATE
+  // (via the fallback), not return null — otherwise a *discovered* site-wide feed (the
+  // page advertises `/feed/`, not a per-series feed — e.g. a dense WordPress translator)
+  // defaults to WHOLE_FEED and ingests every other work + mis-titles the series.
+  test('multi-novel categorized feed, series absent from the window → CATEGORY fallback, not null', () => {
     const items = [
-      item('https://reader.example/first-90/', ['First Novel']),
-      item('https://reader.example/second-439/', ['Second Novel']),
+      item('https://cg.example/novel-tl/kitty/kitty-33/', ['Kitty']),
+      item('https://cg.example/novel-tl/lwnd/lwnd-10/', ['LWND']),
     ];
+    // ≥2 distinct novel categories, none ours → the feed is multi-novel; isolate by slug.
+    expect(chooseSeriesMatch(items, 'https://cg.example/novel-tl/demo/')).toEqual({
+      type: 'CATEGORY',
+      value: 'demo',
+    });
+  });
 
-    expect(chooseSeriesMatch(items, 'https://reader.example/novel/zeta/')).toBeNull();
+  test('multi-novel by other works under the series parent path (uncategorized) → PATH_PREFIX, not null', () => {
+    const items = [
+      item('https://cg.example/novel-tl/kitty/kitty-33/'),
+      item('https://cg.example/novel-tl/lwnd/lwnd-10/'),
+    ];
+    // No categories, but other works sit under the shared `/novel-tl/` parent → multi-novel.
+    expect(chooseSeriesMatch(items, 'https://cg.example/novel-tl/demo/')).toEqual({
+      type: 'PATH_PREFIX',
+      value: '/novel-tl/demo/',
+    });
+  });
+
+  test('no multi-novel signal (single-work / custom structure), series absent → null (discovered stays WHOLE_FEED)', () => {
+    const items = [
+      item('https://reader.example/read/12345/'),
+      item('https://reader.example/read/12346/'),
+    ];
+    // No categories, and item URLs don't share the series' parent path → can't tell it's
+    // multi-novel; a legit per-series feed with a custom URL scheme must stay WHOLE_FEED.
+    expect(chooseSeriesMatch(items, 'https://reader.example/novels/zeta/')).toBeNull();
+  });
+
+  test('a single non-matching novel category (one work), series absent → null (not multi-novel)', () => {
+    const items = [
+      item('https://reader.example/read/1/', ['Zeta Chronicles']),
+      item('https://reader.example/read/2/', ['Zeta Chronicles']),
+    ];
+    // Only one distinct category → below the ≥2 multi-novel threshold; don't over-isolate.
+    expect(chooseSeriesMatch(items, 'https://reader.example/novels/zeta/')).toBeNull();
   });
 });
 

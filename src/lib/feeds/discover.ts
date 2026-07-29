@@ -99,9 +99,33 @@ export function chooseSeriesMatch(items: FeedItem[], seriesUrl: string): SeriesM
   if (items.length > 0 && pathItems.length === items.length) return { type: 'WHOLE_FEED' };
   if (pathItems.length > 0) return { type: 'PATH_PREFIX', value: seriesPath };
 
-  // Can't positively identify this series in the feed (e.g. a site-wide feed whose
-  // current window doesn't include this novel). Caller falls back (see below).
-  return null;
+  // No positive tie. If the feed is *demonstrably* multi-novel — ≥2 distinct novel
+  // categories, or other works sitting under the series' parent path — the series is just
+  // absent from this window, so isolate defensively (via the fallback) rather than let a
+  // *discovered* site-wide feed default to WHOLE_FEED and ingest every other work (+ take
+  // its title from a stray channel entry). Otherwise (a single work, or we genuinely can't
+  // tell) return null, so a real per-series feed with a custom URL scheme stays WHOLE_FEED.
+  const parentSegments = seriesPath.split('/').filter(Boolean).slice(0, -1);
+  const parentPrefix = parentSegments.length > 0 ? `/${parentSegments.join('/')}/` : null;
+  let otherWorkPaths = false;
+  if (parentPrefix) {
+    for (const it of items) {
+      try {
+        const path = new URL(it.url).pathname;
+        if (path.startsWith(parentPrefix)) {
+          const work = path.slice(parentPrefix.length).split('/').filter(Boolean)[0];
+          if (work && work !== slug) {
+            otherWorkPaths = true;
+            break;
+          }
+        }
+      } catch {
+        // ignore unparseable urls
+      }
+    }
+  }
+  const multiNovel = novelCategories.size >= 2 || otherWorkPaths;
+  return multiNovel ? fallbackSeriesMatch(items, seriesUrl) : null;
 }
 
 /**

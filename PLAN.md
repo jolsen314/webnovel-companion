@@ -668,6 +668,18 @@ gating trims the daily set) and WP-40 (making CF-static cheap/304 shrinks per-so
 
 ## Changelog
 
+- **2026-07-29** — **Fix: `chooseSeriesMatch` isolates a discovered multi-novel feed instead of defaulting to
+  WHOLE_FEED.** Found when re-adding a series on a dense multi-novel WordPress site ingested ~30 cross-work chapters and
+  took its title from an unrelated work's feed entry. Root cause: `addSeries` only applied the slug fallback when the
+  feed was *guessed* (`usedGuesses`); a series page that advertises the **site-wide** `/feed/` yields a *discovered* yet
+  multi-novel feed, and when `chooseSeriesMatch` couldn't isolate the series (absent from the ~30-item window) it
+  returned `null` → `WHOLE_FEED` → every work merged in + title from the feed's channel entry. Fix (test-first, pure):
+  with no positive tie, `chooseSeriesMatch` now detects a *demonstrably multi-novel* feed — **≥2 distinct novel
+  categories**, or **other works under the series' parent path** — and returns the `fallbackSeriesMatch` isolation
+  (CATEGORY-slug or PATH_PREFIX) rather than `null`; it still returns `null` for a single-work / custom-scheme feed so a
+  real per-series feed stays WHOLE_FEED (no regression). **260 unit + 47 integration green, typecheck clean.** *(Also
+  cleaned the prod contamination this surfaced. Separately confirmed the site's `/feed/` **does** reach Vercel, so the
+  dense-feed miss is a polling-*frequency* problem, not a CF one — see the WP-40 detail + the frequent-poll follow-up.)*
 - **2026-07-28** — **WP-40 PARKED after a Vercel spike: TLS impersonation can't clear the owner's CF hosts.** Chose
   [`impit`](https://github.com/apify/impit) (Apify; browser-TLS/JA3 + HTTP/2 via patched rustls, napi-rs Node binding,
   prebuilt linux-x64-gnu, ~0 runtime deps, Apache-2.0) after a research + dependency-vetting pass, and deployed a
