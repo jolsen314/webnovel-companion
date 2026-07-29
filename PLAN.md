@@ -41,11 +41,13 @@ To re-prioritize, move rows and update the `NEXT` marker. Don't silently reorder
 
 ## Current focus
 
-> **NEXT: WP-41 (poll time-budget guard + rotation) + WP-27 (status→cadence gating)** — the pivot after the WP-40
-> spike (below) showed a cheap CF bypass isn't viable, so making the **render** path *sustainable* is now the priority.
-> Also queued: **WP-29 editor UI** (schedule editor + push delivery), **WP-30** (title backfill + manual edit),
-> **WP-34** (feed→TOC switch, CF-gated), **WP-37** (auto-discover the chapter-TOC URL), **WP-39** (add-time dedup),
-> **WP-28** (styling/theming).
+> **NEXT: WP-42 (poll-once-per-feed + politeness)** — design approved + feed-reachability verified (2026-07-29); the
+> dedup refactor is the foundation that makes frequent polling (**WP-43**) polite, and it also eases **WP-41** (poll
+> budget) + **WP-27** (cadence). After the WP-40 spike showed a cheap CF bypass isn't viable, the win for the dense
+> CF-fronted feed turned out to be *frequency*, not bypass — its `/feed/` reaches Vercel fine (CF gates only the page).
+> Also queued: **WP-41** (budget guard) + **WP-27** (cadence), **WP-29 editor UI** (schedule editor + push delivery),
+> **WP-30** (title backfill + manual edit), **WP-34** (feed→TOC switch, CF-gated), **WP-37** (auto-discover the
+> chapter-TOC URL), **WP-39** (add-time dedup), **WP-28** (styling/theming).
 >
 > **WP-40 parked — spike (2026-07-28): TLS impersonation can't clear the owner's CF hosts.** An `impit`
 > (browser-TLS/JA3 + HTTP/2) probe deployed to Vercel returned Cloudflare's **JS *managed challenge*** ("Just a
@@ -126,6 +128,8 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-27 | Reading-status lifecycle for poll + store — status→**cadence** gating (skip COMPLETED/DROPPED; PLANNED/backlog polled rarely, not daily — matters because RENDER can't 304), PLANNED seeds a **summary** not the full TOC (backfill on →READING), per-status notify rules | M1 | `TODO` | WP-07, WP-17, WP-18 |
 | WP-40 | ~~Cheap CF bypass via local browser-TLS-impersonation GET~~ **PARKED (spike 2026-07-28): TLS impersonation (`impit`) can't clear the owner's CF hosts** — CF serves a **JS managed challenge** to Vercel's datacenter IP; only a real browser (render) or a residential IP clears it. Premise (hosts are "static, just IP-challenged") was wrong. Revisit = third-party unblocker (privacy + likely same budget limit) | M1↑ | `BLOCKED` | WP-17b |
 | WP-41 | Poll time-budget guard + rotation — the sequential `pollAllSources` loop has no deadline under the 60s ceiling; stop before it and rotate the start offset so the tail (esp. RENDER sources) degrades gracefully instead of being silently dropped daily | M1 | `TODO` | WP-07 |
+| ⭐ WP-42 | Poll-once-per-feed + politeness — group active sources by `(fetchMode, fetchUrl)`, fetch each feed **once** (shared conditional GET), fan out to every series on it; honor 429/Retry-After (`Source.backoffUntil` migration) + per-host min-interval cap; RENDER excluded from the fast tier — [design](docs/superpowers/specs/2026-07-29-poll-dedup-politeness-design.md) | M1 | `NEXT` | WP-07 |
+| WP-43 | Frequent polling (external trigger) — GitHub Actions / cron-job.org → `/api/cron/poll` every ~1–2h (Hobby cron is daily) for the **PLAIN-feed tier only**; composes with WP-41 rotation + WP-27 cadence. **Feed-vs-Vercel reachability verified 2026-07-29 (feed reliably reachable; CF gates the page, not `/feed/`)** | M1 | `TODO` | WP-42, WP-41 |
 | WP-22 | MV3 browser extension (progress capture + "track this") | M2 | `TODO` | WP-08 |
 | WP-23 | Chinese mining: `tokenize/zh.ts` + `dict/cedict.ts` | M3 | `TODO` | WP-04 |
 | WP-02 | `lib/srs/sm2.ts` (pure, test-first) — SM-2 scheduler | M3 | `TODO` | WP-00 |
@@ -668,6 +672,20 @@ gating trims the daily set) and WP-40 (making CF-static cheap/304 shrinks per-so
 
 ## Changelog
 
+- **2026-07-29** — **Designed WP-42 (poll-once-per-feed + politeness) + WP-43 (frequent polling); verified the feed
+  reaches Vercel.** The dense-feed miss is a polling-*frequency* problem, not a Cloudflare one — but before committing
+  to the design we settled a real confound (an earlier feed-poll success coincided with an unusual TOC success, and the
+  health machine resets failure state on success, so current columns couldn't answer it). A throwaway feed-reachability
+  probe (loop N GETs, report egress IP + per-attempt class; run on a preview) gave the decisive result: from the **same
+  egress IP**, the **TOC page challenged 5/5** while the **`/feed/` returned 30 items 8/8** → Cloudflare gates the
+  **page, not the feed**, so the feed is **reliably reachable from Vercel regardless of IP**. Design (owner-approved):
+  `2026-07-29-poll-dedup-politeness-design.md` — a **feed-centric** poll loop (group sources by `(fetchMode, fetchUrl)`,
+  fetch each feed once with a shared conditional GET, fan out per-series), **honor 429/Retry-After** (additive
+  `Source.backoffUntil`), a **per-host min-interval cap** (uses `lastCheckedAt`), and **RENDER excluded from the fast
+  tier**. WP-43 (external trigger, since Hobby cron is daily) is the follow-up and composes with WP-41 rotation + WP-27
+  cadence. Kept the browser-like UA (an honest bot UA risks *more* CF challenges for marginal gain on a private app).
+  Probe fully torn down (branch deleted local + remote; nothing on `main`). *(Real-host probe detail in the gitignored
+  `TESTING-NOTES.local.md`.)*
 - **2026-07-29** — **Fix: `chooseSeriesMatch` isolates a discovered multi-novel feed instead of defaulting to
   WHOLE_FEED.** Found when re-adding a series on a dense multi-novel WordPress site ingested ~30 cross-work chapters and
   took its title from an unrelated work's feed entry. Root cause: `addSeries` only applied the slug fallback when the
