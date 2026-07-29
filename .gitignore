@@ -19,3 +19,6 @@ coverage/
 skills-lock.json
 *.local.md
 /local/
+
+# Local ad-hoc curl/scratch notes (may contain secrets)
+scratch

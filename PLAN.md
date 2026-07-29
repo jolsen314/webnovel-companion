@@ -41,13 +41,19 @@ To re-prioritize, move rows and update the `NEXT` marker. Don't silently reorder
 
 ## Current focus
 
-> **NEXT: WP-29's schedule-editor UI** (lib + schema + cron wiring done; editor UI + push delivery remain), then the
-> reading-status lifecycle (**WP-27**) and **WP-28** (styling/theming). **Elevated (owner wants soon): WP-40** — cheap
-> local CF-static bypass (browser-TLS-impersonation, 304-capable) so CF-fronted-but-static hosts (e.g.
-> cf-wordpress-source) fetch reliably without the uncacheable render. Also queued: **WP-30** (title backfill + manual
-> edit), **WP-34** (feed→TOC switch, CF-gated), **WP-37** (auto-discover the chapter-TOC URL), and **WP-39** (add-time
-> dedup). **Owner has a pending cleanup** to run: the `db:cleanup` CLI (WP-38) against prod to recover the
-> phantom-chapter listings + the duplicate series.
+> **NEXT: WP-41 (poll time-budget guard + rotation) + WP-27 (status→cadence gating)** — the pivot after the WP-40
+> spike (below) showed a cheap CF bypass isn't viable, so making the **render** path *sustainable* is now the priority.
+> Also queued: **WP-29 editor UI** (schedule editor + push delivery), **WP-30** (title backfill + manual edit),
+> **WP-34** (feed→TOC switch, CF-gated), **WP-37** (auto-discover the chapter-TOC URL), **WP-39** (add-time dedup),
+> **WP-28** (styling/theming).
+>
+> **WP-40 parked — spike (2026-07-28): TLS impersonation can't clear the owner's CF hosts.** An `impit`
+> (browser-TLS/JA3 + HTTP/2) probe deployed to Vercel returned Cloudflare's **JS *managed challenge*** ("Just a
+> moment…", 403, ~5.9 KB interstitial) for **both** cf-wordpress-source and cf-static-source. The block is the **datacenter
+> IP**, not the fingerprint — so no cheap code-only GET clears it (only a real browser = render, or a *residential* IP
+> we control). Self-hosted residential egress was declined (no always-on home box). **Revisit third-party unblockers
+> later** — but they carry the WP-17b privacy tradeoff *and* likely hit the **same poll-budget limit as render** (per-
+> request latency), so WP-41 matters regardless. See the WP-40 detail + changelog.
 
 The MVP is **live on Vercel + Neon** — feed pipeline, auth gate, library/detail UI, **Web Push (WP-09, verified on a
 device)**, the **headless renderer (WP-17b, live-validated)**, and **paid→free "now free" detection (WP-20)**. The
@@ -118,7 +124,7 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-RC | Dense-feed miss-detection + TOC reconcile fallback | M1 | `TODO` | WP-05, WP-07, WP-17 |
 | WP-21 | Plan-to-read completion watch (wire WP-13 + notify) — compare **max chapter number** vs target, not post count (split-chapter safe; see CONTEXT.md) | M1 | `TODO` | WP-13, WP-07 |
 | WP-27 | Reading-status lifecycle for poll + store — status→**cadence** gating (skip COMPLETED/DROPPED; PLANNED/backlog polled rarely, not daily — matters because RENDER can't 304), PLANNED seeds a **summary** not the full TOC (backfill on →READING), per-status notify rules | M1 | `TODO` | WP-07, WP-17, WP-18 |
-| WP-40 | Cheap CF bypass for **static** CF-blocked hosts — a **local** browser-TLS-impersonation GET (304-capable) so CF-static sites (server-rendered, just IP-challenged) skip the uncacheable headless render; reserve RENDER for genuinely JS TOCs. *Not* a third-party unblocker (keeps WP-17b privacy stance) | M1↑ | `TODO` | WP-17b |
+| WP-40 | ~~Cheap CF bypass via local browser-TLS-impersonation GET~~ **PARKED (spike 2026-07-28): TLS impersonation (`impit`) can't clear the owner's CF hosts** — CF serves a **JS managed challenge** to Vercel's datacenter IP; only a real browser (render) or a residential IP clears it. Premise (hosts are "static, just IP-challenged") was wrong. Revisit = third-party unblocker (privacy + likely same budget limit) | M1↑ | `BLOCKED` | WP-17b |
 | WP-41 | Poll time-budget guard + rotation — the sequential `pollAllSources` loop has no deadline under the 60s ceiling; stop before it and rotate the start offset so the tail (esp. RENDER sources) degrades gracefully instead of being silently dropped daily | M1 | `TODO` | WP-07 |
 | WP-22 | MV3 browser extension (progress capture + "track this") | M2 | `TODO` | WP-08 |
 | WP-23 | Chinese mining: `tokenize/zh.ts` + `dict/cedict.ts` | M3 | `TODO` | WP-04 |
@@ -590,6 +596,34 @@ WP-34/WP-29 (CF-gated sites), and the harder **403 `cf-mitigated`** set (render-
 need more than a fingerprint. **Confirmed WP-40 hosts (render works from Vercel, only plain fetch blocked):
 cf-wordpress-source, cf-static-source.**
 
+**Spike result — PARKED (2026-07-28).** Research pointed to [`impit`](https://github.com/apify/impit) (Apify; Rust/rustls
+patched for a real browser ClientHello + HTTP/2 ordering; napi-rs Node binding, prebuilt linux-x64-gnu, ~0 runtime deps,
+Apache-2.0) as the best serverless fit — strictly better than spawning `curl-impersonate`. A throwaway probe route
+(`/api/bypass-probe`, both a plain `politeFetch` and an `impit` GET, bearer-gated + SSRF-guarded) was deployed to a
+Vercel preview and run against both confirmed hosts. **Result: impit did NOT clear either** — both returned Cloudflare's
+**JS *managed challenge*** ("Just a moment…", HTTP 403, ~5.9 KB interstitial), `cleared:false`, 0 chapters; plain fetch
+was a bare 403. So the WP-40 premise was **wrong**: these hosts aren't "static, merely IP-challenged" — from Vercel's
+**datacenter IP** they're served a challenge that requires **executing JavaScript**, which TLS impersonation can't do
+(nor could `impers`/curl-impersonate — also no JS). Confirmed by research: pure-code solvers (`cloudscraper`) are dead
+for the modern managed challenge; FlareSolverr/Byparr are just headless browsers (= render cost); and **`cf_clearance`
+is bound to IP+UA+TLS**, so "solve once, cache the cookie" fails on Vercel's rotating egress IPs. The real blocker is
+**IP reputation**, full stop.
+
+**Disposition.** The only mechanisms that clear these hosts are (a) a real browser — the **render** path we already
+have — or (b) a **residential IP we control**. (b) — a self-hosted residential egress (home box + Tailscale/CF-Tunnel,
+a `RESIDENTIAL` fetch rung) is the *only* cheap + 304-capable + privacy-respecting option, but was **declined** (owner
+has no always-on home machine; a Pi + tunnel + SSRF-locked relay + home-uptime dependency isn't worth it for two
+sites). So: **keep CF hosts on render**, and pivot to making render sustainable — **WP-41** (poll budget guard) +
+**WP-27** (cadence gating). Spike torn down (branch `wp40-cf-impit-spike` deleted; no `impit` dep, probe route, or
+middleware exemption on `main`).
+
+**Revisit — third-party unblockers (deferred, not chosen).** A hosted unblocker (ZenRows / ScraperAPI / Scrapfly /
+Bright Data) *would* clear CF (their own browsers + residential IPs), but (1) it reverses the **WP-17b privacy stance**
+— the URLs of what the owner reads would go to a vendor — and (2) **open question:** it likely hits the **same
+time-budget limit as render** — a per-request unblocker call is *also* multi-second, so a large CF/PLANNED set still
+blows the 60 s poll ceiling. So even reconsidering it, **WP-41 + WP-27 remain prerequisites**, not alternatives.
+Real-host probe detail (statuses, byte sizes) is in the gitignored `TESTING-NOTES.local.md`.
+
 ### WP-41 — Poll time-budget guard + rotation
 
 **Motivation (owner, 2026-07-28):** `pollAllSources` is a **strictly sequential** loop (`for … await pollSource`) with
@@ -634,6 +668,23 @@ gating trims the daily set) and WP-40 (making CF-static cheap/304 shrinks per-so
 
 ## Changelog
 
+- **2026-07-28** — **WP-40 PARKED after a Vercel spike: TLS impersonation can't clear the owner's CF hosts.** Chose
+  [`impit`](https://github.com/apify/impit) (Apify; browser-TLS/JA3 + HTTP/2 via patched rustls, napi-rs Node binding,
+  prebuilt linux-x64-gnu, ~0 runtime deps, Apache-2.0) after a research + dependency-vetting pass, and deployed a
+  throwaway probe route (`/api/bypass-probe` — plain vs impit GET, bearer + SSRF-guarded) to a Vercel preview. **Both
+  confirmed hosts (cf-wordpress-source, cf-static-source) returned Cloudflare's JS *managed challenge*** ("Just a moment…",
+  403, ~5.9 KB), `cleared:false` — the block is Vercel's **datacenter IP**, not the TLS fingerprint, so no cheap
+  code-only GET clears it (research confirmed: `cloudscraper` dead for managed challenges; FlareSolverr/Byparr = headless
+  browsers = render cost; `cf_clearance` is IP+UA+TLS-bound so cookie-caching fails on Vercel's rotating IPs). The
+  premise ("static, merely IP-challenged") was wrong. **Disposition:** keep CF hosts on **render**; self-hosted
+  residential egress (the only cheap/304/private alternative) declined (no always-on home box); **pivot to WP-41 (poll
+  budget guard) + WP-27 (cadence gating)** to make render sustainable. Third-party unblockers noted for later revisit —
+  but they carry the privacy tradeoff *and* likely the same per-request budget limit, so WP-41/27 are prerequisites
+  regardless. Spike fully torn down: branch `wp40-cf-impit-spike` deleted (local + remote); no `impit` dep, probe route,
+  or middleware exemption on `main`. *(Detour cost: several deploy cycles chasing a 401 that turned out to be the
+  single-user **auth middleware** gating `/api/bypass-probe` — the probe needed the same public-allowlist exemption as
+  `/api/render`/`/api/cron`. Not a real auth bug; only surfaced because previews are SSO-protected + the route wasn't
+  allowlisted.)* Real-host probe detail (statuses, sizes) in the gitignored `TESTING-NOTES.local.md`.
 - **2026-07-28** — **Fix (WP-35 follow-up): `backfillFromToc` now positions feed-ahead series instead of skipping.**
   **Where it was missing:** the WP-35 spec says a full TOC read positions *every* stored chapter — matched rows get
   their normalized index, any absent chapter is appended after the TOC block (kept, ordered last). The implementation
