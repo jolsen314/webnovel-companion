@@ -1,5 +1,15 @@
 import { describe, expect, test } from 'vitest';
-import { pollSource, type PollableSource, type PollPorts } from '../../../src/server/services/poll';
+import {
+  chooseConditionalState,
+  groupPollSources,
+  hostGate,
+  MIN_POLL_INTERVAL_MINUTES,
+  pollAllSources,
+  pollSource,
+  type PollableSource,
+  type PollEffects,
+  type PollPorts,
+} from '../../../src/server/services/poll';
 import type { PoliteResult } from '../../../src/lib/feeds/fetch';
 import type { SeriesMatch } from '../../../src/lib/feeds/discover';
 import type { KnownChapter } from '../../../src/lib/feeds/diff';
@@ -23,6 +33,9 @@ function source(overrides: Partial<PollableSource> = {}): PollableSource {
     consecutiveFailures: 0,
     failureScore: 0,
     lastFailureType: null,
+    host: 'x.example',
+    lastCheckedAt: null,
+    backoffUntil: null,
     ...overrides,
   };
 }
@@ -234,5 +247,254 @@ describe('pollSource', () => {
     );
     expect(effects.newChapters).toEqual([]);
     expect(effects.accessReconciled.map((c) => c.url)).toEqual(['https://x.example/novel/a/chapter-1/']);
+  });
+});
+
+describe('groupPollSources', () => {
+  test('collapses sources sharing (fetchMode, fetchUrl)', () => {
+    const a = source({ id: 'a', fetchUrl: 'https://s.example/feed/', fetchMode: 'PLAIN' });
+    const b = source({ id: 'b', fetchUrl: 'https://s.example/feed/', fetchMode: 'PLAIN' });
+    const c = source({ id: 'c', fetchUrl: 'https://s.example/feed/', fetchMode: 'RENDER' });
+    const groups = groupPollSources([a, b, c]);
+    expect(groups).toHaveLength(2); // (PLAIN,feed) has a+b; (RENDER,feed) has c
+    const shared = groups.find((g) => g.fetchMode === 'PLAIN')!;
+    expect(shared.sources.map((s) => s.id).sort()).toEqual(['a', 'b']);
+    const rendered = groups.find((g) => g.fetchMode === 'RENDER')!;
+    expect(rendered.sources.map((s) => s.id)).toEqual(['c']);
+  });
+
+  test('derives group.host from the fetched feed host, not the stored page host', () => {
+    const s = source({ host: 'page.example', fetchUrl: 'https://feed-cdn.example/rss' });
+    const [group] = groupPollSources([s]);
+    expect(group!.host).toBe('feed-cdn.example');
+  });
+
+  test('falls back to the stored host when fetchUrl does not parse as a URL', () => {
+    const s = source({ host: 'page.example', fetchUrl: 'not-a-url' });
+    const [group] = groupPollSources([s]);
+    expect(group!.host).toBe('page.example');
+  });
+});
+
+describe('pollAllSources', () => {
+  const NOW = new Date('2026-07-29T12:00:00Z');
+  const FEED = 'https://feed.example/rss';
+
+  function multiPorts(args: {
+    sources: PollableSource[];
+    fetch: PollPorts['fetch'];
+    stored?: Record<string, KnownChapter[]>;
+  }): PollPorts & { loadActiveSources: () => Promise<PollableSource[]>; applied: PollEffects[] } {
+    const applied: PollEffects[] = [];
+    return {
+      applied,
+      fetch: args.fetch,
+      loadActiveSources: async () => args.sources,
+      loadStoredChapters: async (seriesId) => args.stored?.[seriesId] ?? [],
+      applyPollEffects: async (e) => {
+        applied.push(e);
+      },
+    };
+  }
+
+  test('two series on one feed → the feed is fetched ONCE, both get their new chapter', async () => {
+    const feed = RSS(ITEM('g1', 'https://x.example/c1'));
+    const s1 = source({ id: 's1', seriesId: 'ser1', fetchUrl: FEED });
+    const s2 = source({ id: 's2', seriesId: 'ser2', fetchUrl: FEED });
+    let fetches = 0;
+    const p = multiPorts({
+      sources: [s1, s2],
+      fetch: async () => {
+        fetches++;
+        return ok(feed);
+      },
+      stored: { ser1: [], ser2: [] },
+    });
+
+    await pollAllSources(p, NOW);
+
+    expect(fetches).toBe(1); // ONE fetch for the shared feed
+    expect(p.applied.filter((e) => e.newChapters.length === 1)).toHaveLength(2); // both series diffed it
+  });
+
+  test('429 with Retry-After → every source on the host gets backoffUntil', async () => {
+    const s1 = source({ id: 's1', seriesId: 'ser1', fetchUrl: FEED, host: 'h.example' });
+    const p = multiPorts({
+      sources: [s1],
+      fetch: async () => ({ outcome: 'HTTP_4XX', status: 429, retryAfter: '120' }),
+      stored: { ser1: [] },
+    });
+
+    await pollAllSources(p, NOW);
+
+    expect(p.applied[0]!.backoffUntil).toEqual(new Date(NOW.getTime() + 120_000));
+  });
+
+  test('429 on a shared feed → BOTH sources in the group get backoffUntil, not just one', async () => {
+    const s1 = source({ id: 's1', seriesId: 'ser1', fetchUrl: FEED, host: 'h.example' });
+    const s2 = source({ id: 's2', seriesId: 'ser2', fetchUrl: FEED, host: 'h.example' });
+    const p = multiPorts({
+      sources: [s1, s2],
+      fetch: async () => ({ outcome: 'HTTP_4XX', status: 429, retryAfter: '120' }),
+      stored: { ser1: [], ser2: [] },
+    });
+
+    await pollAllSources(p, NOW);
+
+    expect(p.applied).toHaveLength(2);
+    const expected = new Date(NOW.getTime() + 120_000);
+    expect(p.applied.map((e) => e.backoffUntil)).toEqual([expected, expected]);
+  });
+
+  test('200 with a new etag on a shared feed → BOTH sources carry the shared etag', async () => {
+    const feed = RSS(ITEM('g1', 'https://x.example/c1'));
+    const s1 = source({ id: 's1', seriesId: 'ser1', fetchUrl: FEED });
+    const s2 = source({ id: 's2', seriesId: 'ser2', fetchUrl: FEED });
+    const p = multiPorts({
+      sources: [s1, s2],
+      fetch: async () => ok(feed, { etag: '"v2"' }),
+      stored: { ser1: [], ser2: [] },
+    });
+
+    await pollAllSources(p, NOW);
+
+    expect(p.applied).toHaveLength(2);
+    expect(p.applied.map((e) => e.etag)).toEqual(['"v2"', '"v2"']);
+  });
+
+  test('a host past its min-interval last-checked skips the whole group without fetching', async () => {
+    const recentlyChecked = new Date(NOW.getTime() - 5 * 60_000); // 5 min ago, < 15 min floor
+    const s1 = source({ id: 's1', seriesId: 'ser1', fetchUrl: FEED, host: 'h.example', lastCheckedAt: recentlyChecked });
+    let fetches = 0;
+    const p = multiPorts({
+      sources: [s1],
+      fetch: async () => {
+        fetches++;
+        return ok(RSS(''));
+      },
+      stored: { ser1: [] },
+    });
+
+    const effects = await pollAllSources(p, NOW);
+
+    expect(fetches).toBe(0);
+    expect(effects).toEqual([]);
+    expect(p.applied).toEqual([]);
+  });
+
+  test('the host gate keys on the FETCHED feed host, not the stored page host', async () => {
+    const recentlyChecked = new Date(NOW.getTime() - 5 * 60_000); // 5 min ago, < 15 min floor
+    // Two sources with DIFFERENT stored page hosts but the SAME actual feed host (e.g. both
+    // proxied through a shared feed endpoint) — distinct fetchUrls, so distinct groups.
+    const s1 = source({
+      id: 's1',
+      seriesId: 'ser1',
+      host: 'site-a.example', // stored page host
+      fetchUrl: 'https://feeds.hub.example/site-a.xml', // actual feed host: feeds.hub.example
+      lastCheckedAt: recentlyChecked,
+    });
+    const s2 = source({
+      id: 's2',
+      seriesId: 'ser2',
+      host: 'site-b.example', // different stored page host
+      fetchUrl: 'https://feeds.hub.example/site-b.xml', // SAME actual feed host
+      lastCheckedAt: null,
+    });
+    let fetches = 0;
+    const p = multiPorts({
+      sources: [s1, s2],
+      fetch: async () => {
+        fetches++;
+        return ok(RSS(''));
+      },
+      stored: { ser1: [], ser2: [] },
+    });
+
+    const effects = await pollAllSources(p, NOW);
+
+    // s1's recent lastCheckedAt gates BOTH groups, because they share a feed host — even though
+    // s2's own stored page host has never been checked. Keying on the page host would leave s2's
+    // group ungated and fetch it.
+    expect(fetches).toBe(0);
+    expect(effects).toEqual([]);
+  });
+});
+
+describe('chooseConditionalState', () => {
+  test('all sources share one etag → send that etag', () => {
+    const g = [source({ etag: 'W/"v1"' }), source({ etag: 'W/"v1"' })];
+    expect(chooseConditionalState(g)).toEqual({ etag: 'W/"v1"', lastModified: null });
+  });
+
+  test('etags diverge → no conditional (full fetch)', () => {
+    const g = [source({ etag: 'W/"v1"' }), source({ etag: 'W/"v2"' })];
+    expect(chooseConditionalState(g)).toEqual({ etag: null, lastModified: null });
+  });
+
+  test('a new source (null etag) → full fetch even if others match', () => {
+    const g = [source({ etag: 'W/"v1"' }), source({ etag: null })];
+    expect(chooseConditionalState(g)).toEqual({ etag: null, lastModified: null });
+  });
+
+  test('no etags but a shared lastModified → send If-Modified-Since', () => {
+    const g = [
+      source({ etag: null, lastModified: 'Mon, 28 Jul 2026 10:00:00 GMT' }),
+      source({ etag: null, lastModified: 'Mon, 28 Jul 2026 10:00:00 GMT' }),
+    ];
+    expect(chooseConditionalState(g)).toEqual({ etag: null, lastModified: 'Mon, 28 Jul 2026 10:00:00 GMT' });
+  });
+});
+
+describe('hostGate', () => {
+  const now = new Date('2026-07-29T12:00:00Z');
+  const min = MIN_POLL_INTERVAL_MINUTES * 60_000;
+
+  test('backoff in the future → skip:backoff (takes precedence)', () => {
+    expect(hostGate({ hostLastCheckedAt: null, hostBackoffUntil: new Date('2026-07-29T12:30:00Z'), now, minIntervalMs: min }))
+      .toEqual({ skip: true, reason: 'backoff' });
+  });
+  test('polled 5 min ago (< interval) → skip:min-interval', () => {
+    expect(hostGate({ hostLastCheckedAt: new Date('2026-07-29T11:55:00Z'), hostBackoffUntil: null, now, minIntervalMs: min }))
+      .toEqual({ skip: true, reason: 'min-interval' });
+  });
+  test('polled 20 min ago, no backoff → ok', () => {
+    expect(hostGate({ hostLastCheckedAt: new Date('2026-07-29T11:40:00Z'), hostBackoffUntil: null, now, minIntervalMs: min }))
+      .toEqual({ skip: false, reason: 'ok' });
+  });
+  test('never polled, expired backoff → ok', () => {
+    expect(hostGate({ hostLastCheckedAt: null, hostBackoffUntil: new Date('2026-07-29T11:00:00Z'), now, minIntervalMs: min }))
+      .toEqual({ skip: false, reason: 'ok' });
+  });
+
+  // ── Precedence & boundary tests ─────────────────────────────────────────
+  test('backoff in future + recent poll (would min-interval) → skip:backoff (precedence)', () => {
+    expect(hostGate({
+      hostLastCheckedAt: new Date('2026-07-29T11:55:00Z'), // 5 min ago, within min-interval
+      hostBackoffUntil: new Date('2026-07-29T12:30:00Z'), // 30 min in future
+      now,
+      minIntervalMs: min,
+    }))
+      .toEqual({ skip: true, reason: 'backoff' });
+  });
+
+  test('hostBackoffUntil === now (expired at boundary) → ok (strict >)', () => {
+    expect(hostGate({
+      hostLastCheckedAt: null,
+      hostBackoffUntil: now, // exactly now, not in future
+      now,
+      minIntervalMs: min,
+    }))
+      .toEqual({ skip: false, reason: 'ok' });
+  });
+
+  test('now - hostLastCheckedAt === minIntervalMs exactly (at boundary) → ok (strict <)', () => {
+    const exactlyMinAgo = new Date(now.getTime() - min);
+    expect(hostGate({
+      hostLastCheckedAt: exactlyMinAgo, // exactly 15 min ago
+      hostBackoffUntil: null,
+      now,
+      minIntervalMs: min,
+    }))
+      .toEqual({ skip: false, reason: 'ok' });
   });
 });

@@ -41,13 +41,17 @@ To re-prioritize, move rows and update the `NEXT` marker. Don't silently reorder
 
 ## Current focus
 
-> **NEXT: WP-42 (poll-once-per-feed + politeness)** — design approved + feed-reachability verified (2026-07-29); the
-> dedup refactor is the foundation that makes frequent polling (**WP-43**) polite, and it also eases **WP-41** (poll
-> budget) + **WP-27** (cadence). After the WP-40 spike showed a cheap CF bypass isn't viable, the win for the dense
-> CF-fronted feed turned out to be *frequency*, not bypass — its `/feed/` reaches Vercel fine (CF gates only the page).
-> Also queued: **WP-41** (budget guard) + **WP-27** (cadence), **WP-29 editor UI** (schedule editor + push delivery),
-> **WP-30** (title backfill + manual edit), **WP-34** (feed→TOC switch, CF-gated), **WP-37** (auto-discover the
-> chapter-TOC URL), **WP-39** (add-time dedup), **WP-28** (styling/theming).
+> **WP-42 (poll-once-per-feed + politeness) is DONE (2026-07-30)** — feed-centric loop (group by `(fetchMode,
+> fetchUrl)`, fetch once, fan out), 429/Retry-After backoff, and the per-host min-interval cap are all in and covered
+> unit + real-DB (two series sharing one feed fetched once; a host polled <15 min ago skipped, `lastCheckedAt`
+> untouched). 281 unit + 49 integration tests green.
+>
+> **NEXT: WP-41 (poll time-budget guard + rotation)** — the sequential `pollAllSources` loop has no deadline under the
+> 60s ceiling; needed before **WP-43** (frequent external-trigger polling) can lean on it, and it composes with
+> WP-42's per-host gate already in place. After WP-41: **WP-27** (cadence), **WP-43** (frequent polling, now
+> unblocked by WP-42), **WP-29 editor UI** (schedule editor + push delivery), **WP-30** (title backfill + manual
+> edit), **WP-34** (feed→TOC switch, CF-gated), **WP-37** (auto-discover the chapter-TOC URL), **WP-39** (add-time
+> dedup), **WP-28** (styling/theming).
 >
 > **WP-40 parked — spike (2026-07-28): TLS impersonation can't clear the owner's CF hosts.** An `impit`
 > (browser-TLS/JA3 + HTTP/2) probe deployed to Vercel returned Cloudflare's **JS *managed challenge*** ("Just a
@@ -127,8 +131,8 @@ Priority order = row order. `⭐` = load-bearing / do-first.
 | WP-21 | Plan-to-read completion watch (wire WP-13 + notify) — compare **max chapter number** vs target, not post count (split-chapter safe; see CONTEXT.md) | M1 | `TODO` | WP-13, WP-07 |
 | WP-27 | Reading-status lifecycle for poll + store — status→**cadence** gating (skip COMPLETED/DROPPED; PLANNED/backlog polled rarely, not daily — matters because RENDER can't 304), PLANNED seeds a **summary** not the full TOC (backfill on →READING), per-status notify rules | M1 | `TODO` | WP-07, WP-17, WP-18 |
 | WP-40 | ~~Cheap CF bypass via local browser-TLS-impersonation GET~~ **PARKED (spike 2026-07-28): TLS impersonation (`impit`) can't clear the owner's CF hosts** — CF serves a **JS managed challenge** to Vercel's datacenter IP; only a real browser (render) or a residential IP clears it. Premise (hosts are "static, just IP-challenged") was wrong. Revisit = third-party unblocker (privacy + likely same budget limit) | M1↑ | `BLOCKED` | WP-17b |
-| WP-41 | Poll time-budget guard + rotation — the sequential `pollAllSources` loop has no deadline under the 60s ceiling; stop before it and rotate the start offset so the tail (esp. RENDER sources) degrades gracefully instead of being silently dropped daily | M1 | `TODO` | WP-07 |
-| ⭐ WP-42 | Poll-once-per-feed + politeness — group active sources by `(fetchMode, fetchUrl)`, fetch each feed **once** (shared conditional GET), fan out to every series on it; honor 429/Retry-After (`Source.backoffUntil` migration) + per-host min-interval cap; RENDER excluded from the fast tier — [design](docs/superpowers/specs/2026-07-29-poll-dedup-politeness-design.md) | M1 | `NEXT` | WP-07 |
+| WP-41 | Poll time-budget guard + rotation — the sequential `pollAllSources` loop has no deadline under the 60s ceiling; stop before it and rotate the start offset so the tail (esp. RENDER sources) degrades gracefully instead of being silently dropped daily | M1 | `NEXT` | WP-07 |
+| ⭐ WP-42 | Poll-once-per-feed + politeness — group active sources by `(fetchMode, fetchUrl)`, fetch each feed **once** (shared conditional GET), fan out to every series on it; honor 429/Retry-After (`Source.backoffUntil` migration) + per-host min-interval cap; RENDER excluded from the fast tier — [design](docs/superpowers/specs/2026-07-29-poll-dedup-politeness-design.md) | M1 | `DONE` | WP-07 |
 | WP-43 | Frequent polling (external trigger) — GitHub Actions / cron-job.org → `/api/cron/poll` every ~1–2h (Hobby cron is daily) for the **PLAIN-feed tier only**; composes with WP-41 rotation + WP-27 cadence. **Feed-vs-Vercel reachability verified 2026-07-29 (feed reliably reachable; CF gates the page, not `/feed/`)** | M1 | `TODO` | WP-42, WP-41 |
 | WP-22 | MV3 browser extension (progress capture + "track this") | M2 | `TODO` | WP-08 |
 | WP-23 | Chinese mining: `tokenize/zh.ts` + `dict/cedict.ts` | M3 | `TODO` | WP-04 |
@@ -672,6 +676,13 @@ gating trims the daily set) and WP-40 (making CF-static cheap/304 shrinks per-so
 
 ## Changelog
 
+- **2026-07-30** — **WP-42 DONE: poll-once-per-feed + politeness, real-DB verified.** Closed out the design with
+  integration coverage: two series sharing one feed URL (isolated via distinct `PATH_PREFIX` matches) are now proven
+  to be fetched **once** and both advance from that single fetch; a source polled **<15 min ago** (`lastCheckedAt`)
+  is proven to be skipped by the min-interval gate — no fetch, `lastCheckedAt`/`lastSuccessAt`/chapter count all
+  untouched. These sit alongside the existing unit-level dedup/backoff/hostGate coverage (Tasks 1–6) rather than
+  duplicating it. **281 unit + 49 integration tests green, typecheck clean.** WP-43 (frequent external-trigger
+  polling) is now unblocked on the WP-42 side; still wants WP-41 (poll time-budget guard), which is `NEXT`.
 - **2026-07-29** — **Designed WP-42 (poll-once-per-feed + politeness) + WP-43 (frequent polling); verified the feed
   reaches Vercel.** The dense-feed miss is a polling-*frequency* problem, not a Cloudflare one — but before committing
   to the design we settled a real confound (an earlier feed-poll success coincided with an unusual TOC success, and the

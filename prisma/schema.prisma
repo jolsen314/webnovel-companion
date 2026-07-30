@@ -161,6 +161,9 @@ model Source {
   etag         String?
   lastModified String?
 
+  // Politeness: a 429/Retry-After sets this; the poller skips the host until it passes (WP-42).
+  backoffUntil DateTime?
+
   createdAt DateTime @default(now())
 
   chapters Chapter[] // provenance: chapters discovered via this source

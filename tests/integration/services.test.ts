@@ -14,6 +14,7 @@ import {
   type FetchImpl,
 } from '../../src/server/services';
 import { db } from '../../src/server/db';
+import { getCurrentUserId } from '../../src/server/user';
 import type { PoliteResult } from '../../src/lib/feeds/fetch';
 import type { PollEffects } from '../../src/server/services/poll';
 import type { PushSendPorts, PushTarget } from '../../src/server/services/pushSend';
@@ -139,6 +140,91 @@ describe('pollAllSources (real DB)', () => {
   });
 });
 
+describe('pollAllSources dedup + politeness (real DB)', () => {
+  const HUB_FEED = 'https://hub.example/feed/';
+  const HUB_A1 = 'https://hub.example/novel-a/chapter-1/';
+  const HUB_B1 = 'https://hub.example/novel-b/chapter-1/';
+
+  /** A series bound to the shared HUB_FEED, isolated by a PATH_PREFIX match — the multi-novel
+   *  case where several series share one site-wide feed. */
+  async function addHubSeries(title: string, pathPrefix: string): Promise<string> {
+    const series = await db.series.create({ data: { userId: getCurrentUserId(), title } });
+    await db.source.create({
+      data: {
+        seriesId: series.id,
+        url: HUB_FEED,
+        host: 'hub.example',
+        type: 'FEED',
+        fetchMode: 'PLAIN',
+        feedUrl: HUB_FEED,
+        matchType: 'PATH_PREFIX',
+        matchValue: pathPrefix,
+      },
+    });
+    return series.id;
+  }
+
+  test('two series sharing one feed are fetched once and both advance', async () => {
+    const seriesA = await addHubSeries('Novel A', '/novel-a/');
+    const seriesB = await addHubSeries('Novel B', '/novel-b/');
+
+    let fetches = 0;
+    const fetch: FetchImpl = async (url) => {
+      if (url === HUB_FEED) fetches++;
+      return okRes(RSS(ITEM('ga1', HUB_A1) + ITEM('gb1', HUB_B1)));
+    };
+
+    const effects = await pollAllSources(fetch);
+
+    expect(fetches).toBe(1); // one feed URL, fetched once for both series
+    expect(effects).toHaveLength(2);
+
+    const chaptersA = await db.chapter.findMany({ where: { seriesId: seriesA } });
+    const chaptersB = await db.chapter.findMany({ where: { seriesId: seriesB } });
+    expect(chaptersA.map((c) => c.guid)).toEqual(['ga1']);
+    expect(chaptersB.map((c) => c.guid)).toEqual(['gb1']);
+  });
+
+  test('a host polled less than 15 minutes ago is skipped by the min-interval gate', async () => {
+    const seriesId = await addAlpha();
+    const now = new Date('2026-01-01T00:20:00.000Z');
+    const fiveMinAgo = new Date(now.getTime() - 5 * 60_000);
+    await db.source.updateMany({ where: { seriesId }, data: { lastCheckedAt: fiveMinAgo } });
+
+    let fetches = 0;
+    const fetch: FetchImpl = async (url) => {
+      if (url === FEED_URL) fetches++;
+      return okRes(RSS(ITEM('g3', C3) + ITEM('g2', C2) + ITEM('g1', C1)));
+    };
+
+    const effects = await pollAllSources(fetch, undefined, now);
+
+    expect(fetches).toBe(0); // gated before the fetch — min-interval not yet elapsed
+    expect(effects).toEqual([]);
+
+    const source = await db.source.findFirstOrThrow({ where: { seriesId } });
+    expect(source.lastCheckedAt?.getTime()).toBe(fiveMinAgo.getTime()); // untouched
+    expect(source.lastSuccessAt).toBeNull();
+    expect(await db.chapter.count({ where: { seriesId } })).toBe(2); // no new chapters
+  });
+
+  test('a successful poll clears a stale (expired) backoffUntil', async () => {
+    const seriesId = await addAlpha();
+    const now = new Date('2026-01-01T00:20:00.000Z');
+    const expiredBackoff = new Date(now.getTime() - 60_000); // in the past — gate must NOT skip
+    await db.source.updateMany({ where: { seriesId }, data: { backoffUntil: expiredBackoff } });
+
+    await pollAllSources(
+      fetchFrom({ [FEED_URL]: okRes(RSS(ITEM('g2', C2) + ITEM('g1', C1))) }),
+      undefined,
+      now,
+    );
+
+    const source = await db.source.findFirstOrThrow({ where: { seriesId } });
+    expect(source.backoffUntil).toBeNull(); // a healthy poll clears stale backoff
+  });
+});
+
 describe('page-watch source (real DB)', () => {
   const WATCH_URL = 'https://reader.example/series/omega/';
   const W1 = 'https://reader.example/series/omega/chapter-1/';
@@ -199,8 +285,11 @@ describe('page-watch source (real DB)', () => {
     // Add with W1 free, W2 locked.
     const { seriesId } = await addSeries({ url: WATCH_URL }, fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1) + ROW(W2, true))) }));
 
-    // Next poll: W2 is now free.
-    const effects = await pollAllSources(fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1) + ROW(W2))) }));
+    // Next poll: W2 is now free. Pass an explicit `now` since the host min-interval gate (WP-42)
+    // compares against the previous poll's persisted `lastCheckedAt` — the second call below needs
+    // to land more than MIN_POLL_INTERVAL_MINUTES later, not just microseconds after this one.
+    const t0 = new Date('2026-07-29T12:00:00Z');
+    const effects = await pollAllSources(fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1) + ROW(W2))) }), undefined, t0);
     expect(effects[0]!.becameFree.map((c) => c.url)).toEqual([W2]);
     expect(effects[0]!.newChapters).toEqual([]);
 
@@ -208,8 +297,10 @@ describe('page-watch source (real DB)', () => {
     expect(w2.access).toBe('FREE');
     expect(w2.becameFreeAt).not.toBeNull();
 
-    // A subsequent identical poll must not re-detect it (already FREE in storage).
-    const again = await pollAllSources(fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1) + ROW(W2))) }));
+    // A subsequent identical poll, well past the min-interval floor, must not re-detect it
+    // (already FREE in storage).
+    const t1 = new Date(t0.getTime() + 20 * 60_000); // 20 min later, past the 15-min floor
+    const again = await pollAllSources(fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1) + ROW(W2))) }), undefined, t1);
     expect(again[0]!.becameFree).toEqual([]);
   });
 

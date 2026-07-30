@@ -27,6 +27,15 @@ export interface FetchInit {
   signal?: AbortSignal;
 }
 
+/** Parse an HTTP `Retry-After` (delta-seconds or HTTP-date) to an absolute Date. Pure. */
+export function parseRetryAfter(value: string | null | undefined, now: Date): Date | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (/^\d+$/.test(trimmed)) return new Date(now.getTime() + Number(trimmed) * 1000);
+  const ms = Date.parse(trimmed);
+  return Number.isNaN(ms) ? null : new Date(ms);
+}
+
 export type FetchLike = (url: string, init: FetchInit) => Promise<HttpResponse>;
 
 export interface PoliteFetchOptions {
@@ -45,8 +54,9 @@ export type PoliteResult =
       etag: string | null;
       lastModified: string | null;
       finalUrl: string;
+      retryAfter?: string | null;
     }
-  | { outcome: FailureType; status?: number };
+  | { outcome: FailureType; status?: number; retryAfter?: string | null };
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 
@@ -100,12 +110,13 @@ export async function politeFetch(
   try {
     res = await fetchImpl(url, { method: 'GET', headers, redirect: 'follow', signal: controller.signal });
   } catch (err) {
-    return { outcome: classifyError(err) };
+    return { outcome: classifyError(err), retryAfter: null };
   } finally {
     clearTimeout(timer);
   }
 
   const { status } = res;
+  const retryAfter = res.headers.get('retry-after');
   if (status === 304) {
     return {
       outcome: 'SUCCESS',
@@ -115,13 +126,14 @@ export async function politeFetch(
       etag: res.headers.get('etag'),
       lastModified: res.headers.get('last-modified'),
       finalUrl: res.url,
+      retryAfter,
     };
   }
-  if (status >= 500) return { outcome: 'HTTP_5XX', status };
-  if (status >= 400) return { outcome: 'HTTP_4XX', status };
+  if (status >= 500) return { outcome: 'HTTP_5XX', status, retryAfter };
+  if (status >= 400) return { outcome: 'HTTP_4XX', status, retryAfter };
 
   const body = await res.text();
-  if (looksParked(body)) return { outcome: 'PARKED', status };
+  if (looksParked(body)) return { outcome: 'PARKED', status, retryAfter };
 
   return {
     outcome: 'SUCCESS',
@@ -131,5 +143,6 @@ export async function politeFetch(
     etag: res.headers.get('etag'),
     lastModified: res.headers.get('last-modified'),
     finalUrl: res.url,
+    retryAfter,
   };
 }

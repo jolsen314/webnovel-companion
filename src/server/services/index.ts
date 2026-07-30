@@ -64,6 +64,7 @@ function rowToPollable(row: {
   type: PollableSource['type'];
   fetchMode: PollableSource['fetchMode'];
   url: string;
+  host: string;
   feedUrl: string | null;
   matchType: string;
   matchValue: string | null;
@@ -73,6 +74,8 @@ function rowToPollable(row: {
   consecutiveFailures: number;
   failureScore: number;
   lastFailureType: FailureType | 'NONE';
+  lastCheckedAt: Date | null;
+  backoffUntil: Date | null;
 }): PollableSource {
   return {
     id: row.id,
@@ -87,12 +90,16 @@ function rowToPollable(row: {
     consecutiveFailures: row.consecutiveFailures,
     failureScore: row.failureScore,
     lastFailureType: row.lastFailureType === 'NONE' ? null : row.lastFailureType,
+    host: row.host,
+    lastCheckedAt: row.lastCheckedAt,
+    backoffUntil: row.backoffUntil,
   };
 }
 
 function pollPorts(
   fetchImpl: FetchImpl,
   renderImpl?: FetchImpl,
+  now: Date = new Date(),
 ): PollPorts & { loadActiveSources: () => Promise<PollableSource[]> } {
   return {
     fetch: fetchImpl,
@@ -106,7 +113,6 @@ function pollPorts(
         access: c.access === 'UNKNOWN' ? undefined : c.access,
       })),
     applyPollEffects: async (e: PollEffects) => {
-      const now = new Date();
       await db.$transaction([
         db.source.update({
           where: { id: e.sourceId },
@@ -120,6 +126,7 @@ function pollPorts(
             lastCheckedAt: now,
             ...(e.succeeded ? { lastSuccessAt: now } : {}),
             ...(e.escalateToRender ? { fetchMode: 'RENDER' as const } : {}),
+            ...(e.backoffUntil !== undefined ? { backoffUntil: e.backoffUntil } : {}),
           },
         }),
         ...(e.newChapters.length > 0
@@ -159,12 +166,15 @@ function pollPorts(
   };
 }
 
-/** Poll every active source, diffing new chapters and updating health. */
+/** Poll every active source, diffing new chapters and updating health. Fetches once per
+ *  distinct feed/page (fanning out to every series it covers) and gates per host — a host in
+ *  backoff or polled within the last `MIN_POLL_INTERVAL_MINUTES` is skipped this cycle. */
 export function pollAllSources(
   fetchImpl: FetchImpl = fetchPort,
   renderImpl: FetchImpl | undefined = renderPort(),
+  now: Date = new Date(),
 ): Promise<PollEffects[]> {
-  return pollAllCore(pollPorts(fetchImpl, renderImpl));
+  return pollAllCore(pollPorts(fetchImpl, renderImpl, now), now);
 }
 
 /** Build a pure `ReleaseSchedule` from a Series row's schedule columns (null if malformed). */

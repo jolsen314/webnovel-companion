@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { politeFetch, type FetchLike, type HttpResponse } from '../../../src/lib/feeds/fetch';
+import { parseRetryAfter, politeFetch, type FetchLike, type HttpResponse } from '../../../src/lib/feeds/fetch';
 
 /** Build a fake HttpResponse. Header lookups are case-insensitive, like the real thing. */
 function response(
@@ -26,6 +26,21 @@ function stub(result: HttpResponse | Error) {
   return { impl, calls };
 }
 
+describe('parseRetryAfter', () => {
+  const now = new Date('2026-07-29T12:00:00Z');
+  test('delta-seconds → now + seconds', () => {
+    expect(parseRetryAfter('120', now)).toEqual(new Date('2026-07-29T12:02:00Z'));
+  });
+  test('HTTP-date → that date', () => {
+    expect(parseRetryAfter('Wed, 29 Jul 2026 12:05:00 GMT', now)).toEqual(new Date('2026-07-29T12:05:00Z'));
+  });
+  test('null / empty / garbage → null', () => {
+    expect(parseRetryAfter(null, now)).toBeNull();
+    expect(parseRetryAfter('', now)).toBeNull();
+    expect(parseRetryAfter('soon', now)).toBeNull();
+  });
+});
+
 describe('politeFetch', () => {
   test('200 → SUCCESS with body and captured etag/last-modified; sends realistic headers', async () => {
     const { impl, calls } = stub(
@@ -37,7 +52,7 @@ describe('politeFetch', () => {
 
     const result = await politeFetch('https://feed.example/rss', {}, impl);
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       outcome: 'SUCCESS',
       status: 200,
       notModified: false,
@@ -68,8 +83,8 @@ describe('politeFetch', () => {
   });
 
   test('4xx → HTTP_4XX, 5xx → HTTP_5XX (with status)', async () => {
-    expect(await politeFetch('u', {}, stub(response(404)).impl)).toEqual({ outcome: 'HTTP_4XX', status: 404 });
-    expect(await politeFetch('u', {}, stub(response(503)).impl)).toEqual({ outcome: 'HTTP_5XX', status: 503 });
+    expect(await politeFetch('u', {}, stub(response(404)).impl)).toMatchObject({ outcome: 'HTTP_4XX', status: 404 });
+    expect(await politeFetch('u', {}, stub(response(503)).impl)).toMatchObject({ outcome: 'HTTP_5XX', status: 503 });
   });
 
   test('a 200 domain-parking page → PARKED (source is gone despite the 200)', async () => {
@@ -84,11 +99,23 @@ describe('politeFetch', () => {
     [{ cause: { code: 'ECONNREFUSED' } }, 'TIMEOUT'],
   ])('network error %o → %s', async (props, expected) => {
     const err = Object.assign(new Error('net'), props);
-    expect(await politeFetch('u', {}, stub(err).impl)).toEqual({ outcome: expected });
+    expect(await politeFetch('u', {}, stub(err).impl)).toMatchObject({ outcome: expected, retryAfter: null });
   });
 
   test('an aborted request (timeout) → TIMEOUT', async () => {
     const err = Object.assign(new Error('aborted'), { name: 'AbortError' });
-    expect(await politeFetch('u', {}, stub(err).impl)).toEqual({ outcome: 'TIMEOUT' });
+    expect(await politeFetch('u', {}, stub(err).impl)).toMatchObject({ outcome: 'TIMEOUT' });
+  });
+
+  test('politeFetch surfaces the Retry-After header on a 429', async () => {
+    const fake = async (): Promise<HttpResponse> => ({
+      status: 429,
+      url: 'https://x.example/feed/',
+      headers: { get: (n: string) => (n.toLowerCase() === 'retry-after' ? '120' : null) },
+      text: async () => '',
+    });
+    const res = await politeFetch('https://x.example/feed/', {}, fake);
+    expect(res.outcome).toBe('HTTP_4XX'); // health classification unchanged
+    expect(res.retryAfter).toBe('120');
   });
 });
