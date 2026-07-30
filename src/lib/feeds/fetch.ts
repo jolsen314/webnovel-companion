@@ -50,8 +50,12 @@ export type PoliteResult =
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 
+// Plain browser UA: blends in for access and — unlike the old bot UA — leaks no identity
+// (the previous string embedded the owner's GitHub handle, sent to every polled site).
+// Note: does NOT clear CF's page challenge (that's IP/JS-based — a full browser fingerprint
+// via the WP-17b renderer still gets challenged); this is a privacy + access-safety change.
 const USER_AGENT =
-  'WebnovelCompanion/0.1 (+https://github.com/jolsen314/webnovel-companion; personal feed reader)';
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
 
 /** Browser-ish headers so hosts and Cloudflare are less likely to reject a bare bot. */
 function baseHeaders(): Record<string, string> {
