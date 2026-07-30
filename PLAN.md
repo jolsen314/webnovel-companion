@@ -37,6 +37,11 @@ Definition of Done, and (for the pure-logic WPs) the test properties. Nothing el
 **Re-prioritizing.** The order of rows in the [Work-package index](#work-package-index) *is* the priority order.
 To re-prioritize, move rows and update the `NEXT` marker. Don't silently reorder without a Changelog note.
 
+**Committed-doc hygiene.** This file is committed, so keep it anonymous: refer to sources by **framework/category**
+descriptor ("a WordPress source", "a dense-feed CF host", "a concatenated-title source"), never by real site or
+series name, and never name the gitignored local testing-notes file — say supporting detail is "kept in local,
+uncommitted notes." Real names/URLs live only in those local notes and in scratchpad spikes.
+
 ---
 
 ## Current focus
@@ -44,18 +49,16 @@ To re-prioritize, move rows and update the `NEXT` marker. Don't silently reorder
 > **WP-42 (poll-once-per-feed + politeness) is DONE (2026-07-30)** — feed-centric loop (group by `(fetchMode,
 > fetchUrl)`, fetch once, fan out), 429/Retry-After backoff, and the per-host min-interval cap are all in and covered
 > unit + real-DB (two series sharing one feed fetched once; a host polled <15 min ago skipped, `lastCheckedAt`
-> untouched). 281 unit + 49 integration tests green.
+> untouched). 284 unit + 50 integration tests green. Merged to `main` via PR #1 (squash `b96246b`).
 >
 > **NEXT: WP-41 (poll time-budget guard + rotation)** — the sequential `pollAllSources` loop has no deadline under the
 > 60s ceiling; needed before **WP-43** (frequent external-trigger polling) can lean on it, and it composes with
-> WP-42's per-host gate already in place. After WP-41: **WP-27** (cadence), **WP-43** (frequent polling, now
-> unblocked by WP-42), **WP-29 editor UI** (schedule editor + push delivery), **WP-30** (title backfill + manual
-> edit), **WP-34** (feed→TOC switch, CF-gated), **WP-37** (auto-discover the chapter-TOC URL), **WP-39** (add-time
-> dedup), **WP-28** (styling/theming).
+> WP-42's per-host gate already in place. **The full priority order is the ▶ Active queue table below** (poll-scale
+> first — WP-41 → WP-43 → WP-27 — then add/identity, sources, UI, pure libs, and the three *low* items WP-31/32/45).
 >
 > **WP-40 parked — spike (2026-07-28): TLS impersonation can't clear the owner's CF hosts.** An `impit`
 > (browser-TLS/JA3 + HTTP/2) probe deployed to Vercel returned Cloudflare's **JS *managed challenge*** ("Just a
-> moment…", 403, ~5.9 KB interstitial) for **both** cf-wordpress-source and cf-static-source. The block is the **datacenter
+> moment…", 403, ~5.9 KB interstitial) for **both** confirmed CF hosts. The block is the **datacenter
 > IP**, not the fingerprint — so no cheap code-only GET clears it (only a real browser = render, or a *residential* IP
 > we control). Self-hosted residential egress was declined (no always-on home box). **Revisit third-party unblockers
 > later** — but they carry the WP-17b privacy tradeoff *and* likely hit the **same poll-budget limit as render** (per-
@@ -65,8 +68,8 @@ The MVP is **live on Vercel + Neon** — feed pipeline, auth gate, library/detai
 device)**, the **headless renderer (WP-17b, live-validated)**, and **paid→free "now free" detection (WP-20)**. The
 locked→free transition is now caught per-chapter off the TOC (`parseToc`'s access marking → `becameFreeAt` →
 privacy-safe "Now free" push, riding the new-chapter toggle); new *locked* chapters are stored silently and notify only
-on unlock. Remaining near-term: **WP-29 editor UI**. (Real site/series names for testing live in the gitignored
-`TESTING-NOTES.local.md`.)
+on unlock. Remaining near-term: **WP-29 editor UI**. (Real site/series names for testing are kept in local,
+uncommitted notes.)
 
 ---
 
@@ -86,62 +89,57 @@ Mirrors the README [Roadmap](README.md#roadmap) tiers, expressed as shippable mi
 
 ## Work-package index
 
-Priority order = row order. `⭐` = load-bearing / do-first.
+**Active-queue row order = priority** — the top of that table is what's next (marked `NEXT`). Completed and
+later-tier tables are reference only. `⭐` = load-bearing.
 
-| ID | Work package | Milestone | Status | Depends on |
-|----|--------------|-----------|--------|------------|
-| WP-12 | Fold spec's unique content into README, delete spec | M0 | `DONE` | — |
-| ⭐ WP-00 | Repo bootstrap + test harness | M0 | `DONE` | — |
-| WP-GH | Git + private GitHub repo, first push | M0 | `DONE` | — |
-| WP-CI | GitHub Actions: test + typecheck on push/PR | M0 | `DONE` | WP-GH |
-| ⭐ WP-01 | `lib/feeds/diff.ts` (pure, test-first) | M0 | `DONE` | WP-00 |
-| ⭐ WP-03 | `lib/health.ts` (pure, test-first) | M0 | `DONE` | WP-00 |
-| WP-04 | Prisma schema + migration + db client | M0 | `DONE` | WP-00 |
-| WP-05 | Feed parse + auto-discovery + series-match (`lib/feeds/{parse,discover}.ts`, pure) | M0 | `DONE` | WP-00 |
-| WP-FE | Feed/page fetcher (HTTP: realistic headers, conditional GET, Cloudflare-tolerant; injected fetch) | M0 | `DONE` | WP-05 |
-| WP-06 | Next.js + Tailwind + PWA shell (manifest + service worker) | M0 | `DONE` | WP-00 |
-| WP-07 | Services: `pollAllSources()`, `addSeries()` | M0 | `DONE` | WP-01, WP-04, WP-05, WP-FE |
-| WP-08 | API routes (series CRUD, push/subscribe, cron/poll) | M0 | `DONE` | WP-06, WP-07 |
-| ⭐ WP-17 | Page-watch — **primary** for dense/paid sites (`lib/feeds/pageWatch.ts`; framework adapters + generic) | M1↑ | `DONE` | WP-01, WP-05 |
-| WP-17b | Hard sources: self-run headless renderer (`fetchMode` PLAIN→RENDER) for JS-rendered TOCs — [design](docs/superpowers/specs/2026-07-23-wp17b-hard-sources-design.md). **Live-validated on Vercel** | M1↑ | `DONE` | WP-17 |
-| WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` (INTERVAL + WEEKLY), notify day-after, new/unlocked tag. **Lib + schema + cron wiring DONE; editor UI + push delivery (WP-09) remain** | M1↑ | `WIP` | WP-07, WP-10 |
-| ⭐ WP-20 | Paid→free frontier + "now free" (per-chapter LOCKED→FREE off the TOC; `becameFreeAt` + "Now free" push) | M1↑ | `DONE` | WP-07, WP-17 |
-| WP-09 | Web Push end-to-end (VAPID, sw handler, subscribe flow, per-type prefs in Settings, privacy copy, test button) — **verified live on a device** | M0 | `DONE` | WP-06, WP-08 |
-| ⭐ WP-10 | Library + series-detail UI (unread counts, mark progress) | M0 | `DONE` | WP-06, WP-08 |
-| ⭐ WP-AUTH | Single-user password gate (scrypt hash + signed cookie + middleware) — **deploy prerequisite** | M0 | `DONE` | WP-06, WP-08 |
-| WP-11 | Deploy to Vercel + Cron + PWA install verification | M0 | `DONE` | WP-08, WP-AUTH |
-| WP-13 | `lib/completion.ts` (pure) — plan-to-read heuristic | M1 | `TODO` | WP-00 |
-| WP-14 | `lib/dedup.ts` (pure) — "already read this?" | M1 | `TODO` | WP-00 |
-| WP-15 | `lib/search.ts` (pure) — filter/query building | M1 | `TODO` | WP-00 |
-| WP-16 | Host-level health aggregation (site-down vs novel-moved) | M1 | `TODO` | WP-03, WP-07 |
-| WP-18 | Completed shelf + backfill + "Move to Completed?" | M1 | `TODO` | WP-10 |
-| WP-28 | Frontend styling & theming — ordering, feed-page vs library split, theme system (night default + cultivation ancient-scroll, sci-fi holographic-panel), long-title readability (wrap/clamp vs ellipsis) | M1 | `TODO` | WP-10 |
-| WP-19 | Non-destructive re-pointing + "find new source" helper | M1 | `TODO` | WP-16, WP-18 |
-| WP-30 | Series title backfill from TOC (fix acronym/URL-derived titles) + manual title edit | M1 | `TODO` | WP-17, WP-10 |
-| WP-31 | Tab-structured premium TOCs — renderer clicks Free/Premium tabs + tab-membership access marking (unblocks WP-20 "now free" where locked chapters live behind a tab, not row markers) | M1↑ | `TODO` | WP-17b, WP-20 |
-| WP-32 | Split/paginated TOCs across sibling pages — page-watch follows "next chapters" navigation (bounded hops) + stops pagination anchors polluting `parseToc` | M1↑ | `TODO` | WP-17 |
-| WP-33 | Full-TOC backfill (feed series seed whole history at add + on-demand action) + silent `accessReconciled` diff dimension (`UNKNOWN`→`FREE`/`LOCKED`) — [design](docs/superpowers/specs/2026-07-26-feed-toc-transition-design.md) | M1 | `DONE` | WP-07, WP-17, WP-20 |
-| WP-34 | Feed→TOC switch to lock-monitoring — add-time lock detect (prefer PAGE_WATCH) + per-series "Track unlocks" switch + transition identity reconcile — **mechanism buildable; end-to-end "now free" CF-gated** | M1↑ | `TODO` | WP-33, WP-19 |
-| WP-35 | TOC-order chapters (`Chapter.position` from TOC DOM order, direction-normalized) + detail-page display toggle (oldest/newest/unread-first, canonical read-state) — [design](docs/superpowers/specs/2026-07-27-wp35-toc-order-display-design.md) | M1 | `DONE` | WP-17, WP-33, WP-10 |
-| ⭐ WP-36 | `parseToc` series scoping — restrict to main content (drop sidebar/"recent entries" widgets, nav/footer) + optional slug-family filter, so backfill/page-watch stop ingesting **cross-series phantom chapters**. **Data-correctness fix** | M1 | `DONE` | WP-17 |
-| WP-37 | Per-series chapter-TOC URL (landing page ≠ chapter TOC) — resolve/store a dedicated TOC URL distinct from the reading `url`; discovery follows an on-page "table of contents" link or the user sets it | M1 | `TODO` | WP-17, WP-33 |
-| WP-38 | Recover contaminated series (maintenance script) — prune phantom/cross-series chapters, **merge/delete duplicate series**, reset+re-seed, correct the source TOC URL + clean re-backfill (owner has bad production listings + a dup from the WP-33 button) | M1 | `DONE` | WP-36 |
-| WP-39 | Prevent duplicate series on add — wire `canonicalId` (normalized-URL/NU-id) dedup into `addSeries` so the same series can't be added twice (home URL vs TOC URL → one series); consumes WP-14's pure dedup | M1 | `TODO` | WP-07, WP-14 |
-| WP-RC | Dense-feed miss-detection + TOC reconcile fallback | M1 | `TODO` | WP-05, WP-07, WP-17 |
-| WP-21 | Plan-to-read completion watch (wire WP-13 + notify) — compare **max chapter number** vs target, not post count (split-chapter safe; see CONTEXT.md) | M1 | `TODO` | WP-13, WP-07 |
-| WP-27 | Reading-status lifecycle for poll + store — status→**cadence** gating (skip COMPLETED/DROPPED; PLANNED/backlog polled rarely, not daily — matters because RENDER can't 304), PLANNED seeds a **summary** not the full TOC (backfill on →READING), per-status notify rules | M1 | `TODO` | WP-07, WP-17, WP-18 |
-| WP-40 | ~~Cheap CF bypass via local browser-TLS-impersonation GET~~ **PARKED (spike 2026-07-28): TLS impersonation (`impit`) can't clear the owner's CF hosts** — CF serves a **JS managed challenge** to Vercel's datacenter IP; only a real browser (render) or a residential IP clears it. Premise (hosts are "static, just IP-challenged") was wrong. Revisit = third-party unblocker (privacy + likely same budget limit) | M1↑ | `BLOCKED` | WP-17b |
-| WP-41 | Poll time-budget guard + rotation — the sequential `pollAllSources` loop has no deadline under the 60s ceiling; stop before it and rotate the start offset so the tail (esp. RENDER sources) degrades gracefully instead of being silently dropped daily | M1 | `NEXT` | WP-07 |
-| ⭐ WP-42 | Poll-once-per-feed + politeness — group active sources by `(fetchMode, fetchUrl)`, fetch each feed **once** (shared conditional GET), fan out to every series on it; honor 429/Retry-After (`Source.backoffUntil` migration) + per-host min-interval cap; RENDER excluded from the fast tier — [design](docs/superpowers/specs/2026-07-29-poll-dedup-politeness-design.md) | M1 | `DONE` | WP-07 |
-| WP-43 | Frequent polling (external trigger) — GitHub Actions / cron-job.org → `/api/cron/poll` every ~1–2h (Hobby cron is daily) for the **PLAIN-feed tier only**; composes with WP-41 rotation + WP-27 cadence. **Feed-vs-Vercel reachability verified 2026-07-29 (feed reliably reachable; CF gates the page, not `/feed/`)** | M1 | `TODO` | WP-42, WP-41 |
-| WP-22 | MV3 browser extension (progress capture + "track this") | M2 | `TODO` | WP-08 |
-| WP-23 | Chinese mining: `tokenize/zh.ts` + `dict/cedict.ts` | M3 | `TODO` | WP-04 |
-| WP-02 | `lib/srs/sm2.ts` (pure, test-first) — SM-2 scheduler | M3 | `TODO` | WP-00 |
-| WP-24 | Vocab capture + SM-2 review UI (wire WP-02) | M3 | `TODO` | WP-02, WP-23 |
-| WP-25 | Korean sidecar (`services/korean-nlp`) + `tokenize/ko.ts` | M3 | `TODO` | WP-23, WP-24 |
-| WP-PASSKEY | Auth upgrade: passkeys / WebAuthn (passwordless, phishing-resistant) | M4 | `TODO` | WP-AUTH |
-| WP-EXPORT | One-click data export (`/api/export` → JSON) — own-your-data insurance | M1 | `TODO` | WP-AUTH |
-| WP-26 | Extras: TTS, offline caching, Anki export, multi-user | M4 | `TODO` | — |
+### ▶ Active queue (M1) — row order = priority
+
+| ID | Work package | Status | Depends on |
+|----|--------------|--------|------------|
+| ⭐ WP-41 | Poll time-budget guard + rotation — the sequential `pollAllSources` loop has no deadline under the 60s ceiling; stop before it and rotate the start offset so the tail (esp. RENDER sources) degrades gracefully instead of being silently dropped daily | `NEXT` | WP-07 |
+| WP-43 | Frequent polling (external trigger) — GitHub Actions / cron-job.org → `/api/cron/poll` every ~1–2h (Hobby cron is daily) for the **PLAIN-feed tier only**; composes with WP-41 rotation + WP-27 cadence. Feed-vs-Vercel reachability verified 2026-07-29 (feed reachable; CF gates the page, not `/feed/`) | `TODO` | WP-42, WP-41 |
+| WP-27 | Reading-status lifecycle → **cadence** gating (skip COMPLETED/DROPPED; PLANNED/backlog polled rarely, not daily — RENDER can't 304), PLANNED seeds a **summary** not the full TOC (backfill on →READING), per-status notify rules | `TODO` | WP-07, WP-17, WP-18 |
+| WP-39 | Prevent duplicate series on add — wire `canonicalId` dedup into `addSeries` (home URL vs TOC URL → one series); consumes WP-14 | `TODO` | WP-07, WP-14 |
+| WP-37 | Per-series chapter-TOC URL (landing page ≠ chapter TOC) — resolve/store a dedicated TOC URL distinct from the reading `url` | `TODO` | WP-17, WP-33 |
+| WP-30 | Series title backfill from TOC (fix acronym/URL-derived **and site-name-from-feed-channel** titles) + manual title edit | `TODO` | WP-17, WP-10 |
+| WP-34 | Feed→TOC switch to lock-monitoring — add-time lock detect (prefer PAGE_WATCH) + per-series "Track unlocks" + transition reconcile — **end-to-end "now free" CF-gated** | `TODO` | WP-33, WP-19 |
+| WP-46 | Add-time under-fetch escalation — when `addSeries` seeds **≤5 chapters** (dense-feed window miss, or a TOC needing render/pagination), escalate to a proper fetch (RENDER / page-watch / follow-next-page) to seed the full history at add. *(Re-scoped from the old WP-46 dense-feed-reconcile idea — the **ongoing** miss is now covered by WP-43; this is the **add-time** gap.)* | `TODO` | WP-07, WP-17 |
+| WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` + schema + cron wiring **done**; **editor UI + push delivery (WP-09) remain** (picking up later) | `TODO` | WP-07, WP-10 |
+| WP-28 | Frontend styling & theming — ordering, feed-page vs library split, theme system (night default + cultivation ancient-scroll, sci-fi holographic-panel), long-title readability (wrap/clamp vs ellipsis) | `TODO` | WP-10 |
+| WP-18 | Completed shelf + backfill + "Move to Completed?" | `TODO` | WP-10 |
+| WP-19 | Non-destructive re-pointing + "find new source" helper | `TODO` | WP-16, WP-18 |
+| WP-16 | Host-level health aggregation (site-down vs novel-moved) | `TODO` | WP-03, WP-07 |
+| WP-13 | `lib/completion.ts` (pure) — plan-to-read heuristic | `TODO` | WP-00 |
+| WP-21 | Plan-to-read completion watch (wire WP-13 + notify) — compare **max chapter number** vs target, not post count | `TODO` | WP-13, WP-07 |
+| WP-14 | `lib/dedup.ts` (pure) — "already read this?" | `TODO` | WP-00 |
+| WP-15 | `lib/search.ts` (pure) — filter/query building | `TODO` | WP-00 |
+| WP-EXPORT | One-click data export (`/api/export` → JSON) — own-your-data insurance | `TODO` | WP-AUTH |
+| WP-31 | *(low)* Tab-structured premium TOCs — renderer clicks Free/Premium tabs + tab-membership access marking (unblocks WP-20 "now free" where locked chapters live behind a tab) | `TODO` | WP-17b, WP-20 |
+| WP-32 | *(low)* `parseToc` robustness — follow split/paginated sibling TOCs (bounded "next chapters" hops) + **all non-chapter anchor filtering** (pagination + shortcut/CTA like "Last chapter"/"Read") + **URL-slug number authority** (trust a delimited `/chapter-<N>-` over a concatenated title number) | `TODO` | WP-17, WP-35 |
+| WP-45 | *(low)* JSON-adapter rung for static-SPA sources — read a site's static, 304-able chapter JSON directly instead of rendering; bespoke per source, only if the pattern recurs (RENDER handles it today) | `TODO` | WP-17b |
+
+### ✅ Completed
+
+WP-00, WP-GH, WP-CI, WP-12 (bootstrap / CI / docs) · WP-01, WP-03 (pure diff / health) · WP-04, WP-05, WP-FE (schema, feed parse/discover, fetcher) · WP-06, WP-07, WP-08 (Next shell, services, API) · WP-09, WP-10, WP-AUTH, WP-11 (Web Push, library/detail UI, auth gate, deploy) · WP-17, WP-17b (page-watch + headless renderer) · WP-20 (paid→free "now free") · WP-33 (full-TOC backfill + `accessReconciled`) · WP-35 (TOC-order chapters + display toggle) · WP-36 (`parseToc` content scoping) · WP-38 (contaminated-series recovery script) · WP-42 (poll-once-per-feed + politeness).
+
+### ⏭ Later tiers (M2–M4)
+
+| ID | Work package | Milestone | Depends on |
+|----|--------------|-----------|------------|
+| WP-22 | MV3 browser extension (progress capture + "track this") | M2 | WP-08 |
+| WP-23 | Chinese mining: `tokenize/zh.ts` + `dict/cedict.ts` | M3 | WP-04 |
+| WP-02 | `lib/srs/sm2.ts` (pure, test-first) — SM-2 scheduler | M3 | WP-00 |
+| WP-24 | Vocab capture + SM-2 review UI (wire WP-02) | M3 | WP-02, WP-23 |
+| WP-25 | Korean sidecar (`services/korean-nlp`) + `tokenize/ko.ts` | M3 | WP-23, WP-24 |
+| WP-PASSKEY | Auth upgrade: passkeys / WebAuthn (passwordless, phishing-resistant) | M4 | WP-AUTH |
+| WP-26 | Extras: TTS, offline caching, Anki export, multi-user | M4 | — |
+
+### 🚫 Parked
+
+- **WP-40** — cheap CF bypass via a local browser-TLS-impersonation GET. Spike (2026-07-28) proved TLS impersonation
+  can't clear the Cloudflare **JS managed challenge** (triggered by Vercel's datacenter IP, not the fingerprint); only
+  a real browser (render) or a residential IP we control clears it. Revisit = third-party unblocker (privacy tradeoff +
+  likely the same poll-budget limit). See the WP-40 detail + changelog.
 
 ---
 
@@ -169,7 +167,7 @@ model + Prisma's own conventions; the ai-toolkit DB skills were rejected (Kotlin
 poor Prisma/Postgres fit).
 
 **Deliverables:** `prisma/schema.prisma` reconciling the README data model **with the spike findings** (Source
-`matchType`/`matchValue`; health `score` accumulator; Chapter access state; possibly `lastReconciledAt` for WP-RC);
+`matchType`/`matchValue`; health `score` accumulator; Chapter access state; possibly `lastReconciledAt` for WP-46);
 an initial migration; `server/db.ts` Prisma client singleton.
 
 **Migration note (no DB yet):** `prisma migrate dev` needs a live Postgres. Until the host exists (WP-11) we can
@@ -343,7 +341,7 @@ translator sites). Revisit ordering.
 - **WP-20 (paid→free):** read access state per chapter from the TOC adapter; free frontier = highest non-locked
   chapter; fire "now free" on frontier advance (distinct event from "new chapter"); feeds usually omit locked
   chapters, so lock state comes from page-watch.
-- **WP-RC (dense-feed reconcile):** miss-detection (number gap + feed-window saturation) → immediate TOC scan;
+- **WP-46 (dense-feed reconcile):** miss-detection (number gap + feed-window saturation) → immediate TOC scan;
   periodic reconcile for at-risk Sources; may add `lastReconciledAt` + a feed-window marker to `Source` (defer to
   the WP-04 DB pause). **Also the escalation for the add-time "couldn't isolate" case** (below): a series added with
   a best-effort slug/path filter but no chapters, that never fills after N cycles, should escalate to page-watch.
@@ -352,7 +350,7 @@ translator sites). Revisit ordering.
 one and the novel isn't in the current window, `addSeries` does *not* reject or grab the wrong novel — it adds the
 series (correct title from the URL) with a **series-scoped guess** (`fallbackSeriesMatch`: category-slug if the feed
 is categorized, else URL path). It shows 0 chapters until the novel next publishes, when the filter captures it from
-the feed. If it never fills, WP-RC escalates to page-watch. **Cloudflare caveat:** where the *page* is JS-challenged
+the feed. If it never fills, WP-46 escalates to page-watch. **Cloudflare caveat:** where the *page* is JS-challenged
 (e.g. a Cloudflare-challenged source — 403 `cf-mitigated: challenge`) plain page-watch also fails; ongoing releases still arrive via
 `/feed/` (which isn't challenged), but backfill/true page-watch needs a **headless-browser escalation** (separate
 service; not Vercel serverless) or an unblock service — best-effort per the README. Near-term workaround: track such
@@ -370,7 +368,7 @@ Keyed on **reading status** (`SeriesStatus`: READING / PLANNED / PAUSED / DROPPE
 - **Status→cadence, not just skip (owner, 2026-07-28).** Beyond skip/poll, **PLANNED/backlog should poll *rarely*
   (slow cadence or on-demand), not daily.** This sharpened once we confirmed **RENDER sources can't 304** (every poll
   is a full ~5–15s headless render — `renderFetch` sends no validators): a pile of PLANNED reads on a CF/JS host (e.g.
-  many cf-wordpress-source novels) would otherwise cost a full daily render *each*. Gate cadence by status — READING
+  many novels on one CF-fronted host) would otherwise cost a full daily render *each*. Gate cadence by status — READING
   daily; PLANNED/PAUSED slow or on-promote. This also caps the RENDER load **WP-41**'s time-budget guard must absorb,
   and pairs with **WP-40** (make CF-static hosts cheap/304). PLANNED already seeds a summary not the TOC (next bullet),
   so it has little to poll anyway — the win is *not paying to render a backlog you're not reading yet*.
@@ -421,6 +419,17 @@ fallback, which derives the title from the URL slug — see "Add-time isolation 
   usable heading), let the user edit the series title in the detail UI (WP-10) and persist it (PATCH `/api/series/[id]`
   — extend `parseSeriesUpdate` to accept `title`). A manual edit sets the "user-edited" flag so auto-backfill leaves it
   alone. Ship this half even if auto-backfill lands — it's the escape hatch.
+- **Second cause — a feed channel `<title>` that's the *site* name (owner testing, 2026-07-29: a concatenated-title
+  custom source).** A *successful* add can still get a bad title: the series page advertises a proper **per-series**
+  feed, so `addSeries` adopts it as WHOLE_FEED and takes `parsed.title` (the feed's channel `<title>`) — but that
+  channel title is **the *site* name**, not the series. The real name sat in the page `<h1>`, `og:title`/`<title>`
+  (with a " | &lt;Site&gt;" suffix), the advertised feed's `title` **attribute**, and even the feed **item** titles
+  ("&lt;Series&gt; Chapter N"). Two fixes, both here: (a) the same **page `<h1>`/`og:title` backfill** above rescues
+  it — but must **strip a trailing " | &lt;Site&gt;" / " – &lt;Site&gt;"** suffix; (b) at **add-time**, don't blindly
+  trust a channel `<title>` — if it equals the host/site name, prefer `titleFromUrl(url)` (the `/series/<slug>` here
+  already yields a decent name) or an item-title common prefix / the `<link rel=alternate>` title attr. Distinct from
+  the acronym-slug case (that was a *failed* page fetch → `titleFromUrl` slug); here the fetch succeeded and a real
+  feed's channel title was the culprit.
 
 ### WP-31 — Tab-structured premium TOCs (renderer tab capture + tab-membership access)
 
@@ -451,7 +460,7 @@ production renderer both **under-captures** and **mis-classifies**, so WP-20's "
 so that figure was free-only or taken differently; re-confirm with a prod `/api/render` curl when picked up. **Gets its
 own brainstorm → spec when prioritized.** Until then, "now free" on tab-structured paid sites is a known non-detection.
 
-### WP-32 — Split/paginated TOCs across sibling pages (follow-next-page in page-watch)
+### WP-32 — `parseToc` robustness: split/paginated TOCs + anchor filtering + URL-slug number authority
 
 **Motivation (owner testing, 2026-07-26):** the **plain SitePad split-TOC source** hosts one series' chapter list
 across **two sibling slugs** linked by hand-authored anchors — page A (prologue + the early chapters, then a "Next
@@ -466,15 +475,31 @@ navigation to a *new URL*.
    `next chapters?|older|newer` (case-insensitive), for a **bounded** number of hops, and **union** the chapters
    across pages. Generic — handles this site and any future split TOCs. (Rejected: watch only the "front" slug — it
    rolls to a new slug and breaks silently; register both slugs manually — brittle as pages grow.)
-2. **Stop pagination anchors polluting `parseToc`.** "Next/Previous Chapters" text contains "Chapters" →
-   `CHAPTER_TEXT` matches → `parseToc` emits a **phantom chapter row** (url = the sibling page, number = null). Filter
-   navigation anchors out (and feed them to step 1 instead).
-3. **Two parse quirks to handle** (seen on this site): a **slug/label off-by-one** (last link's `href` number is one
-   ahead of its visible "Chapter N" text — decide which to trust or reconcile), and a **non-numeric prologue**
+2. **Filter non-chapter anchors polluting `parseToc` — this WP owns ALL anchor-level filtering.** (WP-36's region
+   scoping, done, drops sidebar/nav/footer *containers*; this is the in-content anchor-level pass — keep it in one
+   place, not scattered.) Two flavors seen so far:
+   - **Pagination anchors** (split TOC) — "Next/Previous Chapters" text contains "Chapters" → `CHAPTER_TEXT` matches →
+     `parseToc` emits a **phantom chapter row** (url = the sibling page, number = null). Filter them out (and feed them
+     to step 1 instead).
+   - **Shortcut/CTA anchors** (owner testing, 2026-07-29: a concatenated-title custom source) — a **"Last chapter:
+     Ch.N …"** jump-link and a **"Read"/"Start reading"** button sit *in the content* and pass the chapter filter, so
+     the newest chapter & ch 1 appear **twice**; `parseToc`'s first-wins dedupe then puts **the newest chapter at
+     position 0** (WP-35 sorts it *oldest* when it's the *newest*). Drop them by text ("last chapter", "read", "start
+     reading", "next/prev"), or on dedupe **prefer the in-list occurrence** over a chrome shortcut.
+3. **Two parse quirks to handle** (seen on the split-TOC site): a **slug/label off-by-one** (last link's `href` number
+   is one ahead of its visible "Chapter N" text — decide which to trust or reconcile), and a **non-numeric prologue**
    ("Chapter α" → `parseChapterNumber` → null; already tolerated, worth a test).
+4. **URL-slug number authority** (owner testing, 2026-07-29: a concatenated-title custom source — folded in from the
+   former WP-44). `parseToc` sets `number = parseChapterNumber(title) ?? parseChapterNumber(url)` — **title first** — but
+   that source jams `Ch.<seq>` onto the raw label with no separator, so chapter 2 (slug `/chapter-2-02`) displays as
+   **"Ch.202"** → the regex reads **202** and the clean slug number is never consulted (~110 wrong). **Fix:** when the
+   URL path has an explicit **delimited** `/chapter-<N>-` (or `/ch-<N>-`, …) number, treat *that* as authoritative over a
+   title-derived number; the noisy title stays the display name (WP-30). Guard: only when the slug number is
+   delimited/unambiguous — don't regress sites where the title is the better source. (Matters for **WP-35**: its
+   direction-normalize reads the number *trend*, which the bogus numbers break.)
 
-**Overlaps WP-RC** (dense-feed reconcile) — both are page-watch completeness safety nets; coordinate when building.
-**Gets its own brainstorm → spec when prioritized.**
+**Low priority** (single custom source so far). Pure `lib/feeds/pageWatch.ts`, test-first. **Gets its own brainstorm →
+spec when prioritized.**
 
 ### WP-33 / WP-34 — Feed ↔ TOC: backfill + switch to lock-monitoring
 
@@ -581,12 +606,12 @@ isn't hard-blocked; only our plain bot `fetch` is challenged. Today the only byp
 (`renderFetch` sends no validators, always `notModified:false`), so every poll is a full ~5–15s render. A backlog of
 such novels blows the poll budget (**WP-41**) for no reason.
 
-**Second driver, harsher (owner testing, 2026-07-28): cf-static-source.org.** Also CF-fronted + Vercel-blocked, but with **no
-usable feed** (advertises none; per-series `/feed/` 404s; site `/feed/` is empty) — so a CF-blocked page fetch can't
-fall back to page-watch *or* a feed and `addSeries` **hard-throws** ("may be blocking automated requests"). The series
-is **unaddable** today, not just empty. This makes WP-40 a *correctness/blocker* fix for some sites, not only an
-efficiency one. (Open: whether cf-static-source is rescued by the fingerprint GET or is the harder 403 set — confirm via a
-Vercel `/api/render` curl, same as chrys.)
+**Second driver, harsher (owner testing, 2026-07-28): a no-feed CF host.** Also CF-fronted + Vercel-blocked, but with
+**no usable feed** (advertises none; per-series `/feed/` 404s; site `/feed/` is empty) — so a CF-blocked page fetch
+can't fall back to page-watch *or* a feed and `addSeries` **hard-throws** ("may be blocking automated requests"). The
+series is **unaddable** today, not just empty. This makes WP-40 a *correctness/blocker* fix for some sites, not only an
+efficiency one. (Open: whether this host is rescued by the fingerprint GET or is the harder 403 set — confirm via a
+Vercel `/api/render` curl.)
 
 **Work:** add a lighter fetch rung for **CF-static** hosts — a single GET with a **browser TLS/JA3 + header
 fingerprint** (e.g. a `curl-impersonate` binary or an impersonation-capable HTTP client) that clears CF's bot challenge
@@ -596,13 +621,13 @@ server to the target, just with a browser-like handshake) — **not** a third-pa
 `fetchMode`/host-policy rung between PLAIN and RENDER: CF-static hosts use it; **reserve real RENDER (Chromium) for
 genuinely JS-rendered TOCs** (the tab / load-more sites — WP-31). **Must cover the add path, not just poll:** today's
 render escalation is **poll-only** (`pollSource` PLAIN→RENDER at ≤5 chapters), while **`addSeries` uses the plain
-`fetch` only** — so a CF-blocked host like cf-static-source **can't be added at all** (it never reaches the poll to escalate).
+`fetch` only** — so a CF-blocked host like this **can't be added at all** (it never reaches the poll to escalate).
 The bypass rung has to be reachable from `addSeries` (or `addSeries` needs a render/bypass fallback on page-fetch
 failure for CF hosts). Caveat: a browser *UA alone* likely won't pass (CF keys on the TLS fingerprint), so verify the
 impersonation actually clears the challenge from Vercel before relying on it. Relates to WP-17b (escalation ladder),
-WP-34/WP-29 (CF-gated sites), and the harder **403 `cf-mitigated`** set (render-clearable-source/cf-blocked-source) which may still
-need more than a fingerprint. **Confirmed WP-40 hosts (render works from Vercel, only plain fetch blocked):
-cf-wordpress-source, cf-static-source.**
+WP-34/WP-29 (CF-gated sites), and the harder **403 `cf-mitigated`** set which may still
+need more than a fingerprint. **Confirmed hosts where render works from Vercel (only plain fetch blocked): a
+dense-feed source and a no-feed source.**
 
 **Spike result — PARKED (2026-07-28).** Research pointed to [`impit`](https://github.com/apify/impit) (Apify; Rust/rustls
 patched for a real browser ClientHello + HTTP/2 ordering; napi-rs Node binding, prebuilt linux-x64-gnu, ~0 runtime deps,
@@ -630,7 +655,7 @@ Bright Data) *would* clear CF (their own browsers + residential IPs), but (1) it
 — the URLs of what the owner reads would go to a vendor — and (2) **open question:** it likely hits the **same
 time-budget limit as render** — a per-request unblocker call is *also* multi-second, so a large CF/PLANNED set still
 blows the 60 s poll ceiling. So even reconsidering it, **WP-41 + WP-27 remain prerequisites**, not alternatives.
-Real-host probe detail (statuses, byte sizes) is in the gitignored `TESTING-NOTES.local.md`.
+Real-host probe detail (statuses, byte sizes) is kept in local, uncommitted notes.
 
 ### WP-41 — Poll time-budget guard + rotation
 
@@ -646,6 +671,26 @@ source is perpetually starved — the backlog drains fairly instead of the tail 
 sources into their own bounded pass. Cheap, and it's a **latent correctness** issue (silent non-polling) that arrives
 the moment there are more sources than fit in 60s — worth doing before it bites, not after. Pairs with WP-27 (cadence
 gating trims the daily set) and WP-40 (making CF-static cheap/304 shrinks per-source cost).
+
+### WP-45 — JSON-adapter rung for static-SPA sources (low priority)
+
+**Priority: low — only worth building if this pattern recurs** (more than the single source seen 2026-07-30). RENDER
+already handles it generically; this is purely a cost optimization.
+
+**Motivation (owner testing, 2026-07-30):** a **static SPA** (a Cloudflare Pages host) returns only a ~2.4 KB shell on
+plain fetch — an empty chapter container + a single **"Read" CTA** — and injects its full chapter list (hundreds)
+*client-side* from a **static JSON data file** the shell points at (`data-title="…/<slug>.json"`). So `parseToc` on the
+plain HTML captures just the CTA; the chapters are invisible without JS. **RENDER captures them all** (validated: the JS
+fills the list, not virtualized), and the WP-17b escalation self-heals it (plain add seeds 1 chapter → next poll parses
+≤5 → escalates to RENDER → the poll after gets the full list).
+
+**The optimization:** that JSON is **static, `etag`/304-able, and CORS-open** — a per-site **JSON adapter** could read it
+directly (chapter url from an index field, number from the `"Ch N: …"` title, series title from a sibling meta JSON),
+skipping the headless render entirely: cheap, conditional-GET-friendly, and **correct titles** (render's first-wins
+dedupe otherwise labels ch 1 with the "Read" CTA text — the WP-32 anchor issue). **Cost:** the JSON shape is
+site-specific, so this is a **bespoke adapter per source**, not generic — hence only justified once several such sites
+exist. Until then, render is the right call. Relates to WP-17b (render) and WP-27 (a *completed* static SPA is also a
+"render-once, then rarely re-poll" case).
 
 ## Backlog / open questions
 
@@ -676,6 +721,33 @@ gating trims the daily set) and WP-40 (making CF-static cheap/304 shrinks per-so
 
 ## Changelog
 
+- **2026-07-30** — **WP index restructured (split + priority) + housekeeping.** Split the flat 40+-row index (where
+  DONE rows were interleaved with active ones and row-order-as-priority had stopped meaning anything) into four tables:
+  **▶ Active queue (M1)** — WIP/TODO ordered by real priority so row-order means something again (WP-41 NEXT → WP-43 →
+  WP-27 → add/identity → sources → UI → pure libs → the three *low* items WP-31/32/45); **✅ Completed**; **⏭ Later
+  tiers (M2–M4)**; **🚫 Parked (WP-40)**. Consolidations: **WP-44 folded into WP-32** (one `parseToc`-robustness WP =
+  split TOCs + all anchor filtering + URL-slug number authority); **WP-RC renumbered → WP-46 and re-scoped** to
+  *add-time* under-fetch escalation (fetch properly when `addSeries` seeds ≤5 chapters) since WP-43 now covers the
+  *ongoing* dense-feed miss; **WP-45** (JSON-adapter rung, low) added to the index; **WP-29** flipped `WIP`→`TODO`
+  (lib/schema/cron done, editor UI + push delivery remain — picking up later). No code change.
+- **2026-07-30** — **Added WP-45 (JSON-adapter rung for static-SPA sources; low priority).** Testing a static SPA (a
+  Cloudflare Pages host) whose plain fetch returns only a ~2.4 KB shell + a "Read" CTA — its hundreds of chapters are
+  injected client-side from a **static, 304-able JSON** file. RENDER already captures them (validated) and the WP-17b
+  escalation self-heals it, so this is filed **low priority**: a per-site JSON adapter would read the data file directly
+  (cheaper + 304-able + correct titles), but the JSON shape is bespoke — only worth it if the pattern recurs. `TODO`.
+
+- **2026-07-30** — **Added WP-44 + extended WP-30 from testing a concatenated-title custom source; consolidated anchor
+  filtering.** A cleanly-fetched plain series (206 chapters) surfaced three parse issues, none a fetch problem:
+  **(1) wrong numbers on ~110 chapters** — the site jams `Ch.<seq>` onto the raw source label ("Ch.2"+"02" → "Ch.202"),
+  and `parseToc` reads the title number first, so it takes 202 instead of the URL slug's correct 2; **(2) a "Last
+  chapter" shortcut + "Read" button** duplicate the newest chapter/ch 1 and, via first-wins dedupe, poison WP-35
+  position 0; **(3) the displayed *series title* is the *site* name** — the adopted per-series feed's channel `<title>`
+  is the site name, not the series (the real name was in the page `<h1>`/`og:title` and the feed item titles). Landed
+  as: new **WP-44** = the *number-source* half only (prefer the delimited URL-slug `/chapter-<N>-` number over a
+  concatenated title number); the **anchor-filtering** half folded into **WP-32** (now the single owner of
+  non-chapter-anchor filtering — pagination + shortcut/CTA; WP-36's done region-scoping stays separate); and
+  **extended WP-30** (site-name-from-feed-channel title → page-`<h1>` backfill with site-suffix strip + smarter
+  add-time feed-title derivation). All `TODO`. (Real-site detail kept in local, uncommitted notes.)
 - **2026-07-30** — **WP-42 DONE: poll-once-per-feed + politeness, real-DB verified.** Closed out the design with
   integration coverage: two series sharing one feed URL (isolated via distinct `PATH_PREFIX` matches) are now proven
   to be fetched **once** and both advance from that single fetch; a source polled **<15 min ago** (`lastCheckedAt`)
@@ -695,8 +767,8 @@ gating trims the daily set) and WP-40 (making CF-static cheap/304 shrinks per-so
   `Source.backoffUntil`), a **per-host min-interval cap** (uses `lastCheckedAt`), and **RENDER excluded from the fast
   tier**. WP-43 (external trigger, since Hobby cron is daily) is the follow-up and composes with WP-41 rotation + WP-27
   cadence. Kept the browser-like UA (an honest bot UA risks *more* CF challenges for marginal gain on a private app).
-  Probe fully torn down (branch deleted local + remote; nothing on `main`). *(Real-host probe detail in the gitignored
-  `TESTING-NOTES.local.md`.)*
+  Probe fully torn down (branch deleted local + remote; nothing on `main`). *(Real-host probe detail kept in local,
+  uncommitted notes.)*
 - **2026-07-29** — **Fix: `chooseSeriesMatch` isolates a discovered multi-novel feed instead of defaulting to
   WHOLE_FEED.** Found when re-adding a series on a dense multi-novel WordPress site ingested ~30 cross-work chapters and
   took its title from an unrelated work's feed entry. Root cause: `addSeries` only applied the slug fallback when the
@@ -713,7 +785,7 @@ gating trims the daily set) and WP-40 (making CF-static cheap/304 shrinks per-so
   [`impit`](https://github.com/apify/impit) (Apify; browser-TLS/JA3 + HTTP/2 via patched rustls, napi-rs Node binding,
   prebuilt linux-x64-gnu, ~0 runtime deps, Apache-2.0) after a research + dependency-vetting pass, and deployed a
   throwaway probe route (`/api/bypass-probe` — plain vs impit GET, bearer + SSRF-guarded) to a Vercel preview. **Both
-  confirmed hosts (cf-wordpress-source, cf-static-source) returned Cloudflare's JS *managed challenge*** ("Just a moment…",
+  confirmed hosts (a dense-feed source + a no-feed source) returned Cloudflare's JS *managed challenge*** ("Just a moment…",
   403, ~5.9 KB), `cleared:false` — the block is Vercel's **datacenter IP**, not the TLS fingerprint, so no cheap
   code-only GET clears it (research confirmed: `cloudscraper` dead for managed challenges; FlareSolverr/Byparr = headless
   browsers = render cost; `cf_clearance` is IP+UA+TLS-bound so cookie-caching fails on Vercel's rotating IPs). The
@@ -725,7 +797,7 @@ gating trims the daily set) and WP-40 (making CF-static cheap/304 shrinks per-so
   or middleware exemption on `main`. *(Detour cost: several deploy cycles chasing a 401 that turned out to be the
   single-user **auth middleware** gating `/api/bypass-probe` — the probe needed the same public-allowlist exemption as
   `/api/render`/`/api/cron`. Not a real auth bug; only surfaced because previews are SSO-protected + the route wasn't
-  allowlisted.)* Real-host probe detail (statuses, sizes) in the gitignored `TESTING-NOTES.local.md`.
+  allowlisted.)* Real-host probe detail (statuses, sizes) kept in local, uncommitted notes.
 - **2026-07-28** — **Fix (WP-35 follow-up): `backfillFromToc` now positions feed-ahead series instead of skipping.**
   **Where it was missing:** the WP-35 spec says a full TOC read positions *every* stored chapter — matched rows get
   their normalized index, any absent chapter is appended after the TOC block (kept, ordered last). The implementation
@@ -749,15 +821,15 @@ gating trims the daily set) and WP-40 (making CF-static cheap/304 shrinks per-so
   through the render/CF story surfaced two structural facts: **RENDER sources can't use conditional GET** (`renderFetch`
   sends no validators, always `notModified:false` → every RENDER poll is a full ~5–15s headless render), and the daily
   cron is a **sequential loop with no time budget** under the 60s ceiling — so a pile of RENDER/CF sources (e.g. many
-  PLANNED cf-wordpress-source reads) blows the budget and **silently drops the tail**. Three tracked responses:
+  PLANNED reads on one CF host) blows the budget and **silently drops the tail**. Three tracked responses:
   **WP-27 extended** to status→*cadence* gating (PLANNED/backlog polled rarely/on-demand, not just skip-COMPLETED —
   motivated by the render cost); **WP-40** — a cheap, 304-capable **local browser-TLS-impersonation** GET for
-  CF-**static** hosts (server-rendered but IP-challenged, like cf-wordpress-source), so they skip the uncacheable
+  CF-**static** hosts (server-rendered but IP-challenged), so they skip the uncacheable
   render, reserving Chromium for genuinely JS TOCs, and explicitly **not** a third-party unblocker (keeps the WP-17b
   privacy stance); **WP-41** — a poll time-budget guard + rotating start offset so the run degrades gracefully instead
   of starving a fixed tail. All `TODO`, "if scale bites" priority; WP-41 is also a latent-correctness safeguard. Also
-  clarified in `TESTING-NOTES.local.md`: cf-wordpress-source is CF-**static** (needs bypass, not render) and the
-  render path can't 304. (Real-site detail stays in that gitignored file.)
+  noted: the dense-feed CF host is CF-**static** (needs bypass, not render) and the render path can't 304. (Real-site
+  detail kept in local, uncommitted notes.)
 - **2026-07-28** — **WP-35 DONE: TOC-order chapters + display toggle.** Chapters now display in the site's own TOC
   order instead of an inferred number/title order. Additive migration `Chapter.position Int?`. Pure `tocReadingOrder`
   infers the TOC's direction from the chapter-number *trend* (skips when ambiguous) and maps each chapter's canonical
@@ -793,8 +865,8 @@ gating trims the daily set) and WP-40 (making CF-static cheap/304 shrinks per-so
   re-point + clean re-backfill). Added a caution against broad use of the backfill button until WP-36/37. WP-36 is
   the higher-priority data-correctness fix. Also surfaced: a **duplicate series** (same work added via home URL and
   TOC URL) → folded merge/delete-dup into WP-38's script, and added **WP-39** (add-time dedup via the unused
-  `canonicalId` field). **Owner chose to do WP-36 + WP-38 before WP-35.** (Real-site detail in the gitignored
-  `TESTING-NOTES.local.md`.)
+  `canonicalId` field). **Owner chose to do WP-36 + WP-38 before WP-35.** (Real-site detail kept in local,
+  uncommitted notes.)
 - **2026-07-27** — **Designed WP-35 (TOC-order chapters + display toggle).** Follow-up to WP-33's number-based
   `orderChaptersForReading`: instead of inferring reading order from numbers/titles (prologue/Extra/Side edge cases),
   follow the **site's own TOC order** — persist `Chapter.position` from `parseToc`'s DOM order (direction-normalized via
@@ -987,7 +1059,7 @@ gating trims the daily set) and WP-40 (making CF-static cheap/304 shrinks per-so
   **series-scoped guess** (`fallbackSeriesMatch`, slug- or path-keyed) for guessed site feeds, trusting `WHOLE_FEED`
   only for page-advertised feeds; `filterBySeriesMatch` CATEGORY now matches by slug too, so the fallback fills in when
   the novel next publishes; title comes from the URL, not the site feed. Verified live: a Cloudflare-challenged source now adds the
-  *correct* novel, empty, with a slug filter. 127 tests. (Page-watch escalation for still-blocked sites → WP-RC/WP-17.)
+  *correct* novel, empty, with a slug filter. 127 tests. (Page-watch escalation for still-blocked sites → WP-46/WP-17.)
 - **2026-07-22** — **WP-10 (library + detail UI) done.** The app is now *usable*. **Library** = a release stream of
   series cards on the design system — the bookmark-ribbon + "N new" badge on unread series (the signature landing on
   real data), health dots (healthy/degraded/down), unread counts, latest chapter, status chips; empty-state when the
@@ -1088,7 +1160,7 @@ gating trims the daily set) and WP-40 (making CF-static cheap/304 shrinks per-so
   the M0 do-first pure functions down to the vocabulary tier (next to WP-24, which consumes it); dropped its ⭐.
   Removed the in-progress sm2 test. `NEXT` is now **WP-03 (health)**, the last early pure engine.
 - **2026-07-16** — **Folded spike into the plan.** Added the "Source-fetching strategy" section (fetch-strategy
-  ladder + density-fallback triggers) and per-WP sub-tasks for WP-05/17/20; added **WP-RC** (dense-feed
+  ladder + density-fallback triggers) and per-WP sub-tasks for WP-05/17/20; added **WP-46** (dense-feed
   miss-detection + TOC reconcile fallback). Design answer to "when does a too-dense multi-novel feed fall back to a
   direct page scan": page-watch is rung 3, triggered at add-time, on runtime gap/saturation, and periodically.
 - **2026-07-16** — **Feed spike + Source-model change.** Ran throwaway spikes against 5 real translator sites (see
