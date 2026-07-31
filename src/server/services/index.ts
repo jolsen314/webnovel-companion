@@ -9,10 +9,12 @@ import { parseToc, tocReadingOrder } from '../../lib/feeds/pageWatch';
 import {
   pollAllSources as pollAllCore,
   sourceTierWhere,
+  POLLABLE_STATUSES,
   type PollableSource,
   type PollEffects,
   type PollPorts,
   type PollTier,
+  type SeriesStatus,
 } from './poll';
 import { addSeries as addSeriesCore, type AddSeriesInput, type AddSeriesResult } from './addSeries';
 import {
@@ -83,10 +85,12 @@ function rowToPollable(row: {
   lastFailureType: FailureType | 'NONE';
   lastCheckedAt: Date | null;
   backoffUntil: Date | null;
+  series: { status: SeriesStatus };
 }): PollableSource {
   return {
     id: row.id,
     seriesId: row.seriesId,
+    seriesStatus: row.series.status,
     type: row.type,
     fetchMode: row.fetchMode,
     fetchUrl: row.feedUrl ?? row.url,
@@ -112,7 +116,13 @@ function pollPorts(
   return {
     fetch: fetchImpl,
     renderFetch: renderImpl,
-    loadActiveSources: async () => (await db.source.findMany({ where: sourceTierWhere(tier) })).map(rowToPollable),
+    loadActiveSources: async () =>
+      (
+        await db.source.findMany({
+          where: { ...sourceTierWhere(tier), series: { status: { in: POLLABLE_STATUSES } } },
+          include: { series: { select: { status: true } } },
+        })
+      ).map(rowToPollable),
     loadStoredChapters: async (seriesId) =>
       (await db.chapter.findMany({ where: { seriesId }, select: { id: true, guid: true, url: true, access: true } })).map((c) => ({
         id: c.id,

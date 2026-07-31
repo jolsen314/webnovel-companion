@@ -702,6 +702,44 @@ describe('savePushSubscription (real DB)', () => {
   });
 });
 
+describe('pollAllSources status gating (real DB, WP-27a)', () => {
+  async function seedStatus(status: 'READING' | 'PLANNED' | 'PAUSED' | 'COMPLETED' | 'DROPPED', host: string, lastCheckedAt: Date | null): Promise<string> {
+    const series = await db.series.create({ data: { userId: getCurrentUserId(), title: status, status } });
+    await db.source.create({
+      data: { seriesId: series.id, url: `https://${host}/rss`, host, type: 'FEED', fetchMode: 'PLAIN', feedUrl: `https://${host}/rss`, matchType: 'WHOLE_FEED', lastCheckedAt },
+    });
+    return series.id;
+  }
+
+  test('COMPLETED / DROPPED / PAUSED are never polled', async () => {
+    const ids = {
+      completed: await seedStatus('COMPLETED', 'c.example', null),
+      dropped: await seedStatus('DROPPED', 'd.example', null),
+      paused: await seedStatus('PAUSED', 'pa.example', null),
+    };
+    const fetch = fetchFrom({}); // any fetch would 404; we assert none happen
+    const effects = await pollAllSources(fetch);
+    expect(effects).toEqual([]);
+    for (const id of Object.values(ids)) {
+      const src = await db.source.findFirstOrThrow({ where: { seriesId: id } });
+      expect(src.lastCheckedAt).toBeNull();
+    }
+  });
+
+  test('PLANNED is polled only when past its weekly window', async () => {
+    const freshLastCheckedAt = new Date(Date.now() - 3 * 24 * 60 * 60_000);
+    const fresh = await seedStatus('PLANNED', 'fresh.example', freshLastCheckedAt);
+    const stale = await seedStatus('PLANNED', 'stale.example', new Date(Date.now() - 8 * 24 * 60 * 60_000));
+    const fetch = fetchFrom({ 'https://stale.example/rss': okRes(RSS('')), 'https://fresh.example/rss': okRes(RSS('')) });
+    const effects = await pollAllSources(fetch);
+    expect(effects.map((e) => e.seriesId)).toEqual([stale]);
+    // Not due (< 7d cadence) → untouched, not stamped by this poll.
+    expect((await db.source.findFirstOrThrow({ where: { seriesId: fresh } })).lastCheckedAt?.getTime()).toBe(
+      freshLastCheckedAt.getTime(),
+    );
+  });
+});
+
 describe('pollAllSources tier filter (real DB, WP-43)', () => {
   const PLAIN_FEED = 'https://plain.example/feed/';
   const RENDER_FEED = 'https://render.example/feed/';

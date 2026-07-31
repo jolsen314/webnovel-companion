@@ -94,6 +94,8 @@ export function statusPollGate(args: {
 export interface PollableSource {
   id: string;
   seriesId: string;
+  /** The reader's shelf status (WP-27a) — gates whether/how often this source polls. */
+  seriesStatus: SeriesStatus;
   /** FEED → parse as a feed + apply the series matcher; PAGE_WATCH → parse the TOC. */
   type: 'FEED' | 'PAGE_WATCH';
   /** PLAIN → `politeFetch`; RENDER → the headless renderer (WP-17b). */
@@ -360,6 +362,13 @@ export async function pollAllSources(
 
   const effects: PollEffects[] = [];
   for (const group of groups) {
+    // Status/cadence gate (WP-27a): poll only sources whose shelf status is due; skip the whole
+    // group's fetch when none are due (e.g. a solo not-due PLANNED render).
+    const eligible = group.sources.filter(
+      (s) => !statusPollGate({ status: s.seriesStatus, lastCheckedAt: s.lastCheckedAt, now }).skip,
+    );
+    if (eligible.length === 0) continue;
+
     const gate = hostGate({
       hostLastCheckedAt: hostLast.get(group.host) ?? null,
       hostBackoffUntil: hostBackoff.get(group.host) ?? null,
@@ -368,17 +377,15 @@ export async function pollAllSources(
     });
     if (gate.skip) continue; // silent no-op; lastCheckedAt untouched
 
-    // Time-budget guard (WP-41): don't *start* a fetch we can't finish within budget. Skip (not
-    // break) so a later cheaper group can still fit — this group's untouched lastCheckedAt makes
-    // rotation re-poll it first next run. Keeps the run under the 300s function ceiling.
+    // Time-budget guard (WP-41).
     if (clock() - start + groupCostMs(group, hasRenderer) > budgetMs) continue;
 
-    const cond = chooseConditionalState(group.sources);
+    const cond = chooseConditionalState(eligible);
     const fetcher = group.fetchMode === 'RENDER' && ports.renderFetch ? ports.renderFetch : ports.fetch;
     const res = await fetcher(group.fetchUrl, { etag: cond.etag, lastModified: cond.lastModified });
     const retryAfterAt = parseRetryAfter(res.retryAfter ?? null, now);
 
-    for (const src of group.sources) {
+    for (const src of eligible) {
       const e = await processFetched(src, res, retryAfterAt, ports);
       await ports.applyPollEffects(e);
       effects.push(e);

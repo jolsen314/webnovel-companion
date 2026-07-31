@@ -47,6 +47,7 @@ function source(overrides: Partial<PollableSource> = {}): PollableSource {
     host: 'x.example',
     lastCheckedAt: null,
     backoffUntil: null,
+    seriesStatus: 'READING',
     ...overrides,
   };
 }
@@ -304,6 +305,11 @@ describe('pollAllSources', () => {
       loadStoredChapters: async (seriesId) => args.stored?.[seriesId] ?? [],
       applyPollEffects: async (e) => {
         applied.push(e);
+        // Mirror the real edge (index.ts pollPorts): a processed source's lastCheckedAt is
+        // stamped, so rotation (WP-41) has something to rotate on across successive runs.
+        // A fixed far-future sentinel (not real wall-clock) keeps this deterministic.
+        const src = args.sources.find((s) => s.id === e.sourceId);
+        if (src) src.lastCheckedAt = new Date(8640000000000000);
       },
     };
   }
@@ -428,6 +434,79 @@ describe('pollAllSources', () => {
     // group ungated and fetch it.
     expect(fetches).toBe(0);
     expect(effects).toEqual([]);
+  });
+
+  describe('pollAllSources — status/cadence gate (WP-27a)', () => {
+    const NOW = new Date('2026-07-30T12:00:00Z');
+    const OVER_A_WEEK = new Date(NOW.getTime() - 8 * 24 * 60 * 60_000);
+    const THREE_DAYS = new Date(NOW.getTime() - 3 * 24 * 60 * 60_000);
+    const FEED = (h: string) => `https://${h}/rss`;
+
+    test('a solo not-due PLANNED group is not fetched', async () => {
+      const s = source({ id: 'p', seriesId: 'serP', host: 'p.example', fetchUrl: FEED('p.example'), seriesStatus: 'PLANNED', lastCheckedAt: THREE_DAYS });
+      let fetches = 0;
+      const p = multiPorts({ sources: [s], fetch: async () => { fetches++; return ok(RSS('')); }, stored: { serP: [] } });
+
+      const effects = await pollAllSources(p, NOW);
+
+      expect(fetches).toBe(0);
+      expect(effects).toEqual([]);
+    });
+
+    test('a mixed group [READING, not-due PLANNED] fetches once, processes only READING', async () => {
+      const feed = FEED('shared.example');
+      const r = source({ id: 'r', seriesId: 'serR', host: 'shared.example', fetchUrl: feed, seriesStatus: 'READING' });
+      const pl = source({ id: 'pl', seriesId: 'serPl', host: 'shared.example', fetchUrl: feed, seriesStatus: 'PLANNED', lastCheckedAt: THREE_DAYS });
+      let fetches = 0;
+      const p = multiPorts({ sources: [r, pl], fetch: async () => { fetches++; return ok(RSS(ITEM('g1', 'https://x/c1'))); }, stored: { serR: [], serPl: [] } });
+
+      await pollAllSources(p, NOW);
+
+      expect(fetches).toBe(1);
+      expect(p.applied.map((e) => e.seriesId)).toEqual(['serR']);
+    });
+
+    test('a mixed group [READING, due PLANNED] fetches once, processes BOTH', async () => {
+      const feed = FEED('shared2.example');
+      const r = source({ id: 'r2', seriesId: 'serR2', host: 'shared2.example', fetchUrl: feed, seriesStatus: 'READING' });
+      const pl = source({ id: 'pl2', seriesId: 'serPl2', host: 'shared2.example', fetchUrl: feed, seriesStatus: 'PLANNED', lastCheckedAt: OVER_A_WEEK });
+      let fetches = 0;
+      const p = multiPorts({ sources: [r, pl], fetch: async () => { fetches++; return ok(RSS(ITEM('g1', 'https://x/c1'))); }, stored: { serR2: [], serPl2: [] } });
+
+      await pollAllSources(p, NOW);
+
+      expect(fetches).toBe(1);
+      expect(p.applied.map((e) => e.seriesId).sort()).toEqual(['serPl2', 'serR2']);
+    });
+
+    test('a PLANNED source past its weekly window is polled', async () => {
+      const s = source({ id: 'p', seriesId: 'serP', host: 'p.example', fetchUrl: FEED('p.example'), seriesStatus: 'PLANNED', lastCheckedAt: OVER_A_WEEK });
+      let fetches = 0;
+      const p = multiPorts({ sources: [s], fetch: async () => { fetches++; return ok(RSS('')); }, stored: { serP: [] } });
+
+      await pollAllSources(p, NOW);
+
+      expect(fetches).toBe(1);
+      expect(p.applied.map((e) => e.seriesId)).toEqual(['serP']);
+    });
+
+    test('a due PLANNED deferred by budget is picked up on the next run (not starved)', async () => {
+      // Two due sources; a budget that fits only one. Run twice; the one skipped first is polled next.
+      const a = source({ id: 'a', seriesId: 'serA', host: 'a.example', fetchUrl: FEED('a.example'), seriesStatus: 'PLANNED', lastCheckedAt: new Date(NOW.getTime() - 9 * 24 * 60 * 60_000) });
+      const b = source({ id: 'b', seriesId: 'serB', host: 'b.example', fetchUrl: FEED('b.example'), seriesStatus: 'PLANNED', lastCheckedAt: OVER_A_WEEK });
+      let t = 0;
+      const clock = () => t;
+      const p = multiPorts({ sources: [a, b], fetch: async () => { t += PLAIN_COST_MS; return ok(RSS('')); }, stored: { serA: [], serB: [] } });
+
+      const first = await pollAllSources(p, NOW, { budgetMs: PLAIN_COST_MS, clock });
+      expect(first).toHaveLength(1); // only the stalest fit the budget
+      const firstId = first[0]!.seriesId;
+      const secondId = firstId === 'serA' ? 'serB' : 'serA';
+
+      t = 0; // fresh run
+      const second = await pollAllSources(p, NOW, { budgetMs: PLAIN_COST_MS, clock });
+      expect(second.map((e) => e.seriesId)).toContain(secondId); // the deferred one is now polled
+    });
   });
 });
 
