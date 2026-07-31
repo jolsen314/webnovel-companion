@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { pollAllSources, evaluateSchedules, notifyForEffects } from '../../../../server/services';
-import { isAuthorizedCron } from '../../../../server/api/validation';
+import { isAuthorizedCron, parsePollTier } from '../../../../server/api/validation';
 
 export const dynamic = 'force-dynamic';
 // Vercel Hobby's function ceiling is 300s (5 min). pollAllSources self-limits to POLL_BUDGET_MS
@@ -14,7 +14,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const effects = await pollAllSources();
+  const tier = parsePollTier(new URL(request.url).searchParams);
+  const effects = await pollAllSources(undefined, undefined, undefined, tier);
   // No-fetch fallback: predicted releases for series with a manual schedule (WP-29).
   const scheduleEffects = await evaluateSchedules();
 
@@ -29,6 +30,7 @@ export async function GET(request: Request) {
   }
 
   const summary = {
+    tier,
     polled: effects.length,
     newChapters: effects.reduce((n, e) => n + e.newChapters.length, 0),
     wentDown: effects.filter((e) => e.crossedDown).length,
