@@ -131,6 +131,8 @@ export interface PollGroup {
 export interface PollEffects {
   sourceId: string;
   seriesId: string;
+  /** The reader's shelf status at poll time (WP-27a) — notify pushes only for READING. */
+  seriesStatus: SeriesStatus;
   health: HealthState;
   /** The fetch itself succeeded (200 or 304) — for `lastSuccessAt`, distinct from "no new chapters". */
   succeeded: boolean;
@@ -289,6 +291,7 @@ export async function processFetched(
   return {
     sourceId: src.id,
     seriesId: src.seriesId,
+    seriesStatus: src.seriesStatus,
     health,
     succeeded: res.outcome === 'SUCCESS',
     notModified,

@@ -372,6 +372,7 @@ describe('notifyForEffects (real DB)', () => {
   const effect = (over: Partial<PollEffects>): PollEffects => ({
     sourceId: 'src',
     seriesId: 'series',
+    seriesStatus: 'READING',
     health: HEALTHY,
     succeeded: true,
     notModified: false,
@@ -496,6 +497,29 @@ describe('notifyForEffects (real DB)', () => {
     await notifyForEffects([effect({ seriesId, newChapters: [{ url: 'u', title: 'C', access: 'FREE' }] })], [], ports);
 
     expect(captured.map((m) => m.title)).toEqual(['New chapter']);
+  });
+
+  test('WP-27a: a non-READING series does not push new chapters or now-free', async () => {
+    const readingId = await addAlpha(); // status defaults READING
+    const planned = await db.series.create({ data: { userId: getCurrentUserId(), title: 'Planned', status: 'PLANNED' } });
+    const captured: PushMessage[] = [];
+    const ports: PushSendPorts = {
+      loadSubscriptions: async () => [{ endpoint: 'e1', p256dh: 'p', auth: 'a' }],
+      send: async (_t, m) => { captured.push(m); return 'SENT'; },
+      deleteSubscription: async () => {},
+    };
+
+    await notifyForEffects(
+      [
+        effect({ seriesId: readingId, seriesStatus: 'READING', newChapters: [{ url: 'r1', title: 'R1', access: 'FREE' }] }),
+        effect({ seriesId: planned.id, seriesStatus: 'PLANNED', newChapters: [{ url: 'p1', title: 'P1', access: 'FREE' }], becameFree: [{ url: 'p0', access: 'FREE' }] }),
+      ],
+      [],
+      ports,
+    );
+
+    // Only the READING series produced a push; the PLANNED one is silent.
+    expect(captured.map((m) => m.tag)).toEqual([`new-${readingId}`]);
   });
 });
 

@@ -313,10 +313,11 @@ export async function notifyForEffects(
   ports: PushSendPorts = pushSendPorts(),
 ): Promise<SendSummary> {
   const newChapters = pollEffects
+    .filter((e) => e.seriesStatus === 'READING')
     .map((e) => ({ seriesId: e.seriesId, count: e.newChapters.filter((c) => c.access !== 'LOCKED').length }))
     .filter((n) => n.count > 0);
   const nowFree = pollEffects
-    .filter((e) => e.becameFree.length > 0)
+    .filter((e) => e.seriesStatus === 'READING' && e.becameFree.length > 0)
     .map((e) => ({ seriesId: e.seriesId, count: e.becameFree.length }));
   const scheduledReleases = scheduleEffects.map((e) => ({ seriesId: e.seriesId, eventKind: e.eventKind }));
 
