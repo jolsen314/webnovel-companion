@@ -21,9 +21,15 @@ export async function POST(request: Request) {
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
   try {
-    const { seriesId, resolved } = await addSeries(parsed.value);
+    const { seriesId, resolved, alreadyExisting } = await addSeries(parsed.value);
+    if (alreadyExisting) {
+      return NextResponse.json(
+        { seriesId, title: resolved.seriesTitle, alreadyExisting: true, message: 'You\'re already tracking this series.' },
+        { status: 200 },
+      );
+    }
     return NextResponse.json(
-      { seriesId, title: resolved.seriesTitle, sourceType: resolved.type, chapters: resolved.chapters.length },
+      { seriesId, title: resolved.seriesTitle, sourceType: resolved.type, chapters: resolved.chapters.length, alreadyExisting: false },
       { status: 201 },
     );
   } catch (error) {
