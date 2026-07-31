@@ -1,0 +1,15 @@
+name: Frequent poll (PLAIN tier)
+
+on:
+  schedule:
+    - cron: '0 */2 * * *'   # every 2h UTC — PLAIN tier only (see docs/superpowers/specs/2026-07-30-wp43-…)
+  workflow_dispatch: {}       # manual run, for testing / on-demand
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger PLAIN-tier poll
+        run: |
+          curl -fsS --max-time 300 "${{ secrets.POLL_URL }}?tier=plain" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
