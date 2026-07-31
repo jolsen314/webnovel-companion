@@ -162,7 +162,14 @@ the front of the queue; **WP-39b** is filed to depend on them.
 
 ## Out of scope / deferred
 
-- **WP-39b** — page-watch home-vs-TOC dedup (needs WP-37 / WP-30).
+- **WP-39b** — the deeper add-dedup residuals, all rooted in matcher/window quality: (a) page-watch home-vs-TOC (needs
+  WP-37 / WP-30); (b) multi-novel re-add **type-flip** across feed windows (WHOLE_FEED↔CATEGORY↔PATH_PREFIX) → a re-add
+  can miss (false negative); (c) two *undetectably* multi-novel novels on one **advertised** feed both resolving to
+  `#WHOLE_FEED` → false **dedup** (false positive). (c) can't be fixed in the dedup layer without keying WHOLE_FEED on
+  `sourceUrl`, which would defeat the home-vs-TOC collapse — the real fix is better multi-novel detection in the matcher.
+- **Suffix escaping** *(resolved)* — CATEGORY values are now `slugify`d (`[a-z0-9-]` only) and `base` never contains a
+  `#` (canonicalUrl strips the fragment), so the id has no ambiguous-separator/collision risk; and ids are only
+  equality-compared, never parsed. No code needed.
 - **Attach-as-alternate-source on dup** — noted on WP-19 (re-pointing).
 - **DB unique constraint** on `(userId, canonicalId)` — optional later hardening; app-level check suffices for a
   single user.
