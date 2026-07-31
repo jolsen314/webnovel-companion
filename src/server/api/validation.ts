@@ -4,6 +4,8 @@
  * validation here (not in the handlers) makes it unit-testable without HTTP.
  */
 
+import type { PollTier } from '../services/poll';
+
 export type ParseResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
 const ok = <T>(value: T): ParseResult<T> => ({ ok: true, value });
@@ -117,4 +119,11 @@ export function parseNotificationPrefsPatch(input: unknown): ParseResult<Notific
 export function isAuthorizedCron(authHeader: string | null, secret: string | undefined): boolean {
   if (!secret) return true;
   return authHeader === `Bearer ${secret}`;
+}
+
+/** Map the poll route's `?tier=` query to a PollTier. Only exactly `plain` narrows to the cheap
+ *  FEED+PLAIN tier; anything else (missing/unknown/empty) → `all`, so a malformed trigger degrades
+ *  to MORE coverage, never less. Pure. WP-43. */
+export function parsePollTier(searchParams: URLSearchParams): PollTier {
+  return searchParams.get('tier') === 'plain' ? 'plain' : 'all';
 }

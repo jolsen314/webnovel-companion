@@ -5,6 +5,7 @@ import {
   parsePushSubscription,
   parseNotificationPrefsPatch,
   isAuthorizedCron,
+  parsePollTier,
 } from '../../../src/server/api/validation';
 
 describe('parseAddSeriesBody', () => {
@@ -103,5 +104,25 @@ describe('isAuthorizedCron', () => {
 
   test('allows the request in dev when no secret is configured', () => {
     expect(isAuthorizedCron(null, undefined)).toBe(true);
+  });
+});
+
+describe('parsePollTier', () => {
+  const parse = (qs: string) => parsePollTier(new URLSearchParams(qs));
+
+  test('?tier=plain → plain', () => {
+    expect(parse('tier=plain')).toBe('plain');
+  });
+
+  test('no tier param → all (full poll)', () => {
+    expect(parse('')).toBe('all');
+  });
+
+  test('unknown tier value → all (fail-safe to full poll)', () => {
+    expect(parse('tier=render')).toBe('all');
+  });
+
+  test('empty tier value → all', () => {
+    expect(parse('tier=')).toBe('all');
   });
 });
