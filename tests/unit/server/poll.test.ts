@@ -296,6 +296,9 @@ describe('pollAllSources', () => {
     sources: PollableSource[];
     fetch: PollPorts['fetch'];
     stored?: Record<string, KnownChapter[]>;
+    /** When set, a processed source's lastCheckedAt is stamped to this (mirroring the real edge),
+     *  so a multi-run test exercises rotation/cadence across runs. Omit for single-run tests. */
+    now?: Date;
   }): PollPorts & { loadActiveSources: () => Promise<PollableSource[]>; applied: PollEffects[] } {
     const applied: PollEffects[] = [];
     return {
@@ -305,11 +308,13 @@ describe('pollAllSources', () => {
       loadStoredChapters: async (seriesId) => args.stored?.[seriesId] ?? [],
       applyPollEffects: async (e) => {
         applied.push(e);
-        // Mirror the real edge (index.ts pollPorts): a processed source's lastCheckedAt is
-        // stamped, so rotation (WP-41) has something to rotate on across successive runs.
-        // A fixed far-future sentinel (not real wall-clock) keeps this deterministic.
-        const src = args.sources.find((s) => s.id === e.sourceId);
-        if (src) src.lastCheckedAt = new Date(8640000000000000);
+        // Mirror the real edge (index.ts pollPorts): a processed source's lastCheckedAt is stamped
+        // to the run's `now`, so rotation (WP-41) + status cadence have real timestamps to work on
+        // across successive runs.
+        if (args.now) {
+          const src = args.sources.find((s) => s.id === e.sourceId);
+          if (src) src.lastCheckedAt = args.now;
+        }
       },
     };
   }
@@ -496,7 +501,7 @@ describe('pollAllSources', () => {
       const b = source({ id: 'b', seriesId: 'serB', host: 'b.example', fetchUrl: FEED('b.example'), seriesStatus: 'PLANNED', lastCheckedAt: OVER_A_WEEK });
       let t = 0;
       const clock = () => t;
-      const p = multiPorts({ sources: [a, b], fetch: async () => { t += PLAIN_COST_MS; return ok(RSS('')); }, stored: { serA: [], serB: [] } });
+      const p = multiPorts({ sources: [a, b], fetch: async () => { t += PLAIN_COST_MS; return ok(RSS('')); }, stored: { serA: [], serB: [] }, now: NOW });
 
       const first = await pollAllSources(p, NOW, { budgetMs: PLAIN_COST_MS, clock });
       expect(first).toHaveLength(1); // only the stalest fit the budget
