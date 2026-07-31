@@ -54,6 +54,7 @@ async function addAlphaDuplicate(): Promise<string> {
     data: {
       userId: getCurrentUserId(),
       title: 'Alpha',
+      canonicalId: 'translator.example/feed#WHOLE_FEED',
       sources: {
         create: { url: PAGE_URL, host: 'translator.example', type: 'FEED', feedUrl: FEED_URL, matchType: 'WHOLE_FEED', matchValue: null },
       },
