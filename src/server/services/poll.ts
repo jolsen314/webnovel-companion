@@ -55,6 +55,42 @@ export function sourceTierWhere(tier: PollTier): { isActive: true; type?: 'FEED'
   return tier === 'plain' ? { isActive: true, type: 'FEED', fetchMode: 'PLAIN' } : { isActive: true };
 }
 
+/** The reader's shelf status for a series (mirrors the Prisma SeriesStatus enum as a local union
+ *  so poll.ts stays Prisma-free). WP-27a. */
+export type SeriesStatus = 'READING' | 'COMPLETED' | 'PAUSED' | 'DROPPED' | 'PLANNED';
+
+/** Minutes between eligible polls per shelf status. 0 = every run; null = never auto-poll
+ *  (re-enters only when the reader changes the status, e.g. promote to READING). WP-27a. */
+const STATUS_CADENCE_MINUTES: Record<SeriesStatus, number | null> = {
+  READING: 0,
+  PLANNED: 7 * 24 * 60, // weekly — a plan-to-read backlog doesn't need daily freshness
+  PAUSED: null, // on-promote only
+  COMPLETED: null,
+  DROPPED: null,
+};
+
+/** Statuses worth loading for a poll at all — derived from the cadence map (the non-null ones),
+ *  so the map stays the single source of truth. Used to pre-filter the active-sources query. */
+export const POLLABLE_STATUSES: SeriesStatus[] = (
+  ['READING', 'COMPLETED', 'PAUSED', 'DROPPED', 'PLANNED'] as SeriesStatus[]
+).filter((s) => STATUS_CADENCE_MINUTES[s] !== null);
+
+/** Whether to skip a source this cycle based on its series' shelf status + cadence. `status-skip`
+ *  = the status never auto-polls; `status-cadence` = polled within its cadence window. Pure. WP-27a. */
+export function statusPollGate(args: {
+  status: SeriesStatus;
+  lastCheckedAt: Date | null;
+  now: Date;
+}): { skip: boolean; reason: 'ok' | 'status-skip' | 'status-cadence' } {
+  const cadence = STATUS_CADENCE_MINUTES[args.status];
+  if (cadence === null) return { skip: true, reason: 'status-skip' };
+  if (cadence === 0) return { skip: false, reason: 'ok' };
+  if (args.lastCheckedAt && args.now.getTime() - args.lastCheckedAt.getTime() < cadence * 60_000) {
+    return { skip: true, reason: 'status-cadence' };
+  }
+  return { skip: false, reason: 'ok' };
+}
+
 /** The subset of a Source row the poller needs. */
 export interface PollableSource {
   id: string;

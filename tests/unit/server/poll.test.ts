@@ -10,13 +10,16 @@ import {
   POLL_BUDGET_MS,
   pollAllSources,
   pollSource,
+  POLLABLE_STATUSES,
   RENDER_COST_MS,
   sourceTierWhere,
+  statusPollGate,
   type PollableSource,
   type PollEffects,
   type PollGroup,
   type PollPorts,
   type PollTier,
+  type SeriesStatus,
 } from '../../../src/server/services/poll';
 import type { PoliteResult } from '../../../src/lib/feeds/fetch';
 import type { SeriesMatch } from '../../../src/lib/feeds/discover';
@@ -707,5 +710,40 @@ describe('sourceTierWhere', () => {
 
   test("'plain' → only the cheap 304-able FEED+PLAIN tier", () => {
     expect(sourceTierWhere('plain')).toEqual({ isActive: true, type: 'FEED', fetchMode: 'PLAIN' });
+  });
+});
+
+describe('statusPollGate', () => {
+  const now = new Date('2026-07-30T12:00:00Z');
+  const week = 7 * 24 * 60 * 60_000;
+
+  test('READING is always eligible (cadence 0), even just polled', () => {
+    expect(statusPollGate({ status: 'READING', lastCheckedAt: now, now })).toEqual({ skip: false, reason: 'ok' });
+  });
+
+  test('COMPLETED / DROPPED / PAUSED never auto-poll → status-skip', () => {
+    for (const status of ['COMPLETED', 'DROPPED', 'PAUSED'] as const) {
+      expect(statusPollGate({ status, lastCheckedAt: null, now })).toEqual({ skip: true, reason: 'status-skip' });
+    }
+  });
+
+  test('PLANNED never polled before → eligible', () => {
+    expect(statusPollGate({ status: 'PLANNED', lastCheckedAt: null, now })).toEqual({ skip: false, reason: 'ok' });
+  });
+
+  test('PLANNED polled 3 days ago (< 7d) → status-cadence skip', () => {
+    const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60_000);
+    expect(statusPollGate({ status: 'PLANNED', lastCheckedAt: threeDaysAgo, now })).toEqual({ skip: true, reason: 'status-cadence' });
+  });
+
+  test('PLANNED at exactly 7 days → eligible (boundary, strict <)', () => {
+    const exactlyWeek = new Date(now.getTime() - week);
+    expect(statusPollGate({ status: 'PLANNED', lastCheckedAt: exactlyWeek, now })).toEqual({ skip: false, reason: 'ok' });
+  });
+});
+
+describe('POLLABLE_STATUSES', () => {
+  test('derives to exactly the non-null-cadence statuses', () => {
+    expect([...POLLABLE_STATUSES].sort()).toEqual(['PLANNED', 'READING']);
   });
 });
