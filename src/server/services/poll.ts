@@ -306,19 +306,6 @@ export async function processFetched(
   };
 }
 
-/** Poll a single source in isolation: fetch once for it alone, then `processFetched` + persist.
- *  Kept for direct unit coverage of the fetch→health→parse→diff pipeline; the feed-centric
- *  `pollAllSources` below fetches once per group and calls `processFetched` itself instead. */
-export async function pollSource(src: PollableSource, ports: PollPorts): Promise<PollEffects> {
-  // RENDER sources use the headless renderer when one is configured; otherwise fall back to plain.
-  const fetcher = src.fetchMode === 'RENDER' && ports.renderFetch ? ports.renderFetch : ports.fetch;
-  const res = await fetcher(src.fetchUrl, { etag: src.etag, lastModified: src.lastModified });
-  const retryAfterAt = parseRetryAfter(res.retryAfter ?? null, new Date());
-  const effects = await processFetched(src, res, retryAfterAt, ports);
-  await ports.applyPollEffects(effects);
-  return effects;
-}
-
 /** Later of two nullable dates, or null if both are null. Pure. */
 function maxDate(a: Date | null, b: Date | null): Date | null {
   if (!a) return b;

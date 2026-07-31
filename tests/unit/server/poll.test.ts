@@ -9,7 +9,7 @@ import {
   PLAIN_COST_MS,
   POLL_BUDGET_MS,
   pollAllSources,
-  pollSource,
+  processFetched,
   POLLABLE_STATUSES,
   RENDER_COST_MS,
   sourceTierWhere,
@@ -21,7 +21,7 @@ import {
   type PollTier,
   type SeriesStatus,
 } from '../../../src/server/services/poll';
-import type { PoliteResult } from '../../../src/lib/feeds/fetch';
+import { parseRetryAfter, type PoliteResult } from '../../../src/lib/feeds/fetch';
 import type { SeriesMatch } from '../../../src/lib/feeds/discover';
 import type { KnownChapter } from '../../../src/lib/feeds/diff';
 
@@ -77,6 +77,19 @@ const ok = (body: string, extra: Partial<Extract<PoliteResult, { outcome: 'SUCCE
   finalUrl: 'https://feed.example/rss',
   ...extra,
 });
+
+/** Poll a single source in isolation (fetch → processFetched → persist). A TEST-ONLY harness for
+ *  the single-source fetch→health→parse→diff pipeline — production polls via `pollAllSources`,
+ *  which layers the status/host/budget gates. Deliberately not exported from poll.ts (nothing in
+ *  production should poll a lone source without those gates). */
+async function pollSource(src: PollableSource, ports: PollPorts): Promise<PollEffects> {
+  const fetcher = src.fetchMode === 'RENDER' && ports.renderFetch ? ports.renderFetch : ports.fetch;
+  const res = await fetcher(src.fetchUrl, { etag: src.etag, lastModified: src.lastModified });
+  const retryAfterAt = parseRetryAfter(res.retryAfter ?? null, new Date());
+  const effects = await processFetched(src, res, retryAfterAt, ports);
+  await ports.applyPollEffects(effects);
+  return effects;
+}
 
 describe('pollSource', () => {
   test('success with new items: diffs, stays HEALTHY, captures validators, persists effects', async () => {

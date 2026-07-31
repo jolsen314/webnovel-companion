@@ -4,7 +4,7 @@ import { nextDueRelease, type ReleaseEventKind, type ReleaseSchedule } from '../
  * Schedule evaluation: the no-fetch half of release tracking (WP-29). For each series
  * carrying a manual schedule, ask the pure `nextDueRelease` whether a predicted release
  * is due, emit an effect for the ones that are, and stamp them so they don't re-fire.
- * Composed behind injected ports (like `pollSource`) so the logic unit-tests with fakes
+ * Composed behind injected ports (like `pollAllSources`) so the logic unit-tests with fakes
  * and binds to Prisma at the edge. Delivery of the effect is WP-09 (push).
  */
 
