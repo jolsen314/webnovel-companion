@@ -94,18 +94,25 @@ Groups can contain sources of mixed status (a shared multi-novel feed with a REA
 gate is **per-source**; the fetch is **per-group**. So, per group (in rotation order):
 
 ```
-eligible = group.sources.filter(s => !statusPollGate({ status: s.seriesStatus, lastCheckedAt: s.lastCheckedAt, now }).skip)
-if eligible.length === 0 → continue          // NO fetch — nothing due (the real compute win for a solo not-due PLANNED render)
+anyDue = group.sources.some(s => !statusPollGate({ status: s.seriesStatus, lastCheckedAt: s.lastCheckedAt, now }).skip)
+if !anyDue → continue                         // NO fetch — nothing due (the real compute win for a solo not-due PLANNED render)
 apply hostGate (per host) → skip if gated
 apply budget guard → skip if unaffordable
 fetch once
-for (src of eligible) → processFetched + applyPollEffects
+for (src of group.sources) → processFetched + applyPollEffects   // fetch already paid for → process every source it covers
 ```
 
-- A solo not-due PLANNED group ⇒ **no fetch** (skips the expensive render).
-- A mixed group ⇒ one shared fetch (the READING sibling needs it anyway), process only the eligible sources; the
-  not-due PLANNED sibling's `lastCheckedAt` is left untouched, so it re-polls next week.
-- Order: status-eligibility first (cheapest, and it can avoid a fetch), then `hostGate`, then the budget guard.
+The gate's value is skipping the (often expensive — RENDER/TOC) **fetch**, so it gates on whether *any* source is due.
+Once a group is fetched, **every source it covers is processed** — the body's already in hand, so processing is cheap,
+and skipping it would only stale a backlog we're holding fresh data for.
+
+- A solo not-due PLANNED group ⇒ **no fetch** (skips the expensive render). The weekly cadence fully applies to any
+  source that would need its *own* fetch.
+- A mixed group ⇒ one shared fetch (a due READING sibling triggers it), and the not-due PLANNED sibling **rides
+  along** — processed for free, keeping its backlog current (notifies are suppressed for non-READING anyway). Its
+  `lastCheckedAt` is stamped, so a feed-shared PLANNED effectively polls at the READING cadence — free, since it's the
+  same fetch, and it keeps sibling etags in sync so `chooseConditionalState(group.sources)` stays efficient.
+- Order: any-due check first (cheapest, and it can avoid a fetch), then `hostGate`, then the budget guard.
 
 ### 4. Notify — "notify only READING" (minimal rule; positive PLANNED triggers = WP-27b)
 
@@ -141,7 +148,7 @@ YAGNI, since rotation already prevents starvation.
 
 - **WP-43 tier:** the status `where` composes with `sourceTierWhere` — the frequent PLAIN poll also honors cadence, so
   a PLANNED PLAIN feed is still weekly on the 2h trigger.
-- **WP-41 rotation / budget:** unchanged — the status gate just trims the eligible set and can drop a fetch; rotation
+- **WP-41 rotation / budget:** unchanged — the status gate just decides whether a group is fetched at all; rotation
   orders whatever remains, the budget guard costs the same per fetched group.
 - **WP-42 host gate:** independent and still applied per host after status-eligibility.
 
@@ -151,7 +158,8 @@ YAGNI, since rotation already prevents starvation.
   the boundary, polls when never-checked (null); PAUSED/COMPLETED/DROPPED → `status-skip`. `POLLABLE_STATUSES` derives
   to exactly `['READING', 'PLANNED']`.
 - **Unit (`pollAllSources` with fakes):** solo not-due PLANNED group → zero fetches; mixed [READING, not-due PLANNED]
-  group → one fetch, only the READING source in `applied`; PLANNED older than 7 days → fetched + processed.
+  group → one fetch, and BOTH sources in `applied` (the not-due PLANNED sibling rides the shared fetch); PLANNED older
+  than 7 days → fetched + processed.
 - **Unit (defer → next-run pickup):** a due (≥7d) PLANNED source skipped because the budget is exhausted keeps its
   `lastCheckedAt` untouched, and on a second `pollAllSources` run (rotation ordering it stalest-first) it is polled —
   pinning the "can't be starved" guarantee at the status-gate layer.

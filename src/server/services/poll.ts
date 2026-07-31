@@ -352,12 +352,15 @@ export async function pollAllSources(
 
   const effects: PollEffects[] = [];
   for (const group of groups) {
-    // Status/cadence gate (WP-27a): poll only sources whose shelf status is due; skip the whole
-    // group's fetch when none are due (e.g. a solo not-due PLANNED render).
-    const eligible = group.sources.filter(
+    // Status/cadence gate (WP-27a): the win is skipping the (often expensive — RENDER/TOC) FETCH,
+    // so gate on whether ANY source in the group is due. Once fetched, every source it covers is
+    // processed below — the body's already in hand, so processing a not-due PLANNED sibling is free
+    // backlog freshness (notifies are suppressed for non-READING anyway). The weekly cadence still
+    // fully applies to a source that would need its OWN fetch (a solo / all-not-due group).
+    const anyDue = group.sources.some(
       (s) => !statusPollGate({ status: s.seriesStatus, lastCheckedAt: s.lastCheckedAt, now }).skip,
     );
-    if (eligible.length === 0) continue;
+    if (!anyDue) continue;
 
     const gate = hostGate({
       hostLastCheckedAt: hostLast.get(group.host) ?? null,
@@ -370,12 +373,12 @@ export async function pollAllSources(
     // Time-budget guard (WP-41).
     if (clock() - start + groupCostMs(group, hasRenderer) > budgetMs) continue;
 
-    const cond = chooseConditionalState(eligible);
+    const cond = chooseConditionalState(group.sources);
     const fetcher = group.fetchMode === 'RENDER' && ports.renderFetch ? ports.renderFetch : ports.fetch;
     const res = await fetcher(group.fetchUrl, { etag: cond.etag, lastModified: cond.lastModified });
     const retryAfterAt = parseRetryAfter(res.retryAfter ?? null, now);
 
-    for (const src of eligible) {
+    for (const src of group.sources) {
       const e = await processFetched(src, res, retryAfterAt, ports);
       await ports.applyPollEffects(e);
       effects.push(e);

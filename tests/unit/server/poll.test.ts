@@ -471,7 +471,7 @@ describe('pollAllSources', () => {
       expect(effects).toEqual([]);
     });
 
-    test('a mixed group [READING, not-due PLANNED] fetches once, processes only READING', async () => {
+    test('a mixed group [READING, not-due PLANNED] fetches once and processes BOTH (the not-due sibling rides the shared fetch)', async () => {
       const feed = FEED('shared.example');
       const r = source({ id: 'r', seriesId: 'serR', host: 'shared.example', fetchUrl: feed, seriesStatus: 'READING' });
       const pl = source({ id: 'pl', seriesId: 'serPl', host: 'shared.example', fetchUrl: feed, seriesStatus: 'PLANNED', lastCheckedAt: THREE_DAYS });
@@ -480,8 +480,10 @@ describe('pollAllSources', () => {
 
       await pollAllSources(p, NOW);
 
+      // The fetch is triggered by the due READING sibling; since it's already paid for, the not-due
+      // PLANNED source is processed too (free backlog freshness) rather than left stale.
       expect(fetches).toBe(1);
-      expect(p.applied.map((e) => e.seriesId)).toEqual(['serR']);
+      expect(p.applied.map((e) => e.seriesId).sort()).toEqual(['serPl', 'serR']);
     });
 
     test('a mixed group [READING, due PLANNED] fetches once, processes BOTH', async () => {
