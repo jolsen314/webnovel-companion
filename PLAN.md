@@ -53,9 +53,7 @@ uncommitted notes." Real names/URLs live only in those local notes and in scratc
 > Feed-vs-Vercel reachability verified 2026-07-29. **Budget×cadence caveat (now realized):** daily cadence is trivial on
 > Neon's compute budget, but at 2h polling (~40 compute-hr/mo) budget becomes a real number to watch — don't go below 2h.
 >
-> **NEXT: WP-27 (reading-status cadence gating)** — gate poll frequency per series status: skip COMPLETED/DROPPED, poll
-> PLANNED/backlog rarely (not daily; RENDER sources can't 304). **The full priority order is the ▶ Active queue
-> table below** (WP-27 → add/identity → sources → UI → pure libs → the three *low* items WP-31/32/45).
+> **WP-27a DONE (2026-07-31)** — reading-status cadence gating implemented: gate poll frequency per series status, skip COMPLETED/DROPPED, poll PLANNED/backlog rarely (not daily; RENDER sources can't 304), with `STATUS_CADENCE_MINUTES` map driving per-source cadence windows. **NEXT: WP-39 (prevent duplicate series on add).** **The full priority order is the ▶ Active queue table below** (WP-39 → add/identity → sources → UI → pure libs → the three *low* items WP-31/32/45).
 >
 > **WP-40 parked — spike (2026-07-28): TLS impersonation can't clear the owner's CF hosts.** An `impit`
 > (browser-TLS/JA3 + HTTP/2) probe deployed to Vercel returned Cloudflare's **JS *managed challenge*** ("Just a
@@ -97,8 +95,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 
 | ID | Work package | Status | Depends on |
 |----|--------------|--------|------------|
-| WP-27 | Reading-status lifecycle → **cadence** gating (skip COMPLETED/DROPPED; PLANNED/backlog polled rarely, not daily — RENDER can't 304), PLANNED seeds a **summary** not the full TOC (backfill on →READING), per-status notify rules | `NEXT` | WP-07, WP-17, WP-18 |
-| WP-39 | Prevent duplicate series on add — wire `canonicalId` dedup into `addSeries` (home URL vs TOC URL → one series); consumes WP-14 | `TODO` | WP-07, WP-14 |
+| WP-39 | Prevent duplicate series on add — wire `canonicalId` dedup into `addSeries` (home URL vs TOC URL → one series); consumes WP-14 | `NEXT` | WP-07, WP-14 |
 | WP-37 | Per-series chapter-TOC URL (landing page ≠ chapter TOC) — resolve/store a dedicated TOC URL distinct from the reading `url` | `TODO` | WP-17, WP-33 |
 | WP-30 | Series title backfill from TOC (fix acronym/URL-derived **and site-name-from-feed-channel** titles) + manual title edit | `TODO` | WP-17, WP-10 |
 | WP-34 | Feed→TOC switch to lock-monitoring — add-time lock detect (prefer PAGE_WATCH) + per-series "Track unlocks" + transition reconcile — **end-to-end "now free" CF-gated** | `TODO` | WP-33, WP-19 |
@@ -110,6 +107,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 | WP-16 | Host-level health aggregation (site-down vs novel-moved) | `TODO` | WP-03, WP-07 |
 | WP-13 | `lib/completion.ts` (pure) — plan-to-read heuristic | `TODO` | WP-00 |
 | WP-21 | Plan-to-read completion watch (wire WP-13 + notify) — compare **max chapter number** vs target, not post count | `TODO` | WP-13, WP-07 |
+| WP-27b | Per-status positive notify rules — PLANNED paid → fire at 0 LOCKED; PLANNED free → fire at targetChapterCount; wire with WP-20/WP-21 | `TODO` | WP-20, WP-21, WP-13 |
 | WP-14 | `lib/dedup.ts` (pure) — "already read this?" | `TODO` | WP-00 |
 | WP-15 | `lib/search.ts` (pure) — filter/query building | `TODO` | WP-00 |
 | WP-EXPORT | One-click data export (`/api/export` → JSON) — own-your-data insurance | `TODO` | WP-AUTH |
@@ -120,7 +118,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 
 ### ✅ Completed
 
-WP-00, WP-GH, WP-CI, WP-12 (bootstrap / CI / docs) · WP-01, WP-03 (pure diff / health) · WP-04, WP-05, WP-FE (schema, feed parse/discover, fetcher) · WP-06, WP-07, WP-08 (Next shell, services, API) · WP-09, WP-10, WP-AUTH, WP-11 (Web Push, library/detail UI, auth gate, deploy) · WP-17, WP-17b (page-watch + headless renderer) · WP-20 (paid→free "now free") · WP-33 (full-TOC backfill + `accessReconciled`) · WP-35 (TOC-order chapters + display toggle) · WP-36 (`parseToc` content scoping) · WP-38 (contaminated-series recovery script) · WP-42 (poll-once-per-feed + politeness) · WP-41 (poll time-budget guard + rotation) · WP-43 (frequent PLAIN-tier polling).
+WP-00, WP-GH, WP-CI, WP-12 (bootstrap / CI / docs) · WP-01, WP-03 (pure diff / health) · WP-04, WP-05, WP-FE (schema, feed parse/discover, fetcher) · WP-06, WP-07, WP-08 (Next shell, services, API) · WP-09, WP-10, WP-AUTH, WP-11 (Web Push, library/detail UI, auth gate, deploy) · WP-17, WP-17b (page-watch + headless renderer) · WP-20 (paid→free "now free") · WP-33 (full-TOC backfill + `accessReconciled`) · WP-35 (TOC-order chapters + display toggle) · WP-36 (`parseToc` content scoping) · WP-38 (contaminated-series recovery script) · WP-42 (poll-once-per-feed + politeness) · WP-41 (poll time-budget guard + rotation) · WP-43 (frequent PLAIN-tier polling) · WP-27a (status-gated + cadence polling).
 
 ### ⏭ Later tiers (M2–M4)
 
@@ -356,30 +354,11 @@ the feed. If it never fills, WP-46 escalates to page-watch. **Cloudflare caveat:
 service; not Vercel serverless) or an unblock service — best-effort per the README. Near-term workaround: track such
 a novel via its NovelUpdates feed instead.
 
-### WP-27 — Reading-status lifecycle for poll + store
+### WP-27a — Reading-status cadence gating (DONE 2026-07-31)
 
-Keyed on **reading status** (`SeriesStatus`: READING / PLANNED / PAUSED / DROPPED / COMPLETED = *I* finished reading), not
-`translationStatus`. Three parts:
+**DONE.** Pure `statusPollGate` + `STATUS_CADENCE_MINUTES` (a map: READING → every run, PLANNED → weekly rolling per-source window, PAUSED/COMPLETED/DROPPED → never) gate `pollAllSources`. **Status-gated polling:** `pollAllSources` skips COMPLETED and DROPPED (no new chapters wanted); motivation is **compute + politeness**, not storage. **Status→cadence, not just skip:** beyond skip/poll, PLANNED/backlog poll rarely (slow cadence, not daily). RENDER sources can't 304 (every poll is a full ~5–15s headless render — `renderFetch` sends no validators), so gating cadence by status saves render cost. READING polls every run; PLANNED polls at most weekly (rolling per-source window, WP-41 rotation guarantees deferred pickup); PAUSED/COMPLETED/DROPPED never polled. **Query filter + per-source gating:** `loadActiveSources` filters COMPLETED/DROPPED/PAUSED out; a group with no due source is not fetched; only eligible sources are processed. **Per-source `seriesStatus` on `PollableSource`** + **`PollEffects.seriesStatus`** propagate status through the pipeline; `notifyForEffects` pushes only for READING (PLANNED polls quietly).
 
-- **Status-gated polling.** `pollAllSources` polls every active source today regardless of shelf. Gate it: **skip
-  COMPLETED and DROPPED** (no new chapters wanted). Motivation is **compute + politeness**, not storage — see the
-  free-tier note in the backlog. Cheap: filter the active-sources query by the parent series' status. *(Open:
-  PAUSED — poll-but-suppress-notify, or skip? Leaning poll-quietly so the backlog is there on resume.)*
-- **Status→cadence, not just skip (owner, 2026-07-28).** Beyond skip/poll, **PLANNED/backlog should poll *rarely*
-  (slow cadence or on-demand), not daily.** This sharpened once we confirmed **RENDER sources can't 304** (every poll
-  is a full ~5–15s headless render — `renderFetch` sends no validators): a pile of PLANNED reads on a CF/JS host (e.g.
-  many novels on one CF-fronted host) would otherwise cost a full daily render *each*. Gate cadence by status — READING
-  daily; PLANNED/PAUSED slow or on-promote. This also caps the RENDER load **WP-41**'s time-budget guard must absorb,
-  and pairs with **WP-40** (make CF-static hosts cheap/304). PLANNED already seeds a summary not the TOC (next bullet),
-  so it has little to poll anyway — the win is *not paying to render a backlog you're not reading yet*.
-- **PLANNED seeds a summary, not the full TOC.** For a plan-to-read series, seeding the whole TOC of a finished
-  ~1,000-chapter translation at add-time is a large insert for something you may never open, and the PLANNED signal is
-  a **milestone**, not per-chapter. Seed a summary (max chapter number, total vs `targetChapterCount`, free/locked
-  counts); **backfill the full TOC when it flips to READING** (shares the WP-18 backfill path). This is the *only*
-  place "store less" earns its keep.
-- **Per-status notify rules** (wire with WP-09/WP-20/WP-21): READING → per new chapter (+ locked→free, WP-20);
-  PLANNED + paid → **fire only when 0 LOCKED remain** (whole work bingeable free — the real "start now" trigger, not
-  "all chapters published"); PLANNED + free ongoing → fire at `targetChapterCount` (WP-21).
+**Dropped:** the WP-27 summary-seeding idea (storage isn't the binding constraint — the limit is **compute/poll-budget**, not DB space). Refiled per-status positive notify rules as **WP-27b** (PLANNED paid → fire at 0 LOCKED; PLANNED free → fire at targetChapterCount; wire with WP-20/WP-21).
 
 > Explicitly **not** doing: pruning stored chapters for COMPLETED. It saves negligible space (see backlog) and costs
 > reading position (`lastReadChapterId` → a real `Chapter` row), the chapter list, and re-diff ability. YAGNI.
@@ -754,6 +733,13 @@ Depends on WP-09 (and the 403-prune hardening, `dc3cb6e`).
 
 ## Changelog
 
+- **2026-07-31** — **WP-27a done: status-gated + cadence polling.** Pure `statusPollGate` + `STATUS_CADENCE_MINUTES`
+  (READING every run; PLANNED weekly; PAUSED/COMPLETED/DROPPED never) gate `pollAllSources`: COMPLETED/DROPPED/PAUSED
+  filtered from `loadActiveSources`, a group with no due source is not fetched, PLANNED polls at most weekly (rolling
+  per-source window; WP-41 rotation prioritizes due-and-stale and guarantees deferred pickup). `seriesStatus` rides
+  `PollableSource`/`PollEffects`; `notifyForEffects` pushes only for READING (PLANNED polls quietly). No schema change.
+  Dropped the WP-27 summary-seeding idea (storage isn't the constraint); refiled per-status notify rules as WP-27b.
+  +11 unit +3 integration tests, typecheck clean.
 - **2026-07-30** — **WP-09 push hardening + WP-47 added (low).** `classifyPushFailure` (pure, tested) now prunes a
   **403** sub (VAPID key mismatch) alongside 404/410, and the push port logs the failing HTTP status + endpoint host so
   a persistent failure is diagnosable in the Vercel logs (was a silent `failed` count). Surfaced from a live WP-43 poll
