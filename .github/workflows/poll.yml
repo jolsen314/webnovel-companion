@@ -2,8 +2,10 @@ name: Frequent poll (PLAIN tier)
 
 on:
   schedule:
-    - cron: '0 */2 * * *'   # every 2h UTC — PLAIN tier only (see docs/superpowers/specs/2026-07-30-wp43-…)
+    - cron: '0 1-23/2 * * *'   # odd hours — phase-shifted off the daily Vercel cron (0 8) so a co-hosted RENDER source can't be gated out (WP-42 host gate); ~2h cadence, PLAIN tier only (see docs/superpowers/specs/2026-07-30-wp43-frequent-poll-plain-tier-design.md)
   workflow_dispatch: {}       # manual run, for testing / on-demand
+
+permissions: {}
 
 jobs:
   poll:

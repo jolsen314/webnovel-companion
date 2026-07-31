@@ -53,8 +53,9 @@ the port returns.
 name: Frequent poll (PLAIN tier)
 on:
   schedule:
-    - cron: '0 */2 * * *'   # every 2h UTC
+    - cron: '0 1-23/2 * * *'   # odd hours — phase-shifted off the daily Vercel cron (0 8)
   workflow_dispatch: {}       # manual run, for testing / on-demand
+permissions: {}
 jobs:
   poll:
     runs-on: ubuntu-latest
@@ -83,9 +84,10 @@ covers PLAIN. **Rejected** — it doesn't achieve its goal and costs resilience:
   budget tail, which the expensive tier never reaches. Removing PLAIN from the daily scope frees tail budget RENDER
   never used → **no improvement to RENDER's odds.** (If the RENDER set alone ever exceeds the budget, the fix is WP-27
   cadence-gating or a dedicated RENDER cadence — not the daily scope.)
-- **The overlap is already a no-op, not redundant work.** The daily cron (`0 8`) and a 2h tick both fire ~08:00;
-  whichever runs second finds PLAIN hosts polled <15 min ago and the WP-42 gate skips them. Worst case (GHA drift) is
-  one extra cheap `304` per PLAIN source per day.
+- **The frequent schedule is phase-shifted to odd UTC hours** (01, 03, 05, …, 23) — specifically off the daily
+  Vercel cron at 08:00 — so that when a PLAIN feed and a co-hosted RENDER or page-watch source share a fetched host,
+  the frequent tick cannot trigger the WP-42 per-host gate and starve the expensive tier's daily poll. This ensures
+  the daily run always has unrestricted access to every host for its full-superset coverage.
 - **A full-superset daily is a safety net.** GitHub Actions cron is the *less* reliable trigger (drift, skips,
   private-repo scheduled workflows auto-disable after 60 days of no commits). Keeping the daily poll a superset
   guarantees every source is polled **at least daily** regardless of what happens to the frequent trigger. The
