@@ -117,6 +117,26 @@ Polling PLANNED weekly means deciding what it pings. The safe default now is **o
 - **Source-down** alerts are left as-is (rare; revisit in 27b). WP-27b adds PLANNED's *positive* triggers
   (paid → fire at 0 LOCKED; free ongoing → fire at `targetChapterCount`, which is WP-21).
 
+### 5. Scheduling behavior (how PLANNED's weekly cadence plays out)
+
+The cadence is a **rolling per-source window anchored to each source's own `lastCheckedAt`** — not a fixed weekday.
+A PLANNED source is eligible again exactly 7 days after *its* last poll, so PLANNED series stagger naturally by when
+each was last polled. (One clustering vector: a batch of PLANNED added in one sitting tends to come due the same day
+each week, re-anchoring +7d from that day.)
+
+Clustering doesn't cause starvation, because the cadence composes with WP-41 rotation:
+
+- A due PLANNED source is ≥7 days stale, so WP-41's least-recently-polled-first ordering sorts it **ahead of** daily
+  READING series (≤1 day stale) — due PLANNED is *prioritized*, not deprioritized.
+- If the budget is exhausted before reaching a due source, its group is skipped **without stamping `lastCheckedAt`**,
+  so next run it's even staler → sorts even earlier → gets polled. It cannot be permanently starved (WP-41's
+  guarantee).
+- In a mixed group, a due PLANNED source **rides the shared fetch** its READING sibling triggers — polled at no extra
+  cost.
+
+If a real, budget-exceeding PLANNED clump ever emerged, the fix is a small ±jitter on the 7-day window — deferred as
+YAGNI, since rotation already prevents starvation.
+
 ## Interactions (all additive, none break)
 
 - **WP-43 tier:** the status `where` composes with `sourceTierWhere` — the frequent PLAIN poll also honors cadence, so
@@ -132,6 +152,9 @@ Polling PLANNED weekly means deciding what it pings. The safe default now is **o
   to exactly `['READING', 'PLANNED']`.
 - **Unit (`pollAllSources` with fakes):** solo not-due PLANNED group → zero fetches; mixed [READING, not-due PLANNED]
   group → one fetch, only the READING source in `applied`; PLANNED older than 7 days → fetched + processed.
+- **Unit (defer → next-run pickup):** a due (≥7d) PLANNED source skipped because the budget is exhausted keeps its
+  `lastCheckedAt` untouched, and on a second `pollAllSources` run (rotation ordering it stalest-first) it is polled —
+  pinning the "can't be starved" guarantee at the status-gate layer.
 - **Integration (real DB):** COMPLETED/DROPPED/PAUSED sources are never polled (`lastCheckedAt` stays null);
   a PLANNED source stale > 7 days is polled and its new chapters are **stored but not pushed**, while a READING
   source's new chapters **are** pushed.
