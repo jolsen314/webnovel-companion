@@ -116,6 +116,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 | WP-31 | *(low)* Tab-structured premium TOCs — renderer clicks Free/Premium tabs + tab-membership access marking (unblocks WP-20 "now free" where locked chapters live behind a tab) | `TODO` | WP-17b, WP-20 |
 | WP-32 | *(low)* `parseToc` robustness — follow split/paginated sibling TOCs (bounded "next chapters" hops) + **all non-chapter anchor filtering** (pagination + shortcut/CTA like "Last chapter"/"Read") + **URL-slug number authority** (trust a delimited `/chapter-<N>-` over a concatenated title number) | `TODO` | WP-17, WP-35 |
 | WP-45 | *(low)* JSON-adapter rung for static-SPA sources — read a site's static, 304-able chapter JSON directly instead of rendering; bespoke per source, only if the pattern recurs (RENDER handles it today) | `TODO` | WP-17b |
+| WP-47 | *(low)* Client resubscribe on VAPID key mismatch — `resyncSubscription` re-posts a stale browser sub whose `applicationServerKey` ≠ current key, so a 403-pruned sub churns (prune→re-add) and the client shows "subscribed" while receiving nothing; detect the key mismatch on load and unsubscribe + re-subscribe under the new key. Makes key rotation self-healing on the client | `TODO` | WP-09 |
 
 ### ✅ Completed
 
@@ -702,6 +703,28 @@ site-specific, so this is a **bespoke adapter per source**, not generic — henc
 exist. Until then, render is the right call. Relates to WP-17b (render) and WP-27 (a *completed* static SPA is also a
 "render-once, then rarely re-poll" case).
 
+### WP-47 — Client resubscribe on VAPID key mismatch (low priority)
+
+**Priority: low.** Only bites on an intentional VAPID key rotation, or a live device holding a subscription created
+under a different key (e.g. a stale sub from another environment). Not needed for the common expired-subscription case,
+which already self-heals.
+
+**Motivation (owner, 2026-07-30):** the WP-09-hardening `classifyPushFailure` now prunes a **403 Forbidden** sub
+(VAPID key mismatch) server-side, alongside 404/410. But the client's self-heal `resyncSubscription`
+([pushClient.ts](src/app/pushClient.ts)) re-POSTs whatever subscription the **browser** still holds on every app load
+([ServiceWorkerRegister.tsx](src/app/ServiceWorkerRegister.tsx)). For a 403 (key-mismatch) sub the browser sub is still
+present but was created under the **old** `applicationServerKey`, so: server prunes it → next load resync re-adds it →
+next send 403s → pruned again — a **prune/re-add churn**, and the settings toggle still reads "subscribed"
+([getPushState](src/app/pushClient.ts) checks the browser sub, not the server row) while no pushes ever arrive. The
+client has no signal to reconnect. *(By contrast, an expired 404/410 sub self-heals cleanly: the browser also loses it →
+`getSubscription()` returns null → toggle flips to "default" → the user re-enables.)*
+
+**Work:** on load (in `resyncSubscription`, or a dedicated check), compare the browser subscription's
+`options.applicationServerKey` bytes against the current `NEXT_PUBLIC_VAPID_PUBLIC_KEY`; **on mismatch, `unsubscribe()`
+then re-`subscribe()` under the new key before posting** (recreate, don't re-post the stale one). Makes a key rotation
+genuinely self-healing on the client and ends the churn. Pure-ish client helper; test the key-compare in isolation.
+Depends on WP-09 (and the 403-prune hardening, `dc3cb6e`).
+
 ## Backlog / open questions
 
 - **Notification privacy** *(implemented 2026-07-26)* — the work's name is kept out of the always-visible notification
@@ -731,6 +754,13 @@ exist. Until then, render is the right call. Relates to WP-17b (render) and WP-2
 
 ## Changelog
 
+- **2026-07-30** — **WP-09 push hardening + WP-47 added (low).** `classifyPushFailure` (pure, tested) now prunes a
+  **403** sub (VAPID key mismatch) alongside 404/410, and the push port logs the failing HTTP status + endpoint host so
+  a persistent failure is diagnosable in the Vercel logs (was a silent `failed` count). Surfaced from a live WP-43 poll
+  showing `pushed:{sent:1,failed:1}` — a stray subscription failing every send. +7 unit tests (309 total), typecheck
+  clean; merged to `main` (`dc3cb6e`). Filed **WP-47 (low)**: the client self-heal `resyncSubscription` re-posts a
+  stale-key browser sub, so a 403-pruned sub churns and the client shows "subscribed" while receiving nothing —
+  detect the `applicationServerKey` mismatch on load and unsubscribe+resubscribe under the new key.
 - **2026-07-30** — **WP-43 done: frequent PLAIN-tier polling.** External GitHub Actions trigger (`.github/workflows/poll.yml`,
   every 2h, `workflow_dispatch` for manual runs) calls `/api/cron/poll?tier=plain` with secret URL + `CRON_SECRET`.
   Pure `sourceTierWhere` (FEED+PLAIN vs all) + fail-safe `parsePollTier` (only `plain` narrows) thread a `PollTier`
