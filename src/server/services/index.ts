@@ -28,7 +28,7 @@ import type { ReleaseSchedule } from '../../lib/schedule';
 // bundlers (webpack/Vite) paper over it. `webPush.<fn>` always resolves.
 import webPush from 'web-push';
 import { buildPushMessages } from '../../lib/notify';
-import { sendPushMessages, type PushSendPorts, type SendSummary } from './pushSend';
+import { classifyPushFailure, sendPushMessages, type PushSendPorts, type SendSummary } from './pushSend';
 import { getNotificationPrefs } from './notificationPrefs';
 
 export { listSeries, getSeries, updateSeries } from './series';
@@ -266,7 +266,17 @@ function pushSendPorts(): PushSendPorts {
         return 'SENT';
       } catch (e) {
         const status = (e as { statusCode?: number }).statusCode;
-        return status === 404 || status === 410 ? 'EXPIRED' : 'FAILED';
+        const outcome = classifyPushFailure(status);
+        // Log the status so a persistent failure is diagnosable — the send summary only counts
+        // it. Host only: the endpoint path carries a per-subscription secret token.
+        let host = 'unknown';
+        try {
+          host = new URL(target.endpoint).host;
+        } catch {
+          /* keep 'unknown' */
+        }
+        console.warn(`push send ${outcome}`, { status: status ?? 'none', host });
+        return outcome;
       }
     },
     deleteSubscription: async (endpoint) => {

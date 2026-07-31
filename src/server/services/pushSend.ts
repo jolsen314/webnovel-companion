@@ -15,6 +15,16 @@ export interface PushTarget {
 
 export type SendOutcome = 'SENT' | 'EXPIRED' | 'FAILED';
 
+/** Classify a failed Web Push send by the endpoint's HTTP status into a prune-or-keep outcome.
+ *  `EXPIRED` (prune) = the subscription is permanently dead *for us*: 404 Not Found / 410 Gone
+ *  (unsubscribed or expired) and 403 Forbidden (VAPID key mismatch — created under different keys,
+ *  so it can never accept our pushes; also the desired behavior on an intentional key rotation).
+ *  Everything else — 429 rate-limit, 5xx, or a network error with no status — is `FAILED`
+ *  (transient): keep the subscription and retry next run. Pure. */
+export function classifyPushFailure(status: number | undefined): Exclude<SendOutcome, 'SENT'> {
+  return status === 403 || status === 404 || status === 410 ? 'EXPIRED' : 'FAILED';
+}
+
 export interface PushSendPorts {
   loadSubscriptions: () => Promise<PushTarget[]>;
   send: (target: PushTarget, message: PushMessage) => Promise<SendOutcome>;

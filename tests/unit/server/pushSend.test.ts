@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { sendPushMessages, type PushSendPorts, type PushTarget, type SendOutcome } from '../../../src/server/services/pushSend';
+import { classifyPushFailure, sendPushMessages, type PushSendPorts, type PushTarget, type SendOutcome } from '../../../src/server/services/pushSend';
 import type { PushMessage } from '../../../src/lib/notify';
 
 const msg = (tag: string): PushMessage => ({ title: 'T', body: 'B', url: '/x', tag });
@@ -53,5 +53,35 @@ describe('sendPushMessages', () => {
     const summary = await sendPushMessages([msg('a')], h.ports);
     expect(summary).toEqual({ sent: 0, expired: 0, failed: 1 });
     expect(h.deleted).toEqual([]);
+  });
+});
+
+describe('classifyPushFailure', () => {
+  test('404 Not Found → EXPIRED (subscription gone, prune it)', () => {
+    expect(classifyPushFailure(404)).toBe('EXPIRED');
+  });
+
+  test('410 Gone → EXPIRED (unsubscribed, prune it)', () => {
+    expect(classifyPushFailure(410)).toBe('EXPIRED');
+  });
+
+  test('403 Forbidden → EXPIRED (VAPID key mismatch — dead for us, prune it)', () => {
+    expect(classifyPushFailure(403)).toBe('EXPIRED');
+  });
+
+  test('429 rate-limit → FAILED (transient, keep and retry)', () => {
+    expect(classifyPushFailure(429)).toBe('FAILED');
+  });
+
+  test('500 server error → FAILED (transient, keep)', () => {
+    expect(classifyPushFailure(500)).toBe('FAILED');
+  });
+
+  test('400 Bad Request → FAILED (not a gone signal, keep)', () => {
+    expect(classifyPushFailure(400)).toBe('FAILED');
+  });
+
+  test('no status (network error / undefined) → FAILED (keep)', () => {
+    expect(classifyPushFailure(undefined)).toBe('FAILED');
   });
 });
