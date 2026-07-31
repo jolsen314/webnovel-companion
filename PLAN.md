@@ -53,7 +53,9 @@ uncommitted notes." Real names/URLs live only in those local notes and in scratc
 > Feed-vs-Vercel reachability verified 2026-07-29. **Budget×cadence caveat (now realized):** daily cadence is trivial on
 > Neon's compute budget, but at 2h polling (~40 compute-hr/mo) budget becomes a real number to watch — don't go below 2h.
 >
-> **WP-27a DONE (2026-07-31)** — reading-status cadence gating implemented: gate poll frequency per series status, skip COMPLETED/DROPPED, poll PLANNED/backlog rarely (not daily; RENDER sources can't 304), with `STATUS_CADENCE_MINUTES` map driving per-source cadence windows. **NEXT: WP-39 (prevent duplicate series on add).** **The full priority order is the ▶ Active queue table below** (WP-39 → add/identity → sources → UI → pure libs → the three *low* items WP-31/32/45).
+> **WP-27a DONE (2026-07-31)** — reading-status cadence gating implemented: gate poll frequency per series status, skip COMPLETED/DROPPED, poll PLANNED/backlog rarely (not daily; RENDER sources can't 304), with `STATUS_CADENCE_MINUTES` map driving per-source cadence windows.
+>
+> **WP-39 DONE (2026-07-31)** — add-time dedup: pure `canonicalSeriesId` (deterministic feed-identity + exact/near-URL) keys a series, rejects on duplicate (returning the existing series with `alreadyExisting`), persists `canonicalId`. Catches all re-adds (http/https/www/slash/tracking params) + home-vs-TOC for feed series; keeps multi-novel-feed siblings distinct. Page-watch home-vs-TOC residual filed as WP-39b. **NEXT: WP-37 (per-series TOC URL).** **The full priority order is the ▶ Active queue table below**.
 >
 > **WP-40 parked — spike (2026-07-28): TLS impersonation can't clear the owner's CF hosts.** An `impit`
 > (browser-TLS/JA3 + HTTP/2) probe deployed to Vercel returned Cloudflare's **JS *managed challenge*** ("Just a
@@ -95,15 +97,15 @@ later-tier tables are reference only. `⭐` = load-bearing.
 
 | ID | Work package | Status | Depends on |
 |----|--------------|--------|------------|
-| WP-39 | Prevent duplicate series on add — wire `canonicalId` dedup into `addSeries` (home URL vs TOC URL → one series); consumes WP-14 | `NEXT` | WP-07, WP-14 |
-| WP-37 | Per-series chapter-TOC URL (landing page ≠ chapter TOC) — resolve/store a dedicated TOC URL distinct from the reading `url` | `TODO` | WP-17, WP-33 |
+| WP-37 | Per-series chapter-TOC URL (landing page ≠ chapter TOC) — resolve/store a dedicated TOC URL distinct from the reading `url` | `NEXT` | WP-17, WP-33 |
 | WP-30 | Series title backfill from TOC (fix acronym/URL-derived **and site-name-from-feed-channel** titles) + manual title edit | `TODO` | WP-17, WP-10 |
+| WP-39b | Page-watch home-vs-TOC dedup — unify a landing URL vs a chapter-TOC URL for a page-watch (no-feed) series (via WP-37's TOC-URL identity and/or a WP-30-clean title match) | `TODO` | WP-37, WP-30 |
 | WP-34 | Feed→TOC switch to lock-monitoring — add-time lock detect (prefer PAGE_WATCH) + per-series "Track unlocks" + transition reconcile — **end-to-end "now free" CF-gated** | `TODO` | WP-33, WP-19 |
 | WP-46 | Add-time under-fetch escalation — when `addSeries` seeds **≤5 chapters** (dense-feed window miss, or a TOC needing render/pagination), escalate to a proper fetch (RENDER / page-watch / follow-next-page) to seed the full history at add. *(Re-scoped from the old WP-46 dense-feed-reconcile idea — the **ongoing** miss is now covered by WP-43; this is the **add-time** gap.)* | `TODO` | WP-07, WP-17 |
 | WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` + schema + cron wiring **done**; **editor UI + push delivery (WP-09) remain** (picking up later) | `TODO` | WP-07, WP-10 |
 | WP-28 | Frontend styling & theming — ordering, feed-page vs library split, theme system (night default + cultivation ancient-scroll, sci-fi holographic-panel), long-title readability (wrap/clamp vs ellipsis) | `TODO` | WP-10 |
 | WP-18 | Completed shelf + backfill + "Move to Completed?" | `TODO` | WP-10 |
-| WP-19 | Non-destructive re-pointing + "find new source" helper | `TODO` | WP-16, WP-18 |
+| WP-19 | Non-destructive re-pointing + "find new source" helper (also: on a duplicate add (WP-39), optionally offer to attach the pasted URL as an **alternate source** on the existing series rather than only rejecting) | `TODO` | WP-16, WP-18 |
 | WP-16 | Host-level health aggregation (site-down vs novel-moved) | `TODO` | WP-03, WP-07 |
 | WP-13 | `lib/completion.ts` (pure) — plan-to-read heuristic | `TODO` | WP-00 |
 | WP-21 | Plan-to-read completion watch (wire WP-13 + notify) — compare **max chapter number** vs target, not post count | `TODO` | WP-13, WP-07 |
@@ -118,7 +120,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 
 ### ✅ Completed
 
-WP-00, WP-GH, WP-CI, WP-12 (bootstrap / CI / docs) · WP-01, WP-03 (pure diff / health) · WP-04, WP-05, WP-FE (schema, feed parse/discover, fetcher) · WP-06, WP-07, WP-08 (Next shell, services, API) · WP-09, WP-10, WP-AUTH, WP-11 (Web Push, library/detail UI, auth gate, deploy) · WP-17, WP-17b (page-watch + headless renderer) · WP-20 (paid→free "now free") · WP-33 (full-TOC backfill + `accessReconciled`) · WP-35 (TOC-order chapters + display toggle) · WP-36 (`parseToc` content scoping) · WP-38 (contaminated-series recovery script) · WP-42 (poll-once-per-feed + politeness) · WP-41 (poll time-budget guard + rotation) · WP-43 (frequent PLAIN-tier polling) · WP-27a (status-gated + cadence polling).
+WP-00, WP-GH, WP-CI, WP-12 (bootstrap / CI / docs) · WP-01, WP-03 (pure diff / health) · WP-04, WP-05, WP-FE (schema, feed parse/discover, fetcher) · WP-06, WP-07, WP-08 (Next shell, services, API) · WP-09, WP-10, WP-AUTH, WP-11 (Web Push, library/detail UI, auth gate, deploy) · WP-17, WP-17b (page-watch + headless renderer) · WP-20 (paid→free "now free") · WP-33 (full-TOC backfill + `accessReconciled`) · WP-35 (TOC-order chapters + display toggle) · WP-36 (`parseToc` content scoping) · WP-38 (contaminated-series recovery script) · WP-42 (poll-once-per-feed + politeness) · WP-41 (poll time-budget guard + rotation) · WP-43 (frequent PLAIN-tier polling) · WP-27a (status-gated + cadence polling) · WP-39 (add-time dedup).
 
 ### ⏭ Later tiers (M2–M4)
 
@@ -562,17 +564,11 @@ page is not the chapter list:
   prune/delete can land first; the clean re-backfill wants WP-36. A small detail-page UI (delete-chapter / reset /
   edit-source-URL) is a **follow-up** once the fixes settle.
 
-### WP-39 — Prevent duplicate series on add
+### WP-39 — Prevent duplicate series on add (DONE 2026-07-31)
 
-**Motivation (owner, 2026-07-27):** the same work got added twice (home URL and TOC URL → two `Series` rows). Add-time
-dedup **doesn't exist** — the schema *has* a `Series.canonicalId` field ("NovelUpdates id / normalized URL — de-dup
-key") + `@@index([userId, canonicalId])`, but `addSeries`/`createSeries` never set or check it. **Work:** compute a
-`canonicalId` at add (normalized series URL — strip scheme/`www`/trailing slash/tracking, or a NU id when available),
-set it on create, and **check for an existing series with the same `canonicalId`** before inserting — if found, don't
-create a second; surface "already tracking this" (and optionally add the new URL as an alternate source). Consumes
-WP-14's pure `lib/dedup.ts`. Note the URL forms to reconcile: a **landing/home URL vs a chapter-TOC URL** for the same
-series are *different* URLs — canonicalization alone won't unify them, so dedup also needs a title/known-source match
-or the WP-37 TOC-URL resolution to map both to one identity. (WP-38 cleans up the dup that already exists.)
+**What shipped:** pure `canonicalSeriesId` (`src/lib/dedup.ts`) keys a feed series on `canonical(feedUrl)#matcher` and a page-watch series on `canonical(sourceUrl)` (scheme/www-insensitive); `addSeries` computes it post-resolution, and a new `findSeriesByCanonicalId` port makes a duplicate return the existing series (`alreadyExisting`, route 200 not 201) instead of creating a second row — `createSeries` never runs. Persists `canonicalId` on create. Catches all re-adds (http/https/www/trailing slash/tracking params) + home-vs-TOC for feed series; keeps multi-novel-feed siblings distinct via the matcher. No schema change (column + index already existed).
+
+**Residual:** page-watch-only series with different landing vs chapter-TOC URLs (no shared feed) are not unified by canonical URL alone — title/url reconciliation is deferred as **WP-39b** (gated on WP-37's TOC-URL resolution and WP-30's title backfill). WP-19 noted for alternate-source-on-dup UX.
 
 ### WP-40 — Cheap CF bypass for static CF-blocked hosts (browser-fingerprint GET, not render)
 
@@ -733,6 +729,12 @@ Depends on WP-09 (and the 403-prune hardening, `dc3cb6e`).
 
 ## Changelog
 
+- **2026-07-31** — **WP-39 done: add-time dedup.** Pure `canonicalSeriesId` (`lib/dedup.ts`) keys a feed series on
+  `canonical(feedUrl)#matcher` and a page-watch series on `canonical(sourceUrl)` (scheme/www-insensitive); `addSeries`
+  computes it post-resolution, and a new `findSeriesByCanonicalId` port makes a duplicate return the existing series
+  (`alreadyExisting`, route 200) instead of a second row — `createSeries` never runs. Catches all re-adds + home-vs-TOC
+  for feed series; keeps multi-novel-feed siblings distinct. No schema change. Residual (page-watch home-vs-TOC) filed
+  as WP-39b (after WP-37/WP-30); WP-19 noted for alternate-source-on-dup. +8 unit +1 integration, typecheck clean.
 - **2026-07-31** — **WP-27a refinement: gate the fetch, not the processing.** The cadence gate now decides only whether
   a group is *fetched* (`anyDue`) — once fetched, every source it covers is processed. Skipping an already-fetched
   not-due PLANNED sibling saved ~nothing (parse/diff on a body in hand) and staled a backlog we were holding fresh data
