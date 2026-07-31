@@ -46,15 +46,20 @@ uncommitted notes." Real names/URLs live only in those local notes and in scratc
 
 ## Current focus
 
-> **WP-42 (poll-once-per-feed + politeness) is DONE (2026-07-30)** — feed-centric loop (group by `(fetchMode,
-> fetchUrl)`, fetch once, fan out), 429/Retry-After backoff, and the per-host min-interval cap are all in and covered
-> unit + real-DB (two series sharing one feed fetched once; a host polled <15 min ago skipped, `lastCheckedAt`
-> untouched). 284 unit + 50 integration tests green. Merged to `main` via PR #1 (squash `b96246b`).
+> **WP-41 (poll time-budget guard + rotation) is DONE (2026-07-30)** — `pollAllSources` now (a) drains hosts
+> **least-recently-polled first** (`orderGroupsByStaleness`, reusing the existing `lastCheckedAt` column — no schema
+> change) so a dropped tail keeps its older timestamp and sorts ahead next run, and (b) **stops starting group fetches**
+> once the run can't finish one within `POLL_BUDGET_MS` (270s), skip-not-break so a later cheap group still fits.
+> Per-group cost is estimated (`groupCostMs`: RENDER 15s vs PLAIN 5s). The cron route's `maxDuration` was raised **60→300**
+> (Vercel Hobby's real ceiling — verified against the docs; the old 60s was self-imposed, not a platform cap). 296 unit
+> (+12) + 50 integration tests green, typecheck clean.
 >
-> **NEXT: WP-41 (poll time-budget guard + rotation)** — the sequential `pollAllSources` loop has no deadline under the
-> 60s ceiling; needed before **WP-43** (frequent external-trigger polling) can lean on it, and it composes with
-> WP-42's per-host gate already in place. **The full priority order is the ▶ Active queue table below** (poll-scale
-> first — WP-41 → WP-43 → WP-27 — then add/identity, sources, UI, pure libs, and the three *low* items WP-31/32/45).
+> **NEXT: WP-43 (frequent polling via external trigger)** — GitHub Actions / cron-job.org → `/api/cron/poll` every
+> ~1–2h (Hobby cron is daily) for the **PLAIN-feed tier only**; now composes with WP-41's rotation + per-host gate.
+> Feed-vs-Vercel reachability already verified 2026-07-29. **Budget×cadence caveat (from the WP-41 discussion):** at
+> daily cadence a 270s run is trivial on Neon's ~192 free compute-hours/mo, but hourly polling makes budget×cadence a
+> real number to watch — size the external cadence with that in mind. **The full priority order is the ▶ Active queue
+> table below** (WP-43 → WP-27 → add/identity → sources → UI → pure libs → the three *low* items WP-31/32/45).
 >
 > **WP-40 parked — spike (2026-07-28): TLS impersonation can't clear the owner's CF hosts.** An `impit`
 > (browser-TLS/JA3 + HTTP/2) probe deployed to Vercel returned Cloudflare's **JS *managed challenge*** ("Just a
@@ -96,8 +101,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 
 | ID | Work package | Status | Depends on |
 |----|--------------|--------|------------|
-| ⭐ WP-41 | Poll time-budget guard + rotation — the sequential `pollAllSources` loop has no deadline under the 60s ceiling; stop before it and rotate the start offset so the tail (esp. RENDER sources) degrades gracefully instead of being silently dropped daily | `NEXT` | WP-07 |
-| WP-43 | Frequent polling (external trigger) — GitHub Actions / cron-job.org → `/api/cron/poll` every ~1–2h (Hobby cron is daily) for the **PLAIN-feed tier only**; composes with WP-41 rotation + WP-27 cadence. Feed-vs-Vercel reachability verified 2026-07-29 (feed reachable; CF gates the page, not `/feed/`) | `TODO` | WP-42, WP-41 |
+| WP-43 | Frequent polling (external trigger) — GitHub Actions / cron-job.org → `/api/cron/poll` every ~1–2h (Hobby cron is daily) for the **PLAIN-feed tier only**; composes with WP-41 rotation + WP-27 cadence. Feed-vs-Vercel reachability verified 2026-07-29 (feed reachable; CF gates the page, not `/feed/`) | `NEXT` | WP-42, WP-41 |
 | WP-27 | Reading-status lifecycle → **cadence** gating (skip COMPLETED/DROPPED; PLANNED/backlog polled rarely, not daily — RENDER can't 304), PLANNED seeds a **summary** not the full TOC (backfill on →READING), per-status notify rules | `TODO` | WP-07, WP-17, WP-18 |
 | WP-39 | Prevent duplicate series on add — wire `canonicalId` dedup into `addSeries` (home URL vs TOC URL → one series); consumes WP-14 | `TODO` | WP-07, WP-14 |
 | WP-37 | Per-series chapter-TOC URL (landing page ≠ chapter TOC) — resolve/store a dedicated TOC URL distinct from the reading `url` | `TODO` | WP-17, WP-33 |
@@ -120,7 +124,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 
 ### ✅ Completed
 
-WP-00, WP-GH, WP-CI, WP-12 (bootstrap / CI / docs) · WP-01, WP-03 (pure diff / health) · WP-04, WP-05, WP-FE (schema, feed parse/discover, fetcher) · WP-06, WP-07, WP-08 (Next shell, services, API) · WP-09, WP-10, WP-AUTH, WP-11 (Web Push, library/detail UI, auth gate, deploy) · WP-17, WP-17b (page-watch + headless renderer) · WP-20 (paid→free "now free") · WP-33 (full-TOC backfill + `accessReconciled`) · WP-35 (TOC-order chapters + display toggle) · WP-36 (`parseToc` content scoping) · WP-38 (contaminated-series recovery script) · WP-42 (poll-once-per-feed + politeness).
+WP-00, WP-GH, WP-CI, WP-12 (bootstrap / CI / docs) · WP-01, WP-03 (pure diff / health) · WP-04, WP-05, WP-FE (schema, feed parse/discover, fetcher) · WP-06, WP-07, WP-08 (Next shell, services, API) · WP-09, WP-10, WP-AUTH, WP-11 (Web Push, library/detail UI, auth gate, deploy) · WP-17, WP-17b (page-watch + headless renderer) · WP-20 (paid→free "now free") · WP-33 (full-TOC backfill + `accessReconciled`) · WP-35 (TOC-order chapters + display toggle) · WP-36 (`parseToc` content scoping) · WP-38 (contaminated-series recovery script) · WP-42 (poll-once-per-feed + politeness) · WP-41 (poll time-budget guard + rotation).
 
 ### ⏭ Later tiers (M2–M4)
 
@@ -659,6 +663,17 @@ Real-host probe detail (statuses, byte sizes) is kept in local, uncommitted note
 
 ### WP-41 — Poll time-budget guard + rotation
 
+> ✅ **DONE (2026-07-30).** Two pure helpers added to [poll.ts](src/server/services/poll.ts), both unit-tested:
+> `orderGroupsByStaleness` (least-recently-polled-first ordering, keyed on the existing per-host `lastCheckedAt`
+> aggregate — **no schema change / no persisted cursor**) and `groupCostMs` (RENDER 15s / PLAIN 5s worst-case
+> estimate). `pollAllSources` orders groups by staleness, then per group applies the existing host-gate, then a
+> **budget guard** — `clock()-start + groupCostMs > POLL_BUDGET_MS (270s)` ⇒ **skip (not break)**, so a later cheap
+> group still fits and the skipped group's untouched `lastCheckedAt` makes rotation re-poll it first next run. A
+> `clock` is injected (defaults to `Date.now`) so the guard is deterministically testable. Cron route `maxDuration`
+> **60→300** (the 60s was self-imposed; Hobby's ceiling is 300s per Vercel docs). *Deferred as YAGNI:* a separate
+> bounded RENDER pass (the plan's "optionally") — the single ordered loop with per-group cost already degrades
+> gracefully. 296 unit + 50 integration green, typecheck clean.
+
 **Motivation (owner, 2026-07-28):** `pollAllSources` is a **strictly sequential** loop (`for … await pollSource`) with
 **no deadline**, under a **60s function ceiling**. Plain sources are cheap (mostly 304s), but **RENDER sources can't
 304** and cost ~5–15s each, so as the active set grows (especially RENDER/CF sources) the run can exceed 60s and be
@@ -721,6 +736,13 @@ exist. Until then, render is the right call. Relates to WP-17b (render) and WP-2
 
 ## Changelog
 
+- **2026-07-30** — **WP-41 done: poll time-budget guard + rotation.** `pollAllSources` now drains hosts
+  least-recently-polled-first (`orderGroupsByStaleness`, reusing `lastCheckedAt` — no schema change) and stops
+  starting group fetches once the run can't finish one within `POLL_BUDGET_MS` (270s), skip-not-break so a later
+  cheap group still fits; per-group cost estimated by `groupCostMs` (RENDER 15s / PLAIN 5s). Injected `clock` makes
+  the guard deterministically testable. Cron `maxDuration` **60→300** after confirming (Vercel docs) 300s is Hobby's
+  real ceiling and the old 60s was self-imposed. +12 unit tests (296 total) + 50 integration green, typecheck clean.
+  Follow-up noted on WP-43: budget×cadence becomes a real Neon-compute number once polling goes hourly.
 - **2026-07-30** — **WP index restructured (split + priority) + housekeeping.** Split the flat 40+-row index (where
   DONE rows were interleaved with active ones and row-order-as-priority had stopped meaning anything) into four tables:
   **▶ Active queue (M1)** — WIP/TODO ordered by real priority so row-order means something again (WP-41 NEXT → WP-43 →

@@ -15,6 +15,20 @@ import { parseRetryAfter, type PoliteResult } from '../../lib/feeds/fetch';
  *  trigger polite. Polls fired more often than this per host simply no-op. */
 export const MIN_POLL_INTERVAL_MINUTES = 15;
 
+/** Wall-clock budget for one `pollAllSources` run. The cron function's `maxDuration` is 300s
+ *  (Vercel Hobby's ceiling); this leaves ~30s headroom for the push + schedule steps and the
+ *  response. The loop stops *starting* new group fetches once the run can't finish one within
+ *  budget — so a run degrades gracefully (drops its freshest tail, which rotation re-polls first
+ *  next run) instead of being killed mid-loop. Tunable against real poll logs. WP-41. */
+export const POLL_BUDGET_MS = 270_000;
+
+/** Worst-case cost estimates used to decide whether the *next* group fits the remaining budget.
+ *  RENDER can't 304 — every poll is a full headless render (~5–15s); PLAIN is a conditional GET
+ *  (mostly fast 304s) plus parse. Conservative on purpose: overestimating skips a borderline
+ *  group (rotation catches it next run) rather than risking an over-budget kill. WP-41. */
+export const RENDER_COST_MS = 15_000;
+export const PLAIN_COST_MS = 5_000;
+
 /** Whether to skip a host this cycle: backoff (429/Retry-After) first, then the min-interval
  *  cap. Both compare against pre-run state. Pure. */
 export function hostGate(args: {
@@ -139,6 +153,29 @@ export function groupPollSources(sources: PollableSource[]): PollGroup[] {
   return [...byKey.values()];
 }
 
+/** Worst-case cost estimate for fetching one group, used by the time-budget guard. A RENDER
+ *  group only actually renders when a renderer is configured; without one it falls back to a
+ *  plain fetch, so it costs the plain estimate. Pure. WP-41. */
+export function groupCostMs(group: PollGroup, hasRenderer: boolean): number {
+  return group.fetchMode === 'RENDER' && hasRenderer ? RENDER_COST_MS : PLAIN_COST_MS;
+}
+
+/** Order groups least-recently-polled first, so each run drains the stalest hosts and no source
+ *  is perpetually starved when the budget can't cover everything. A host with no recorded poll
+ *  (null/absent) is treated as infinitely stale and sorts first. Whatever a run drops keeps its
+ *  older `lastCheckedAt` (it isn't stamped), so it sorts ahead next run — fair rotation. Pure,
+ *  stable (ties keep input order). WP-41. */
+export function orderGroupsByStaleness(
+  groups: PollGroup[],
+  hostLast: Map<string, Date | null>,
+): PollGroup[] {
+  const staleness = (g: PollGroup): number => hostLast.get(g.host)?.getTime() ?? -Infinity;
+  return groups
+    .map((g, i) => ({ g, i }))
+    .sort((a, b) => staleness(a.g) - staleness(b.g) || a.i - b.i)
+    .map(({ g }) => g);
+}
+
 /** Validators the whole group agrees on: prefer a shared non-null etag, else a shared
  *  non-null lastModified, else none (full fetch). Any null/divergence → full. Pure. */
 export function chooseConditionalState(
@@ -246,7 +283,13 @@ function maxDate(a: Date | null, b: Date | null): Date | null {
 export async function pollAllSources(
   ports: PollPorts & { loadActiveSources: () => Promise<PollableSource[]> },
   now: Date = new Date(),
+  opts: { budgetMs?: number; clock?: () => number } = {},
 ): Promise<PollEffects[]> {
+  const budgetMs = opts.budgetMs ?? POLL_BUDGET_MS;
+  const clock = opts.clock ?? Date.now;
+  const start = clock();
+  const hasRenderer = ports.renderFetch != null;
+
   const sources = await ports.loadActiveSources();
 
   // Pre-run per-host aggregates (max lastCheckedAt / backoffUntil across the host's sources).
@@ -265,8 +308,13 @@ export async function pollAllSources(
   }
   const minIntervalMs = MIN_POLL_INTERVAL_MINUTES * 60_000;
 
+  // Drain least-recently-polled hosts first (WP-41): under a tight budget the run polls the
+  // stalest and drops its freshest tail — but whatever it drops keeps its older lastCheckedAt,
+  // so it sorts ahead next run and the backlog rotates instead of a fixed tail never polling.
+  const groups = orderGroupsByStaleness(groupPollSources(sources), hostLast);
+
   const effects: PollEffects[] = [];
-  for (const group of groupPollSources(sources)) {
+  for (const group of groups) {
     const gate = hostGate({
       hostLastCheckedAt: hostLast.get(group.host) ?? null,
       hostBackoffUntil: hostBackoff.get(group.host) ?? null,
@@ -274,6 +322,11 @@ export async function pollAllSources(
       minIntervalMs,
     });
     if (gate.skip) continue; // silent no-op; lastCheckedAt untouched
+
+    // Time-budget guard (WP-41): don't *start* a fetch we can't finish within budget. Skip (not
+    // break) so a later cheaper group can still fit — this group's untouched lastCheckedAt makes
+    // rotation re-poll it first next run. Keeps the run under the 300s function ceiling.
+    if (clock() - start + groupCostMs(group, hasRenderer) > budgetMs) continue;
 
     const cond = chooseConditionalState(group.sources);
     const fetcher = group.fetchMode === 'RENDER' && ports.renderFetch ? ports.renderFetch : ports.fetch;

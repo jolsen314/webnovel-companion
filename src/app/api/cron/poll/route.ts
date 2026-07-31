@@ -3,8 +3,10 @@ import { pollAllSources, evaluateSchedules, notifyForEffects } from '../../../..
 import { isAuthorizedCron } from '../../../../server/api/validation';
 
 export const dynamic = 'force-dynamic';
-// Poll each source; keep well under Vercel's function ceiling.
-export const maxDuration = 60;
+// Vercel Hobby's function ceiling is 300s (5 min). pollAllSources self-limits to POLL_BUDGET_MS
+// (270s) and rotates least-recently-polled first (WP-41), so the run drains fairly and finishes
+// with headroom for the push + schedule steps below rather than being killed mid-loop.
+export const maxDuration = 300;
 
 /** Vercel Cron target: poll every active source, diff new chapters, update health. */
 export async function GET(request: Request) {

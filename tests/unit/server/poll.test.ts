@@ -1,13 +1,19 @@
 import { describe, expect, test } from 'vitest';
 import {
   chooseConditionalState,
+  groupCostMs,
   groupPollSources,
   hostGate,
   MIN_POLL_INTERVAL_MINUTES,
+  orderGroupsByStaleness,
+  PLAIN_COST_MS,
+  POLL_BUDGET_MS,
   pollAllSources,
   pollSource,
+  RENDER_COST_MS,
   type PollableSource,
   type PollEffects,
+  type PollGroup,
   type PollPorts,
 } from '../../../src/server/services/poll';
 import type { PoliteResult } from '../../../src/lib/feeds/fetch';
@@ -496,5 +502,198 @@ describe('hostGate', () => {
       minIntervalMs: min,
     }))
       .toEqual({ skip: false, reason: 'ok' });
+  });
+});
+
+describe('pollAllSources — time budget + rotation (WP-41)', () => {
+  const NOW = new Date('2026-07-30T12:00:00Z');
+  const FEED = (h: string) => `https://${h}/rss`;
+
+  /** Ports whose fetches advance a shared fake clock, so the budget guard sees elapsed time. */
+  function timedPorts(args: {
+    sources: PollableSource[];
+    plainMs?: number;
+    renderMs?: number;
+    withRenderer?: boolean;
+  }): PollPorts & {
+    loadActiveSources: () => Promise<PollableSource[]>;
+    applied: PollEffects[];
+    clock: () => number;
+    plainFetches: number;
+    renderFetches: number;
+  } {
+    const applied: PollEffects[] = [];
+    const state = { t: 0, plainFetches: 0, renderFetches: 0 };
+    const feed = RSS(ITEM('g1', 'https://x.example/c1'));
+    const ports = {
+      applied,
+      clock: () => state.t,
+      get plainFetches() {
+        return state.plainFetches;
+      },
+      get renderFetches() {
+        return state.renderFetches;
+      },
+      fetch: async () => {
+        state.plainFetches++;
+        state.t += args.plainMs ?? 0;
+        return ok(feed);
+      },
+      loadActiveSources: async () => args.sources,
+      loadStoredChapters: async () => [],
+      applyPollEffects: async (e: PollEffects) => {
+        applied.push(e);
+      },
+    } as PollPorts & {
+      loadActiveSources: () => Promise<PollableSource[]>;
+      applied: PollEffects[];
+      clock: () => number;
+      plainFetches: number;
+      renderFetches: number;
+    };
+    if (args.withRenderer) {
+      ports.renderFetch = async () => {
+        state.renderFetches++;
+        state.t += args.renderMs ?? 0;
+        return ok(feed);
+      };
+    }
+    return ports;
+  }
+
+  test('stops starting group fetches once the budget cannot cover the next one', async () => {
+    // Three distinct plain feeds, each fetch "costs" PLAIN_COST_MS; budget fits exactly two.
+    const s = [0, 1, 2].map((i) =>
+      source({ id: `s${i}`, seriesId: `ser${i}`, host: `h${i}.example`, fetchUrl: FEED(`h${i}.example`) }),
+    );
+    const p = timedPorts({ sources: s, plainMs: PLAIN_COST_MS });
+
+    await pollAllSources(p, NOW, { budgetMs: 2 * PLAIN_COST_MS, clock: p.clock });
+
+    expect(p.plainFetches).toBe(2); // third group never fetched — over budget
+    expect(p.applied.map((e) => e.seriesId)).toEqual(['ser0', 'ser1']);
+  });
+
+  test('an unaffordable RENDER group is skipped but a later affordable PLAIN still polls', async () => {
+    // Render is estimated at 15s, plain at 5s; a 10s budget can't fit the render but can fit the plain.
+    const render = source({ id: 'r', seriesId: 'serR', host: 'r.example', fetchUrl: FEED('r.example'), fetchMode: 'RENDER' });
+    const plain = source({ id: 'p', seriesId: 'serP', host: 'p.example', fetchUrl: FEED('p.example'), fetchMode: 'PLAIN' });
+    const p = timedPorts({ sources: [render, plain], plainMs: PLAIN_COST_MS, renderMs: RENDER_COST_MS, withRenderer: true });
+
+    await pollAllSources(p, NOW, { budgetMs: 2 * PLAIN_COST_MS, clock: p.clock });
+
+    expect(p.renderFetches).toBe(0); // render skipped (didn't fit)
+    expect(p.plainFetches).toBe(1); // loop continued past it to the affordable plain
+    expect(p.applied.map((e) => e.seriesId)).toEqual(['serP']);
+  });
+
+  test('rotation: the least-recently-polled host is polled first under a tight budget', async () => {
+    // One host polled 20 min ago (>15 min floor, so not gated), one never polled. Budget fits one.
+    const stale = source({ id: 'a', seriesId: 'serStale', host: 'a.example', fetchUrl: FEED('a.example'), lastCheckedAt: null });
+    const fresh = source({
+      id: 'b',
+      seriesId: 'serFresh',
+      host: 'b.example',
+      fetchUrl: FEED('b.example'),
+      lastCheckedAt: new Date(NOW.getTime() - 20 * 60_000),
+    });
+    // Input order puts the fresher one FIRST, to prove ordering (not input order) picks the winner.
+    const p = timedPorts({ sources: [fresh, stale], plainMs: PLAIN_COST_MS });
+
+    await pollAllSources(p, NOW, { budgetMs: PLAIN_COST_MS, clock: p.clock });
+
+    expect(p.plainFetches).toBe(1);
+    expect(p.applied.map((e) => e.seriesId)).toEqual(['serStale']); // never-polled drained first
+  });
+
+  test('with the default (ample) budget every group is polled', async () => {
+    const s = [0, 1, 2].map((i) =>
+      source({ id: `s${i}`, seriesId: `ser${i}`, host: `h${i}.example`, fetchUrl: FEED(`h${i}.example`) }),
+    );
+    const p = timedPorts({ sources: s, plainMs: PLAIN_COST_MS });
+
+    await pollAllSources(p, NOW); // no opts → POLL_BUDGET_MS, real Date.now (elapsed ~0)
+
+    expect(p.plainFetches).toBe(3);
+    expect(POLL_BUDGET_MS).toBeGreaterThan(3 * PLAIN_COST_MS);
+  });
+});
+
+describe('groupCostMs', () => {
+  const grp = (over: Partial<PollGroup> = {}): PollGroup => ({
+    key: 'k',
+    fetchMode: 'PLAIN',
+    fetchUrl: 'https://x.example/feed',
+    host: 'x.example',
+    sources: [],
+    ...over,
+  });
+
+  test('a PLAIN group costs the plain estimate', () => {
+    expect(groupCostMs(grp({ fetchMode: 'PLAIN' }), true)).toBe(PLAIN_COST_MS);
+  });
+
+  test('a RENDER group with a renderer configured costs the render estimate', () => {
+    expect(groupCostMs(grp({ fetchMode: 'RENDER' }), true)).toBe(RENDER_COST_MS);
+  });
+
+  test('a RENDER group with NO renderer falls back to plain cost (it fetches plain)', () => {
+    expect(groupCostMs(grp({ fetchMode: 'RENDER' }), false)).toBe(PLAIN_COST_MS);
+  });
+
+  test('render is estimated as more expensive than plain', () => {
+    expect(RENDER_COST_MS).toBeGreaterThan(PLAIN_COST_MS);
+  });
+});
+
+describe('orderGroupsByStaleness', () => {
+  const groupsFor = (hosts: string[]): PollGroup[] =>
+    hosts.map((h, i) =>
+      groupPollSources([source({ id: `s${i}`, host: h, fetchUrl: `https://${h}/feed` })])[0]!,
+    );
+
+  test('a never-polled host (no entry) sorts before a polled one', () => {
+    const [never, polled] = groupsFor(['never.example', 'polled.example']);
+    const hostLast = new Map<string, Date | null>([
+      ['polled.example', new Date('2026-07-30T10:00:00Z')],
+      // never.example intentionally absent
+    ]);
+    expect(orderGroupsByStaleness([polled!, never!], hostLast).map((g) => g.host)).toEqual([
+      'never.example',
+      'polled.example',
+    ]);
+  });
+
+  test('an explicit null lastChecked sorts before a polled one', () => {
+    const [a, b] = groupsFor(['a.example', 'b.example']);
+    const hostLast = new Map<string, Date | null>([
+      ['a.example', new Date('2026-07-30T10:00:00Z')],
+      ['b.example', null],
+    ]);
+    expect(orderGroupsByStaleness([a!, b!], hostLast).map((g) => g.host)).toEqual(['b.example', 'a.example']);
+  });
+
+  test('the least-recently-polled host sorts first (stalest drains first)', () => {
+    const [old, mid, fresh] = groupsFor(['old.example', 'mid.example', 'fresh.example']);
+    const hostLast = new Map<string, Date | null>([
+      ['old.example', new Date('2026-07-30T08:00:00Z')],
+      ['mid.example', new Date('2026-07-30T10:00:00Z')],
+      ['fresh.example', new Date('2026-07-30T11:00:00Z')],
+    ]);
+    expect(orderGroupsByStaleness([fresh!, mid!, old!], hostLast).map((g) => g.host)).toEqual([
+      'old.example',
+      'mid.example',
+      'fresh.example',
+    ]);
+  });
+
+  test('ties keep input order (stable)', () => {
+    const [a, b] = groupsFor(['a.example', 'b.example']);
+    const t = new Date('2026-07-30T10:00:00Z');
+    const hostLast = new Map<string, Date | null>([
+      ['a.example', t],
+      ['b.example', t],
+    ]);
+    expect(orderGroupsByStaleness([a!, b!], hostLast).map((g) => g.host)).toEqual(['a.example', 'b.example']);
   });
 });
