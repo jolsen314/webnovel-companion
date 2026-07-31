@@ -356,7 +356,7 @@ a novel via its NovelUpdates feed instead.
 
 ### WP-27a — Reading-status cadence gating (DONE 2026-07-31)
 
-**DONE.** Pure `statusPollGate` + `STATUS_CADENCE_MINUTES` (a map: READING → every run, PLANNED → weekly rolling per-source window, PAUSED/COMPLETED/DROPPED → never) gate `pollAllSources`. **Status-gated polling:** `pollAllSources` skips COMPLETED and DROPPED (no new chapters wanted); motivation is **compute + politeness**, not storage. **Status→cadence, not just skip:** beyond skip/poll, PLANNED/backlog poll rarely (slow cadence, not daily). RENDER sources can't 304 (every poll is a full ~5–15s headless render — `renderFetch` sends no validators), so gating cadence by status saves render cost. READING polls every run; PLANNED polls at most weekly (rolling per-source window, WP-41 rotation guarantees deferred pickup); PAUSED/COMPLETED/DROPPED never polled. **Query filter + fetch gating:** `loadActiveSources` filters COMPLETED/DROPPED/PAUSED out; a group with no due source is not fetched (the win = skipping expensive RENDER/TOC fetches), but once a group *is* fetched every source it covers is processed (a not-due PLANNED sibling rides a shared fetch for free — keeps its backlog current, notifies stay READING-only). **Per-source `seriesStatus` on `PollableSource`** + **`PollEffects.seriesStatus`** propagate status through the pipeline; `notifyForEffects` pushes only for READING (PLANNED polls quietly).
+**DONE.** Pure `statusPollGate` + `STATUS_CADENCE_MINUTES` (a map: READING → every run, PLANNED → weekly rolling per-source window, PAUSED/COMPLETED/DROPPED → never) gate `pollAllSources`. **Status-gated polling:** `pollAllSources` skips COMPLETED and DROPPED (no new chapters wanted); motivation is **compute + politeness**, not storage. **Status→cadence, not just skip:** beyond skip/poll, PLANNED/backlog poll rarely (slow cadence, not daily). RENDER sources can't 304 (every poll is a full ~5–15s headless render — `renderFetch` sends no validators), so gating cadence by status saves render cost. READING polls every run; PLANNED polls at most weekly (rolling per-source window, WP-41 rotation guarantees deferred pickup); PAUSED/COMPLETED/DROPPED never polled. **Query filter + fetch gating:** `loadActiveSources` filters COMPLETED/DROPPED/PAUSED out; a group with no due source is not fetched (the win = skipping expensive RENDER/TOC fetches), but once a group *is* fetched every source it covers is processed (a not-due PLANNED sibling rides a shared fetch for free — keeps its backlog current; new-chapter/now-free pushes stay READING-only). *Caveat:* source-down alerts aren't status-filtered yet, so a shared-feed outage can surface co-hosted PLANNED siblings in lockstep — dedup is WP-16 (host-level health), non-READING suppression is WP-27b. **Per-source `seriesStatus` on `PollableSource`** + **`PollEffects.seriesStatus`** propagate status through the pipeline; `notifyForEffects` pushes only for READING (PLANNED polls quietly).
 
 **Dropped:** the WP-27 summary-seeding idea (storage isn't the binding constraint — the limit is **compute/poll-budget**, not DB space). Refiled per-status positive notify rules as **WP-27b** (PLANNED paid → fire at 0 LOCKED; PLANNED free → fire at targetChapterCount; wire with WP-20/WP-21).
 
@@ -736,9 +736,13 @@ Depends on WP-09 (and the 403-prune hardening, `dc3cb6e`).
 - **2026-07-31** — **WP-27a refinement: gate the fetch, not the processing.** The cadence gate now decides only whether
   a group is *fetched* (`anyDue`) — once fetched, every source it covers is processed. Skipping an already-fetched
   not-due PLANNED sibling saved ~nothing (parse/diff on a body in hand) and staled a backlog we were holding fresh data
-  for; now it rides the shared fetch for free (notifies stay READING-only, and sibling etags stay in sync). The
-  expensive-fetch win (solo/all-not-due groups never fetch) is unchanged. Also relocated the test-only `pollSource` out
-  of production. 320 unit + 55 integration green.
+  for; now it rides the shared fetch for free (new-chapter/now-free pushes stay READING-only; sibling etags stay in
+  sync). The expensive-fetch win (solo/all-not-due groups never fetch) is unchanged. *Caveat:* source-down alerts
+  aren't status-filtered, so a shared-feed outage surfaces co-hosted PLANNED siblings in lockstep — routes to WP-16
+  (host-level dedup) / WP-27b (non-READING suppression). 320 unit + 56 integration green.
+- **2026-07-31** — **WP-27a polish (post-review).** Relocated the test-only `pollSource` out of production (`poll.ts`
+  no longer exports an ungated, wire-able single-source poll — it's a local helper in the test file); the multi-run
+  test fake stamps the run's `now` instead of a max-date sentinel.
 - **2026-07-31** — **WP-27a done: status-gated + cadence polling.** Pure `statusPollGate` + `STATUS_CADENCE_MINUTES`
   (READING every run; PLANNED weekly; PAUSED/COMPLETED/DROPPED never) gate `pollAllSources`: COMPLETED/DROPPED/PAUSED
   filtered from `loadActiveSources`, a group with no due source is not fetched, PLANNED polls at most weekly (rolling

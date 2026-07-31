@@ -109,7 +109,9 @@ and skipping it would only stale a backlog we're holding fresh data for.
 - A solo not-due PLANNED group ⇒ **no fetch** (skips the expensive render). The weekly cadence fully applies to any
   source that would need its *own* fetch.
 - A mixed group ⇒ one shared fetch (a due READING sibling triggers it), and the not-due PLANNED sibling **rides
-  along** — processed for free, keeping its backlog current (notifies are suppressed for non-READING anyway). Its
+  along** — processed for free, keeping its backlog current (new-chapter/now-free pushes are READING-only anyway;
+  *caveat:* source-down alerts aren't status-filtered yet, so a shared-feed outage steps + surfaces co-hosted PLANNED
+  siblings in lockstep — dedup is WP-16, non-READING suppression is WP-27b). Its
   `lastCheckedAt` is stamped, so a feed-shared PLANNED effectively polls at the READING cadence — free, since it's the
   same fetch, and it keeps sibling etags in sync so `chooseConditionalState(group.sources)` stays efficient.
 - Order: any-due check first (cheapest, and it can avoid a fetch), then `hostGate`, then the budget guard.

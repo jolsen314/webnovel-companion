@@ -762,6 +762,27 @@ describe('pollAllSources status gating (real DB, WP-27a)', () => {
       freshLastCheckedAt.getTime(),
     );
   });
+
+  test('a not-due PLANNED source riding a shared feed with a READING source is processed (ride-along)', async () => {
+    const SHARED = 'https://shared-feed.example/rss';
+    const reading = await db.series.create({ data: { userId: getCurrentUserId(), title: 'R-shared', status: 'READING' } });
+    const planned = await db.series.create({ data: { userId: getCurrentUserId(), title: 'P-shared', status: 'PLANNED' } });
+    const recent = new Date(Date.now() - 2 * 24 * 60 * 60_000); // 2 days ago — well inside the weekly window (not due on its own)
+    for (const [seriesId, lastCheckedAt] of [[reading.id, null], [planned.id, recent]] as const) {
+      await db.source.create({
+        data: { seriesId, url: SHARED, host: 'shared-feed.example', type: 'FEED', fetchMode: 'PLAIN', feedUrl: SHARED, matchType: 'WHOLE_FEED', lastCheckedAt },
+      });
+    }
+
+    const effects = await pollAllSources(fetchFrom({ [SHARED]: okRes(RSS(ITEM('g1', 'https://shared-feed.example/c1'))) }));
+
+    // The due READING source triggers the one shared fetch; the not-due PLANNED source rides along
+    // (processed for free) rather than being left stale — both store the chapter.
+    expect(effects.map((e) => e.seriesId).sort()).toEqual([planned.id, reading.id].sort());
+    expect(await db.chapter.count({ where: { seriesId: reading.id } })).toBe(1);
+    expect(await db.chapter.count({ where: { seriesId: planned.id } })).toBe(1);
+    expect((await db.source.findFirstOrThrow({ where: { seriesId: planned.id } })).lastCheckedAt).not.toBeNull();
+  });
 });
 
 describe('pollAllSources tier filter (real DB, WP-43)', () => {
