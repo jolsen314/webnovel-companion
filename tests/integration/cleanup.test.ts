@@ -10,6 +10,7 @@ import {
   type FetchImpl,
 } from '../../src/server/services';
 import { db } from '../../src/server/db';
+import { getCurrentUserId } from '../../src/server/user';
 import type { PoliteResult } from '../../src/lib/feeds/fetch';
 
 // ── fixtures (mirrors tests/integration/services.test.ts) ────────────────────
@@ -42,6 +43,29 @@ async function addAlpha(): Promise<string> {
   const fetch = fetchFrom({ [PAGE_URL]: okRes(PAGE(FEED_URL)), [FEED_URL]: okRes(RSS(ITEM('g1', C1) + ITEM('g2', C2))) });
   const { seriesId } = await addSeries({ url: PAGE_URL }, fetch);
   return seriesId;
+}
+
+/** A second "Alpha" series row with identical content — simulates a pre-existing duplicate
+ *  (e.g. from before WP-39, or a race) for mergeSeries to clean up. Created directly via
+ *  `db` because add-time dedup (WP-39) now collapses a second `addAlpha()` call into the
+ *  same row instead of creating a duplicate. */
+async function addAlphaDuplicate(): Promise<string> {
+  const series = await db.series.create({
+    data: {
+      userId: getCurrentUserId(),
+      title: 'Alpha',
+      sources: {
+        create: { url: PAGE_URL, host: 'translator.example', type: 'FEED', feedUrl: FEED_URL, matchType: 'WHOLE_FEED', matchValue: null },
+      },
+      chapters: {
+        create: [
+          { title: 'Chapter g1', url: C1, guid: 'g1', access: 'UNKNOWN' },
+          { title: 'Chapter g2', url: C2, guid: 'g2', access: 'UNKNOWN' },
+        ],
+      },
+    },
+  });
+  return series.id;
 }
 
 // ── tests ───────────────────────────────────────────────────────────────────
@@ -163,7 +187,7 @@ describe('setSourceUrl (real DB)', () => {
 describe('mergeSeries (real DB)', () => {
   test('folds unique chapters into `into` and deletes the source series', async () => {
     const intoId = await addAlpha(); // chapters a-1, a-2
-    const fromId = await addAlpha(); // a second copy (a-1, a-2) + a unique a-9
+    const fromId = await addAlphaDuplicate(); // a second copy (a-1, a-2) + a unique a-9
     await db.chapter.create({ data: { seriesId: fromId, title: 'C9', url: 'https://translator.example/a-9/' } });
 
     const res = await mergeSeries(fromId, intoId);
@@ -186,7 +210,7 @@ describe('mergeSeries (real DB)', () => {
 
   test('into adopts from’s reading progress only when into had none', async () => {
     const intoId = await addAlpha();
-    const fromId = await addAlpha();
+    const fromId = await addAlphaDuplicate();
     const fromChapters = await db.chapter.findMany({ where: { seriesId: fromId }, orderBy: { url: 'asc' } });
 
     await db.readingProgress.create({
@@ -204,7 +228,7 @@ describe('mergeSeries (real DB)', () => {
 
   test('does not overwrite into’s existing reading progress', async () => {
     const intoId = await addAlpha();
-    const fromId = await addAlpha();
+    const fromId = await addAlphaDuplicate();
     const intoChapters = await db.chapter.findMany({ where: { seriesId: intoId }, orderBy: { url: 'asc' } });
     const fromChapters = await db.chapter.findMany({ where: { seriesId: fromId }, orderBy: { url: 'asc' } });
 

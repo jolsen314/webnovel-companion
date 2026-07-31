@@ -83,6 +83,18 @@ describe('addSeries (real DB)', () => {
     expect(chapters.find((c) => c.url === C3)!.access).toBe('LOCKED');
     expect(chapters.find((c) => c.url === C1)!.guid).toBe('g1'); // overlap kept the feed guid
   });
+
+  test('WP-39: re-adding the same series returns the existing one, no second row', async () => {
+    const fetch = fetchFrom({ [PAGE_URL]: okRes(PAGE(FEED_URL)), [FEED_URL]: okRes(RSS(ITEM('g1', C1))) });
+    const first = await addSeries({ url: PAGE_URL }, fetch);
+    const second = await addSeries({ url: PAGE_URL }, fetch);
+
+    expect(first.alreadyExisting).toBe(false);
+    expect(second.alreadyExisting).toBe(true);
+    expect(second.seriesId).toBe(first.seriesId);
+    expect(await db.series.count()).toBe(1);
+    expect((await db.series.findFirstOrThrow()).canonicalId).toBe('translator.example/feed#WHOLE_FEED');
+  });
 });
 
 describe('listSeries (real DB)', () => {

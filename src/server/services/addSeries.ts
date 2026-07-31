@@ -10,6 +10,7 @@ import {
 import { parseToc, mergeFeedAndToc, withReadingPositions } from '../../lib/feeds/pageWatch';
 import type { FeedItem } from '../../lib/feeds/diff';
 import type { PoliteResult } from '../../lib/feeds/fetch';
+import { canonicalSeriesId } from '../../lib/dedup';
 
 /**
  * Add-time source resolution: given a URL the user pastes, discover a feed (or fall
@@ -31,16 +32,19 @@ export interface ResolvedSource {
   type: 'FEED' | 'PAGE_WATCH';
   match: SeriesMatch;
   chapters: FeedItem[];
+  canonicalId: string; // WP-39
 }
 
 export interface AddSeriesPorts {
   fetch: (url: string, opts?: { etag?: string | null; lastModified?: string | null }) => Promise<PoliteResult>;
   createSeries: (resolved: ResolvedSource) => Promise<{ seriesId: string }>;
+  findSeriesByCanonicalId: (canonicalId: string) => Promise<{ seriesId: string } | null>; // WP-39
 }
 
 export interface AddSeriesResult {
   seriesId: string;
   resolved: ResolvedSource;
+  alreadyExisting: boolean; // WP-39
 }
 
 function looksLikeFeed(body: string): boolean {
@@ -55,6 +59,19 @@ function titleFromUrl(url: string): string {
   } catch {
     return url;
   }
+}
+
+/** The resolved source before its dedup id is computed. */
+type ResolvedCore = Omit<ResolvedSource, 'canonicalId'>;
+
+/** Compute the dedup id, and create the series only if one with that id doesn't already exist. */
+async function finalize(core: ResolvedCore, ports: AddSeriesPorts): Promise<AddSeriesResult> {
+  const canonicalId = canonicalSeriesId({ feedUrl: core.feedUrl, sourceUrl: core.sourceUrl, match: core.match });
+  const resolved: ResolvedSource = { ...core, canonicalId };
+  const existing = await ports.findSeriesByCanonicalId(canonicalId);
+  if (existing) return { seriesId: existing.seriesId, resolved, alreadyExisting: true };
+  const { seriesId } = await ports.createSeries(resolved);
+  return { seriesId, resolved, alreadyExisting: false };
 }
 
 export async function addSeries(input: AddSeriesInput, ports: AddSeriesPorts): Promise<AddSeriesResult> {
@@ -100,16 +117,15 @@ export async function addSeries(input: AddSeriesInput, ports: AddSeriesPorts): P
         : match.type === 'WHOLE_FEED'
           ? (parsed.title ?? titleFromUrl(url)) // series' own feed → channel title is the novel
           : titleFromUrl(url)); // slug/path fallback → humanize the URL, not the site name
-    const resolved: ResolvedSource = { seriesTitle, sourceUrl: url, host, feedUrl, type: 'FEED', match, chapters };
-    const { seriesId } = await ports.createSeries(resolved);
-    return { seriesId, resolved };
+    const core: ResolvedCore = { seriesTitle, sourceUrl: url, host, feedUrl, type: 'FEED', match, chapters };
+    return finalize(core, ports);
   }
 
   // No feed, but the page loads → page-watch mode. Seed from the TOC so the first
   // poll diffs against a known set instead of re-reporting the whole backlog.
   if (pageOk) {
     const toc = parseToc(page.body, url);
-    const resolved: ResolvedSource = {
+    const core: ResolvedCore = {
       seriesTitle: input.title ?? titleFromUrl(url),
       sourceUrl: url,
       host,
@@ -118,8 +134,7 @@ export async function addSeries(input: AddSeriesInput, ports: AddSeriesPorts): P
       match: { type: 'WHOLE_FEED' },
       chapters: withReadingPositions(toc, toc),
     };
-    const { seriesId } = await ports.createSeries(resolved);
-    return { seriesId, resolved };
+    return finalize(core, ports);
   }
 
   // Neither the page nor any feed is reachable.

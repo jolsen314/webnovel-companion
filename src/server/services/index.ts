@@ -364,11 +364,16 @@ export function sendTestNotification(ports: PushSendPorts = pushSendPorts()): Pr
 export function addSeries(input: AddSeriesInput, fetchImpl: FetchImpl = fetchPort): Promise<AddSeriesResult> {
   return addSeriesCore(input, {
     fetch: fetchImpl,
+    findSeriesByCanonicalId: async (canonicalId) => {
+      const s = await db.series.findFirst({ where: { userId: getCurrentUserId(), canonicalId }, select: { id: true } });
+      return s ? { seriesId: s.id } : null;
+    },
     createSeries: async (r) => {
       const series = await db.series.create({
         data: {
           userId: getCurrentUserId(),
           title: r.seriesTitle,
+          canonicalId: r.canonicalId, // WP-39
           sources: {
             create: {
               url: r.sourceUrl,

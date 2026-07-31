@@ -18,11 +18,15 @@ const ok = (body: string): PoliteResult => ({
   finalUrl: 'https://x.example/',
 });
 
-function ports(map: Record<string, PoliteResult>): AddSeriesPorts & { created: ResolvedSource[] } {
+function ports(
+  map: Record<string, PoliteResult>,
+  existing: (canonicalId: string) => { seriesId: string } | null = () => null,
+): AddSeriesPorts & { created: ResolvedSource[] } {
   const created: ResolvedSource[] = [];
   return {
     created,
     fetch: async (url) => map[url] ?? ({ outcome: 'HTTP_4XX', status: 404 } as PoliteResult),
+    findSeriesByCanonicalId: async (canonicalId) => existing(canonicalId),
     createSeries: async (resolved) => {
       created.push(resolved);
       return { seriesId: 'new1' };
@@ -148,5 +152,28 @@ describe('addSeries', () => {
     const p = ports({ [url]: { outcome: 'DNS' } }); // page dead, all feed guesses 404 by default
 
     await expect(addSeries({ url }, p)).rejects.toThrow(/reach|feed/i);
+  });
+});
+
+describe('addSeries dedup (WP-39)', () => {
+  const url = 'https://translator.example/novel/alpha/';
+  const feedUrl = 'https://translator.example/feed/';
+  const map = { [url]: ok(PAGE(feedUrl)), [feedUrl]: ok(RSS(ITEM('g1', 'https://translator.example/alpha-1/'))) };
+
+  test('a new series is created with a canonicalId and alreadyExisting=false', async () => {
+    const p = ports(map);
+    const result = await addSeries({ url }, p);
+    expect(result.alreadyExisting).toBe(false);
+    expect(p.created).toHaveLength(1);
+    expect(p.created[0]!.canonicalId).toBe('translator.example/feed#WHOLE_FEED');
+    expect(result.resolved.canonicalId).toBe('translator.example/feed#WHOLE_FEED');
+  });
+
+  test('a duplicate (canonicalId already present) returns the existing series and does NOT create', async () => {
+    const p = ports(map, (id) => (id === 'translator.example/feed#WHOLE_FEED' ? { seriesId: 'existing1' } : null));
+    const result = await addSeries({ url }, p);
+    expect(result.alreadyExisting).toBe(true);
+    expect(result.seriesId).toBe('existing1');
+    expect(p.created).toHaveLength(0); // createSeries never called
   });
 });
