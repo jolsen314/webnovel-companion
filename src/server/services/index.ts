@@ -6,7 +6,14 @@ import type { SeriesMatch } from '../../lib/feeds/discover';
 import type { FailureType } from '../../lib/health';
 import { diffChapters, canonicalUrl } from '../../lib/feeds/diff';
 import { parseToc, tocReadingOrder } from '../../lib/feeds/pageWatch';
-import { pollAllSources as pollAllCore, type PollableSource, type PollEffects, type PollPorts } from './poll';
+import {
+  pollAllSources as pollAllCore,
+  sourceTierWhere,
+  type PollableSource,
+  type PollEffects,
+  type PollPorts,
+  type PollTier,
+} from './poll';
 import { addSeries as addSeriesCore, type AddSeriesInput, type AddSeriesResult } from './addSeries';
 import {
   evaluateSchedules as evaluateSchedulesCore,
@@ -100,11 +107,12 @@ function pollPorts(
   fetchImpl: FetchImpl,
   renderImpl?: FetchImpl,
   now: Date = new Date(),
+  tier: PollTier = 'all',
 ): PollPorts & { loadActiveSources: () => Promise<PollableSource[]> } {
   return {
     fetch: fetchImpl,
     renderFetch: renderImpl,
-    loadActiveSources: async () => (await db.source.findMany({ where: { isActive: true } })).map(rowToPollable),
+    loadActiveSources: async () => (await db.source.findMany({ where: sourceTierWhere(tier) })).map(rowToPollable),
     loadStoredChapters: async (seriesId) =>
       (await db.chapter.findMany({ where: { seriesId }, select: { id: true, guid: true, url: true, access: true } })).map((c) => ({
         id: c.id,
@@ -173,8 +181,9 @@ export function pollAllSources(
   fetchImpl: FetchImpl = fetchPort,
   renderImpl: FetchImpl | undefined = renderPort(),
   now: Date = new Date(),
+  tier: PollTier = 'all',
 ): Promise<PollEffects[]> {
-  return pollAllCore(pollPorts(fetchImpl, renderImpl, now), now);
+  return pollAllCore(pollPorts(fetchImpl, renderImpl, now, tier), now);
 }
 
 /** Build a pure `ReleaseSchedule` from a Series row's schedule columns (null if malformed). */

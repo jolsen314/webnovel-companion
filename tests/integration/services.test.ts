@@ -701,3 +701,59 @@ describe('savePushSubscription (real DB)', () => {
     expect(subs[0]!.p256dh).toBe('p2');
   });
 });
+
+describe('pollAllSources tier filter (real DB, WP-43)', () => {
+  const PLAIN_FEED = 'https://plain.example/feed/';
+  const RENDER_FEED = 'https://render.example/feed/';
+  const WATCH_URL = 'https://watch.example/toc/';
+
+  /** Seed one source of a given type/fetchMode bound to a fresh series. Returns the source id. */
+  async function seedSource(args: {
+    title: string;
+    url: string;
+    host: string;
+    type: 'FEED' | 'PAGE_WATCH';
+    fetchMode: 'PLAIN' | 'RENDER';
+  }): Promise<string> {
+    const series = await db.series.create({ data: { userId: getCurrentUserId(), title: args.title } });
+    const source = await db.source.create({
+      data: {
+        seriesId: series.id,
+        url: args.url,
+        host: args.host,
+        type: args.type,
+        fetchMode: args.fetchMode,
+        feedUrl: args.type === 'FEED' ? args.url : null,
+        matchType: 'WHOLE_FEED',
+      },
+    });
+    return source.id;
+  }
+
+  test("tier='plain' polls only FEED+PLAIN; RENDER and PAGE_WATCH are untouched", async () => {
+    const plainId = await seedSource({ title: 'PlainFeed', url: PLAIN_FEED, host: 'plain.example', type: 'FEED', fetchMode: 'PLAIN' });
+    const renderId = await seedSource({ title: 'RenderFeed', url: RENDER_FEED, host: 'render.example', type: 'FEED', fetchMode: 'RENDER' });
+    const watchId = await seedSource({ title: 'PageWatch', url: WATCH_URL, host: 'watch.example', type: 'PAGE_WATCH', fetchMode: 'PLAIN' });
+
+    // Fetch serves every url, so "not polled" can only be due to the tier filter, not a fetch miss.
+    const fetch = fetchFrom({ [PLAIN_FEED]: okRes(RSS('')), [RENDER_FEED]: okRes(RSS('')), [WATCH_URL]: okRes('<html></html>') });
+    const effects = await pollAllSources(fetch, undefined, undefined, 'plain');
+
+    expect(effects.map((e) => e.sourceId)).toEqual([plainId]);
+    // The excluded sources were never polled → lastCheckedAt stays null.
+    expect((await db.source.findFirstOrThrow({ where: { id: renderId } })).lastCheckedAt).toBeNull();
+    expect((await db.source.findFirstOrThrow({ where: { id: watchId } })).lastCheckedAt).toBeNull();
+    expect((await db.source.findFirstOrThrow({ where: { id: plainId } })).lastCheckedAt).not.toBeNull();
+  });
+
+  test("tier='all' polls every active source (filter does not leak into the default path)", async () => {
+    await seedSource({ title: 'PlainFeed', url: PLAIN_FEED, host: 'plain.example', type: 'FEED', fetchMode: 'PLAIN' });
+    await seedSource({ title: 'RenderFeed', url: RENDER_FEED, host: 'render.example', type: 'FEED', fetchMode: 'RENDER' });
+    await seedSource({ title: 'PageWatch', url: WATCH_URL, host: 'watch.example', type: 'PAGE_WATCH', fetchMode: 'PLAIN' });
+
+    const fetch = fetchFrom({ [PLAIN_FEED]: okRes(RSS('')), [RENDER_FEED]: okRes(RSS('')), [WATCH_URL]: okRes('<html></html>') });
+    const effects = await pollAllSources(fetch, undefined, undefined, 'all');
+
+    expect(effects).toHaveLength(3);
+  });
+});
