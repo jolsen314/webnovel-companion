@@ -53,8 +53,10 @@ export type SeriesMatch =
 /** Generic WordPress categories that never identify a specific novel. */
 const GENERIC_CATEGORIES = new Set(['normal', 'uncategorized', 'uncategorised', 'novel', 'chapter', 'chapters']);
 
-/** Slug-normalize a string: lowercase, drop apostrophes/punctuation, spaces → hyphens. */
-function slugify(s: string): string {
+/** Slug-normalize a string: lowercase, drop apostrophes/punctuation, spaces → hyphens.
+ *  Exported so `canonicalSeriesId` (WP-39) can converge a positive CATEGORY match (the raw
+ *  category name) with the fallback match (the URL slug) — both slugify to the same key. */
+export function slugify(s: string): string {
   return s
     .toLowerCase()
     .replace(/['’]/g, '')

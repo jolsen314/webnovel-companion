@@ -22,7 +22,7 @@ source, not the raw URL.
 
 ```ts
 import { canonicalUrl, /* existing */ } from './feeds/diff';
-import type { SeriesMatch } from './feeds/discover';
+import { slugify, type SeriesMatch } from './feeds/discover';
 
 /** A stable per-series identity for add-time dedup. Feed series are identified by their FEED (so a
  *  home URL and a TOC URL that resolve to the same feed collapse to one id) plus the series matcher
@@ -39,7 +39,12 @@ export function canonicalSeriesId(input: {
   // (feedUrl === null) is identified by the URL alone (its match is always WHOLE_FEED).
   if (input.feedUrl === null) return base;
   const m = input.match;
-  const suffix = m.type === 'WHOLE_FEED' ? m.type : `${m.type}:${m.value}`;
+  // CATEGORY value is slugified so a re-add resolving to the positive match (raw category name)
+  // converges with one resolving to the fallback match (URL slug) — see the caveat below.
+  const suffix =
+    m.type === 'WHOLE_FEED' ? m.type
+    : m.type === 'CATEGORY' ? `CATEGORY:${slugify(m.value)}`
+    : `PATH_PREFIX:${m.value}`;
   return `${base}#${suffix}`;
 }
 
@@ -51,10 +56,19 @@ function stripSchemeWww(u: string): string {
 
 - **Feed, WHOLE_FEED** (per-series feed): `id = <feed-host+path>#WHOLE_FEED`. Home & TOC adds that both discover this
   feed collapse to one id.
-- **Feed, CATEGORY:Alpha / PATH_PREFIX:/alpha** (multi-novel site feed): `id = <feed>#CATEGORY:Alpha`. Two novels on
-  the same site feed get **different** ids (the matcher discriminates) — no false collision.
+- **Feed, CATEGORY / PATH_PREFIX** (multi-novel site feed): `id = <feed>#CATEGORY:<slug>` (the CATEGORY value is
+  `slugify`d). Two novels on the same site feed get **different** ids (the matcher discriminates) — no false collision.
 - **Page-watch** (no feed): `id = <page-host+path>`. Exact/near re-adds of the same page collapse; a different page
   URL (home vs TOC) does **not** (the deferred residual — see WP-39b).
+
+> **Multi-novel re-add idempotency — scope caveat.** The matcher is derived from the *live feed window* at add time,
+> so for a **multi-novel** feed the id is stable only within a window. The most likely divergence — a positive match
+> (raw category *name*) vs the fallback match (URL *slug*) — is **closed** by slugifying the CATEGORY value (both →
+> the same slug; `chooseSeriesMatch` picks the category precisely because `slugify(name) === slug`). The remaining,
+> rarer divergence is a matcher *type* flip across windows (WHOLE_FEED ↔ CATEGORY ↔ PATH_PREFIX, e.g. when a novel
+> ages out of the capped window) → a re-add could miss and create a second row. Single-novel / per-series feeds are
+> fully deterministic (always WHOLE_FEED), and back-to-back home+TOC adds sit in one window, so the owner's actual
+> incident is covered; the residual degrades to a WP-38-cleanable duplicate and is folded into **WP-39b**.
 
 ### 2. `addSeries` flow (`src/server/services/addSeries.ts`)
 

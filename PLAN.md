@@ -99,7 +99,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 |----|--------------|--------|------------|
 | WP-37 | Per-series chapter-TOC URL (landing page ≠ chapter TOC) — resolve/store a dedicated TOC URL distinct from the reading `url` | `NEXT` | WP-17, WP-33 |
 | WP-30 | Series title backfill from TOC (fix acronym/URL-derived **and site-name-from-feed-channel** titles) + manual title edit | `TODO` | WP-17, WP-10 |
-| WP-39b | Page-watch home-vs-TOC dedup — unify a landing URL vs a chapter-TOC URL for a page-watch (no-feed) series (via WP-37's TOC-URL identity and/or a WP-30-clean title match) | `TODO` | WP-37, WP-30 |
+| WP-39b | Deeper add-dedup (residuals from WP-39): (a) page-watch home-vs-TOC — unify a landing URL vs a chapter-TOC URL for a no-feed series (via WP-37's TOC-URL identity and/or a WP-30-clean title match); (b) multi-novel-feed re-add stability — the matcher can flip type across feed windows (WHOLE_FEED↔CATEGORY↔PATH_PREFIX) so a re-add long after a novel ages out of the window can miss (WP-39 slugifies the CATEGORY value, closing the name-vs-slug case; the type-flip remains) | `TODO` | WP-37, WP-30 |
 | WP-34 | Feed→TOC switch to lock-monitoring — add-time lock detect (prefer PAGE_WATCH) + per-series "Track unlocks" + transition reconcile — **end-to-end "now free" CF-gated** | `TODO` | WP-33, WP-19 |
 | WP-46 | Add-time under-fetch escalation — when `addSeries` seeds **≤5 chapters** (dense-feed window miss, or a TOC needing render/pagination), escalate to a proper fetch (RENDER / page-watch / follow-next-page) to seed the full history at add. *(Re-scoped from the old WP-46 dense-feed-reconcile idea — the **ongoing** miss is now covered by WP-43; this is the **add-time** gap.)* | `TODO` | WP-07, WP-17 |
 | WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` + schema + cron wiring **done**; **editor UI + push delivery (WP-09) remain** (picking up later) | `TODO` | WP-07, WP-10 |
@@ -733,8 +733,10 @@ Depends on WP-09 (and the 403-prune hardening, `dc3cb6e`).
   `canonical(feedUrl)#matcher` and a page-watch series on `canonical(sourceUrl)` (scheme/www-insensitive); `addSeries`
   computes it post-resolution, and a new `findSeriesByCanonicalId` port makes a duplicate return the existing series
   (`alreadyExisting`, route 200) instead of a second row — `createSeries` never runs. Catches all re-adds + home-vs-TOC
-  for feed series; keeps multi-novel-feed siblings distinct. No schema change. Residual (page-watch home-vs-TOC) filed
-  as WP-39b (after WP-37/WP-30); WP-19 noted for alternate-source-on-dup. +8 unit +1 integration, typecheck clean.
+  for feed series; keeps multi-novel-feed siblings distinct. The CATEGORY value is `slugify`d so a re-add's positive
+  match (category name) converges with the fallback match (URL slug). No schema change. Residuals (page-watch
+  home-vs-TOC; multi-novel matcher-type flips across feed windows) filed as WP-39b (after WP-37/WP-30); WP-19 noted for
+  alternate-source-on-dup. +9 unit +1 integration, typecheck clean.
 - **2026-07-31** — **WP-27a refinement: gate the fetch, not the processing.** The cadence gate now decides only whether
   a group is *fetched* (`anyDue`) — once fetched, every source it covers is processed. Skipping an already-fetched
   not-due PLANNED sibling saved ~nothing (parse/diff on a body in hand) and staled a backlog we were holding fresh data
