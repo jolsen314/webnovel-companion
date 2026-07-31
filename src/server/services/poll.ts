@@ -71,9 +71,8 @@ const STATUS_CADENCE_MINUTES: Record<SeriesStatus, number | null> = {
 
 /** Statuses worth loading for a poll at all — derived from the cadence map (the non-null ones),
  *  so the map stays the single source of truth. Used to pre-filter the active-sources query. */
-export const POLLABLE_STATUSES: SeriesStatus[] = (
-  ['READING', 'COMPLETED', 'PAUSED', 'DROPPED', 'PLANNED'] as SeriesStatus[]
-).filter((s) => STATUS_CADENCE_MINUTES[s] !== null);
+export const POLLABLE_STATUSES = (Object.keys(STATUS_CADENCE_MINUTES) as SeriesStatus[])
+  .filter((s) => STATUS_CADENCE_MINUTES[s] !== null);
 
 /** Whether to skip a source this cycle based on its series' shelf status + cadence. `status-skip`
  *  = the status never auto-polls; `status-cadence` = polled within its cadence window. Pure. WP-27a. */
