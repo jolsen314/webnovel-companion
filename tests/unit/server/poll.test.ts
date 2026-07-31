@@ -11,10 +11,12 @@ import {
   pollAllSources,
   pollSource,
   RENDER_COST_MS,
+  sourceTierWhere,
   type PollableSource,
   type PollEffects,
   type PollGroup,
   type PollPorts,
+  type PollTier,
 } from '../../../src/server/services/poll';
 import type { PoliteResult } from '../../../src/lib/feeds/fetch';
 import type { SeriesMatch } from '../../../src/lib/feeds/discover';
@@ -695,5 +697,15 @@ describe('orderGroupsByStaleness', () => {
       ['b.example', t],
     ]);
     expect(orderGroupsByStaleness([a!, b!], hostLast).map((g) => g.host)).toEqual(['a.example', 'b.example']);
+  });
+});
+
+describe('sourceTierWhere', () => {
+  test("'all' → every active source (the daily full superset)", () => {
+    expect(sourceTierWhere('all')).toEqual({ isActive: true });
+  });
+
+  test("'plain' → only the cheap 304-able FEED+PLAIN tier", () => {
+    expect(sourceTierWhere('plain')).toEqual({ isActive: true, type: 'FEED', fetchMode: 'PLAIN' });
   });
 });

@@ -45,6 +45,16 @@ export function hostGate(args: {
   return { skip: false, reason: 'ok' };
 }
 
+/** Which active sources a poll run considers. 'all' = the full daily superset; 'plain' = only the
+ *  cheap, conditional-GET-friendly FEED+PLAIN tier the frequent external trigger polls (WP-43). */
+export type PollTier = 'all' | 'plain';
+
+/** Prisma `where` selecting the sources for a tier. Pure — no Prisma import; the returned literal is
+ *  structurally a `Prisma.SourceWhereInput`. WP-43. */
+export function sourceTierWhere(tier: PollTier): { isActive: true; type?: 'FEED'; fetchMode?: 'PLAIN' } {
+  return tier === 'plain' ? { isActive: true, type: 'FEED', fetchMode: 'PLAIN' } : { isActive: true };
+}
+
 /** The subset of a Source row the poller needs. */
 export interface PollableSource {
   id: string;
