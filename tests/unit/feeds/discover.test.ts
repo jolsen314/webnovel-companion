@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   discoverFeeds,
+  findTocUrl,
   guessFeedUrls,
   chooseSeriesMatch,
   fallbackSeriesMatch,
@@ -171,5 +172,58 @@ describe('filterBySeriesMatch', () => {
 
   test('PATH_PREFIX keeps only items whose url path starts with the prefix', () => {
     expect(filterBySeriesMatch(items, { type: 'PATH_PREFIX', value: '/series/zeta/' })).toEqual([c]);
+  });
+});
+
+describe('findTocUrl', () => {
+  const BASE = 'https://site.example/series/alpha/';
+
+  test('finds a "Table of Contents" link and resolves a relative href', () => {
+    const html = `<html><body>
+      <a href="/series/alpha/toc/">Table of Contents</a>
+    </body></html>`;
+    expect(findTocUrl(html, BASE)).toBe('https://site.example/series/alpha/toc/');
+  });
+
+  test('matches case- and whitespace-insensitively across the heuristic set', () => {
+    for (const text of ['CHAPTER LIST', ' all   chapters ', 'TABLE OF CONTENTS']) {
+      const html = `<a href="https://site.example/toc">${text}</a>`;
+      expect(findTocUrl(html, BASE)).toBe('https://site.example/toc');
+    }
+  });
+
+  test('does not match bare nav tokens "Index" / "TOC" (too false-positive-prone)', () => {
+    expect(findTocUrl(`<a href="/">Index</a>`, BASE)).toBeNull();
+    expect(findTocUrl(`<a href="/toc">TOC</a>`, BASE)).toBeNull();
+  });
+
+  test('returns null when the landing page has no TOC link (it IS the TOC)', () => {
+    const html = `<html><body>
+      <a href="/series/alpha/chapter-1">Chapter 1</a>
+      <a href="/series/alpha/chapter-2">Chapter 2</a>
+    </body></html>`;
+    expect(findTocUrl(html, BASE)).toBeNull();
+  });
+
+  test('ignores a self-link back to the current page', () => {
+    const html = `<a href="https://site.example/series/alpha/#top">Table of Contents</a>`;
+    expect(findTocUrl(html, BASE)).toBeNull();
+  });
+
+  test('ignores a cross-host TOC link', () => {
+    const html = `<a href="https://other.example/toc">Table of Contents</a>`;
+    expect(findTocUrl(html, BASE)).toBeNull();
+  });
+
+  test('does not treat a bare "Chapter N" link as the TOC', () => {
+    const html = `<a href="/series/alpha/chapter-3">Chapter 3: Index of Suspicion</a>`;
+    expect(findTocUrl(html, BASE)).toBeNull();
+  });
+
+  test('returns the first matching link when several exist', () => {
+    const html = `
+      <a href="/first/toc">All Chapters</a>
+      <a href="/second/toc">Chapter List</a>`;
+    expect(findTocUrl(html, BASE)).toBe('https://site.example/first/toc');
   });
 });

@@ -172,6 +172,53 @@ export function filterBySeriesMatch(items: FeedItem[], match: SeriesMatch): Feed
   }
 }
 
+/** Anchor texts that denote a link to the chapter table of contents (WP-37). Anchored so a
+ *  bare "Chapter N" / "Chapter 3: Index …" link is never mistaken for the TOC itself.
+ *  The bare `toc`/`index` tokens were dropped (post-review hardening, 2026-07-31): a site
+ *  footer/nav link literally texted "Index" or "TOC" was resolving a spurious TOC URL for
+ *  feed series — too false-positive-prone for bare nav/chrome links. */
+const TOC_LINK_TEXT = /^(?:table of contents|chapter list|all chapters)$/i;
+
+/** Strip tags, decode nothing (labels are plain text), collapse whitespace, trim. */
+function linkText(anchor: string): string {
+  return anchor
+    .replace(/<[^>]*>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Find the landing page's link to its chapter table of contents, when the TOC lives on a
+ * separate page (WP-37). Pure. Returns the first same-host, absolute URL whose anchor text
+ * matches `TOC_LINK_TEXT` and that isn't the current page; else null (the landing page IS the
+ * TOC, or no link is discoverable → caller falls back to `url`).
+ */
+export function findTocUrl(html: string, baseUrl: string): string | null {
+  let base: URL;
+  try {
+    base = new URL(baseUrl);
+  } catch {
+    return null;
+  }
+  const current = `${base.origin}${base.pathname}`;
+  for (const anchor of html.match(/<a\b[^>]*>[\s\S]*?<\/a>/gi) ?? []) {
+    const openTag = anchor.match(/<a\b[^>]*>/i)?.[0] ?? '';
+    const href = attr(openTag, 'href');
+    if (!href) continue;
+    if (!TOC_LINK_TEXT.test(linkText(anchor))) continue;
+    let resolved: URL;
+    try {
+      resolved = new URL(href, base);
+    } catch {
+      continue;
+    }
+    if (resolved.host !== base.host) continue; // same-host only
+    if (`${resolved.origin}${resolved.pathname}` === current) continue; // not a self-link
+    return resolved.toString();
+  }
+  return null;
+}
+
 /** Common feed-URL fallbacks to try when a page advertises none (mostly WordPress). */
 export function guessFeedUrls(pageUrl: string): string[] {
   try {

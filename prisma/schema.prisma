@@ -142,6 +142,9 @@ model Source {
   type      SourceType      @default(FEED)
   fetchMode SourceFetchMode @default(PLAIN) // WP-17b: escalates to RENDER when a plain TOC under-reads
   feedUrl   String?
+  // WP-37: the chapter table-of-contents page, when it differs from `url` (the landing/reading
+  // page). null → the landing page IS the TOC; consumers fall back to `url`. Shared with WP-34.
+  tocUrl    String?
 
   // Series isolation within a (possibly site-wide, multi-novel) feed.
   matchType  SourceMatch @default(WHOLE_FEED)

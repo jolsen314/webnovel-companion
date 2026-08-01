@@ -46,31 +46,27 @@ uncommitted notes." Real names/URLs live only in those local notes and in scratc
 
 ## Current focus
 
-> **WP-41 + WP-43 are DONE (2026-07-30).** WP-41: `pollAllSources` drains hosts least-recently-polled first
-> (no schema change) and stops starting fetches once the run can't finish one within 270s, skip-not-break. WP-43: external
-> GitHub Actions trigger (`/.github/workflows/poll.yml`, 2h cadence via `workflow_dispatch` for manual runs) calls
-> `/api/cron/poll?tier=plain` with secret URL + `CRON_SECRET`, PLAIN-feed tier only, composing with WP-41's rotation.
-> Feed-vs-Vercel reachability verified 2026-07-29. **Budget×cadence caveat (now realized):** daily cadence is trivial on
-> Neon's compute budget, but at 2h polling (~40 compute-hr/mo) budget becomes a real number to watch — don't go below 2h.
+> **NEXT: WP-30 — series title backfill from TOC + manual title edit.** Fix acronym/URL-derived and
+> site-name-from-feed-channel titles by auto-backfilling from the page-watch TOC (only overwriting an auto-derived
+> title, never a user edit), with a manual title-edit escape hatch. WP-37's reverse-info finding steers this one:
+> prefer the **landing page's** content heading over the standalone TOC page's title (which is a slug-abbreviation with
+> no `og:title`). See the **`### WP-30`** detail section below. Full priority order = the **▶ Active queue** table.
 >
-> **WP-27a DONE (2026-07-31)** — reading-status cadence gating implemented: gate poll frequency per series status, skip COMPLETED/DROPPED, poll PLANNED/backlog rarely (not daily; RENDER sources can't 304), with `STATUS_CADENCE_MINUTES` map driving per-source cadence windows.
+> **Recently landed (newest first):** WP-37 (per-series chapter-TOC URL: auto-resolve at add, self-heal at backfill) ·
+> WP-39 (add-time dedup via `canonicalSeriesId`) · WP-27a (reading-status cadence gating) · WP-43 (2h external
+> GitHub-Actions trigger, PLAIN tier) · WP-41 (poll time-budget guard + least-recently-polled rotation) · WP-42
+> (poll-once-per-feed + politeness). Full detail in the ✅ Completed table, each `### WP-NN` section, and the Changelog.
 >
-> **WP-39 DONE (2026-07-31)** — add-time dedup: pure `canonicalSeriesId` (deterministic feed-identity + exact/near-URL) keys a series, rejects on duplicate (returning the existing series with `alreadyExisting`), persists `canonicalId`. Catches all re-adds (http/https/www/slash/tracking params) + home-vs-TOC for feed series; keeps multi-novel-feed siblings distinct. Page-watch home-vs-TOC residual filed as WP-39b. **NEXT: WP-37 (per-series TOC URL).** **The full priority order is the ▶ Active queue table below**.
->
-> **WP-40 parked — spike (2026-07-28): TLS impersonation can't clear the owner's CF hosts.** An `impit`
-> (browser-TLS/JA3 + HTTP/2) probe deployed to Vercel returned Cloudflare's **JS *managed challenge*** ("Just a
-> moment…", 403, ~5.9 KB interstitial) for **both** confirmed CF hosts. The block is the **datacenter
-> IP**, not the fingerprint — so no cheap code-only GET clears it (only a real browser = render, or a *residential* IP
-> we control). Self-hosted residential egress was declined (no always-on home box). **Revisit third-party unblockers
-> later** — but they carry the WP-17b privacy tradeoff *and* likely hit the **same poll-budget limit as render** (per-
-> request latency), so WP-41 matters regardless. See the WP-40 detail + changelog.
+> **Standing constraints to keep in mind:**
+> - **Poll budget × cadence** (WP-41/43): the daily run self-limits to `POLL_BUDGET_MS` (270s) and rotates stalest-first;
+>   the 2h PLAIN trigger costs ~40 Neon compute-hr/mo — **don't drop below 2h** without re-checking Neon's ~191 hr/mo.
+> - **Cloudflare hosts need render** (WP-40, parked): CF blocks Vercel's **datacenter IP**, not the TLS fingerprint, so
+>   only a real browser (render) or a residential IP clears it — no cheap code-only GET. See the WP-40 detail.
 
-The MVP is **live on Vercel + Neon** — feed pipeline, auth gate, library/detail UI, **Web Push (WP-09, verified on a
-device)**, the **headless renderer (WP-17b, live-validated)**, and **paid→free "now free" detection (WP-20)**. The
-locked→free transition is now caught per-chapter off the TOC (`parseToc`'s access marking → `becameFreeAt` →
-privacy-safe "Now free" push, riding the new-chapter toggle); new *locked* chapters are stored silently and notify only
-on unlock. Remaining near-term: **WP-29 editor UI**. (Real site/series names for testing are kept in local,
-uncommitted notes.)
+The MVP is **live on Vercel + Neon** — feed pipeline, auth gate, library/detail UI, **Web Push** (WP-09, device-verified),
+the **headless renderer** (WP-17b), **paid→free "now free"** (WP-20, per-chapter off the TOC → privacy-safe push),
+**status-gated + cadence polling** (WP-27a), and **add-time dedup** (WP-39). (Real site/series names for testing are kept
+in local, uncommitted notes.)
 
 ---
 
@@ -97,8 +93,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 
 | ID | Work package | Status | Depends on |
 |----|--------------|--------|------------|
-| WP-37 | Per-series chapter-TOC URL (landing page ≠ chapter TOC) — resolve/store a dedicated TOC URL distinct from the reading `url` | `NEXT` | WP-17, WP-33 |
-| WP-30 | Series title backfill from TOC (fix acronym/URL-derived **and site-name-from-feed-channel** titles) + manual title edit | `TODO` | WP-17, WP-10 |
+| WP-30 | Series title backfill from TOC (fix acronym/URL-derived **and site-name-from-feed-channel** titles) + manual title edit | `NEXT` | WP-17, WP-10 |
 | WP-39b | Deeper add-dedup (residuals from WP-39, all matcher/window-quality): (a) page-watch home-vs-TOC — unify a landing URL vs a chapter-TOC URL for a no-feed series (via WP-37's TOC-URL identity and/or a WP-30-clean title match); (b) multi-novel re-add **type-flip** across feed windows (WHOLE_FEED↔CATEGORY↔PATH_PREFIX) → a re-add can miss (false negative; WP-39 slugified the CATEGORY value, closing the name-vs-slug case, but the type-flip remains); (c) two *undetectably* multi-novel novels on one **advertised** feed both resolving to `#WHOLE_FEED` → false dedup (false positive) — real fix is better multi-novel detection in the matcher | `TODO` | WP-37, WP-30 |
 | WP-34 | Feed→TOC switch to lock-monitoring — add-time lock detect (prefer PAGE_WATCH) + per-series "Track unlocks" + transition reconcile — **end-to-end "now free" CF-gated** | `TODO` | WP-33, WP-19 |
 | WP-46 | Add-time under-fetch escalation — when `addSeries` seeds **≤5 chapters** (dense-feed window miss, or a TOC needing render/pagination), escalate to a proper fetch (RENDER / page-watch / follow-next-page) to seed the full history at add. *(Re-scoped from the old WP-46 dense-feed-reconcile idea — the **ongoing** miss is now covered by WP-43; this is the **add-time** gap.)* | `TODO` | WP-07, WP-17 |
@@ -120,7 +115,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 
 ### ✅ Completed
 
-WP-00, WP-GH, WP-CI, WP-12 (bootstrap / CI / docs) · WP-01, WP-03 (pure diff / health) · WP-04, WP-05, WP-FE (schema, feed parse/discover, fetcher) · WP-06, WP-07, WP-08 (Next shell, services, API) · WP-09, WP-10, WP-AUTH, WP-11 (Web Push, library/detail UI, auth gate, deploy) · WP-17, WP-17b (page-watch + headless renderer) · WP-20 (paid→free "now free") · WP-33 (full-TOC backfill + `accessReconciled`) · WP-35 (TOC-order chapters + display toggle) · WP-36 (`parseToc` content scoping) · WP-38 (contaminated-series recovery script) · WP-42 (poll-once-per-feed + politeness) · WP-41 (poll time-budget guard + rotation) · WP-43 (frequent PLAIN-tier polling) · WP-27a (status-gated + cadence polling) · WP-39 (add-time dedup).
+WP-00, WP-GH, WP-CI, WP-12 (bootstrap / CI / docs) · WP-01, WP-03 (pure diff / health) · WP-04, WP-05, WP-FE (schema, feed parse/discover, fetcher) · WP-06, WP-07, WP-08 (Next shell, services, API) · WP-09, WP-10, WP-AUTH, WP-11 (Web Push, library/detail UI, auth gate, deploy) · WP-17, WP-17b (page-watch + headless renderer) · WP-20 (paid→free "now free") · WP-33 (full-TOC backfill + `accessReconciled`) · WP-35 (TOC-order chapters + display toggle) · WP-36 (`parseToc` content scoping) · WP-38 (contaminated-series recovery script) · WP-42 (poll-once-per-feed + politeness) · WP-41 (poll time-budget guard + rotation) · WP-43 (frequent PLAIN-tier polling) · WP-27a (status-gated + cadence polling) · WP-39 (add-time dedup) · WP-37 (per-series chapter-TOC URL).
 
 ### ⏭ Later tiers (M2–M4)
 
@@ -482,6 +477,10 @@ navigation to a *new URL*.
 **Low priority** (single custom source so far). Pure `lib/feeds/pageWatch.ts`, test-first. **Gets its own brainstorm →
 spec when prioritized.**
 
+**Also owns (added 2026-07-31, WP-37 final-review follow-up):** `findTocUrl` (`lib/feeds/discover.ts`) needs the
+same class of nav/chrome anchor-filtering as `parseToc`'s chrome exclusion — it's currently why the bare `toc`/
+`index` heuristic tokens had to be dropped (too false-positive-prone against bare nav links) rather than filtered.
+
 ### WP-33 / WP-34 — Feed ↔ TOC: backfill + switch to lock-monitoring
 
 Full design + rationale: [feed-toc-transition-design](docs/superpowers/specs/2026-07-26-feed-toc-transition-design.md)
@@ -563,6 +562,53 @@ page is not the chapter list:
   URL** (manual — the WP-37 concern, done by hand here) and **clean re-backfill** (clean once WP-36 lands). Destructive
   prune/delete can land first; the clean re-backfill wants WP-36. A small detail-page UI (delete-chapter / reset /
   edit-source-URL) is a **follow-up** once the fixes settle.
+
+### WP-37 — Per-series chapter-TOC URL (landing page ≠ chapter TOC)
+
+**DONE (2026-07-31).** `Source.tocUrl String?` shipped as an additive migration. A pure `findTocUrl(html, baseUrl)`
+(`src/lib/feeds/discover.ts`) discovers the on-page chapter-TOC link via an anchor-text heuristic ("table of
+contents" / "chapter list" / "all chapters"), guarded to same-host and against self-links/cross-host
+anchors. `tocUrl` is **resolved at add-time** on both the feed and page-watch add paths, and **self-healed at
+backfill-time** — a null `tocUrl` is discovered then, followed one hop, and persisted (never re-discovered on every
+poll). Consumers: `backfillFromToc` fetches `tocUrl ?? url`; the page-watch poll's fetch URL is
+`feedUrl ?? tocUrl ?? url`. The reverse-info exploration (§5 of the spec) is written up in-repo.
+
+**Post-review hardening (2026-07-31):** dropped the bare `toc`/`index` heuristic tokens — a footer/nav link
+literally texted "Index" or "TOC" was resolving a spurious TOC URL for feed series; see WP-32 for the
+follow-up (nav/chrome anchor-filtering) that would let them be reinstated safely.
+
+**Add-time under-fetch caveat (→ WP-46, not a WP-37 bug).** At add-time, a landing≠TOC series still seeds its initial
+chapters from the **landing page only** (the discovered `tocUrl` isn't fetched until backfill/poll), so such a series
+shows **0 chapters until its first backfill or poll**, which then fills it via `tocUrl`. This is the already-tracked
+WP-46 add-time under-fetch gap, not a regression introduced here — noted so it isn't mistaken for one.
+
+**Reverse-info finding → steers WP-30.** On the probed source, the standalone TOC page's own title/`<h1>` is a
+slug-abbreviation plus a "Table of Contents" label (no `og:title`), while the **landing page** carries the real series
+title *and* the cover. Recommendation for WP-30: extract the title from the **landing page's** content heading, using
+the TOC page only as a fallback; keep `url` (not `tocUrl`) as the page fetched for title/cover.
+
+**Problem.** A `Source` has one `url` (the page the user reads / the landing page) plus an optional `feedUrl`. But some
+series are registered with a **landing/overview URL that has no chapter list** — the real table of contents is a
+**separate linked page**. `backfillFromToc` and page-watch both fetch `source.url` and run `parseToc` on it, so they
+parse a page with no chapters (or the wrong ones). Today's only fix is manual: `db:cleanup set-source-url` to repoint
+the source before backfilling. WP-37 makes the TOC URL a first-class, resolvable field.
+
+**Proposed approach (refine in the brainstorm).**
+- **Schema (additive migration):** add `Source.tocUrl String?` (nullable; `null` → fall back to `url`). Migrations are
+  live now (Neon; WP-35 already ran one), so this is a normal `prisma migrate`.
+- **Resolution:** at add-time (and on demand), discover the TOC link on the landing page — follow an on-page anchor
+  whose text matches "table of contents" / "chapter list" / "all chapters" (case-insensitive), guarded like the other
+  anchor heuristics. If none is found, leave `tocUrl` null and let the user set/override it from the detail UI (extend
+  `parseSeriesUpdate` to accept a TOC URL, mirroring WP-30's manual title edit).
+- **Consumers:** `backfillFromToc` and the page-watch poll fetch `tocUrl ?? url`. The reading `url` stays the
+  user-facing link (unchanged in the UI).
+- **Reconcile with WP-34** (feed→TOC switch also stores a TOC URL) — one field, not two. **Enables WP-39b(a)**
+  (page-watch home-vs-TOC dedup keys on the shared TOC URL) and relates to WP-19 re-pointing.
+
+**Definition of Done.** A series whose landing page ≠ its TOC can be added and then backfilled/polled against the
+**correct** chapter list **without** a manual `set-source-url`: `tocUrl` is auto-resolved at add when the TOC link is
+discoverable, else editable from the detail UI; `backfillFromToc` + page-watch use `tocUrl ?? url`; additive migration
+applied; TOC-link discovery unit-tested (pure), and backfill-uses-tocUrl covered by an integration test.
 
 ### WP-39 — Prevent duplicate series on add (DONE 2026-07-31)
 
@@ -729,6 +775,24 @@ Depends on WP-09 (and the 403-prune hardening, `dc3cb6e`).
 
 ## Changelog
 
+- **2026-07-31** — **WP-37 post-review hardening.** Dropped the bare `toc`/`index` tokens from `findTocUrl`'s
+  anchor-text heuristic (`lib/feeds/discover.ts`) — a footer/nav link literally texted "Index" or "TOC" was
+  resolving a spurious TOC URL for feed series; the heuristic set is now `table of contents` / `chapter list` /
+  `all chapters` only. Added a negative unit test proving the false-positive vector is closed, and restored an
+  integration test covering skip-already-seen on the tocUrl backfill path (the two original WP-37 backfill tests
+  both seeded 0 chapters at add, so neither exercised diffing against a chapter already stored). Nav/chrome
+  anchor-filtering for `findTocUrl` (mirroring `parseToc`'s) filed under WP-32. Full suite + typecheck clean.
+- **2026-07-31** — **WP-37 done: per-series chapter-TOC URL.** Additive `Source.tocUrl String?` migration. Pure
+  `findTocUrl(html, baseUrl)` (`lib/feeds/discover.ts`) discovers the on-page chapter-TOC link via an anchor-text
+  heuristic (table of contents / chapter list / all chapters / toc / index), guarded same-host and against
+  self-links/cross-host anchors. Resolved at **add-time** on both the feed and page-watch paths; **self-healed at
+  backfill-time** (a null `tocUrl` is discovered, followed one hop, and persisted) — never re-discovered on poll.
+  `backfillFromToc` uses `tocUrl ?? url`; page-watch poll fetch is `feedUrl ?? tocUrl ?? url`. Reverse-info exploration
+  written up. **Caveat:** a landing≠TOC series still seeds its add-time chapters from the landing page only, so it
+  shows 0 chapters until its first backfill/poll fills it via `tocUrl` — that's the already-tracked WP-46 add-time
+  under-fetch gap, not a WP-37 bug. **Steers WP-30:** the probed source's standalone TOC page title is a
+  slug-abbreviation with no `og:title`, while the landing page carries the real title + cover — WP-30 should prefer
+  the landing page's content heading, TOC page only as fallback. Unblocks WP-39b(a). Typecheck clean.
 - **2026-07-31** — **WP-39 done: add-time dedup.** Pure `canonicalSeriesId` (`lib/dedup.ts`) keys a feed series on
   `canonical(feedUrl)#matcher` and a page-watch series on `canonical(sourceUrl)` (scheme/www-insensitive); `addSeries`
   computes it post-resolution, and a new `findSeriesByCanonicalId` port makes a duplicate return the existing series

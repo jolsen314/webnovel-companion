@@ -66,6 +66,27 @@ describe('addSeries (real DB)', () => {
     expect(series!.chapters.map((c) => c.guid).sort()).toEqual(['g1', 'g2']);
   });
 
+  test('WP-37: add-time resolves and persists tocUrl from a landing-page TOC link', async () => {
+    const LANDING = 'https://toc.example/series/beta/';
+    const TOC = 'https://toc.example/series/beta/contents/';
+    // Landing page: no feed, links to a separate TOC page.
+    const landingBody = `<html><body>
+      <a href="/series/beta/contents/">Table of Contents</a>
+    </body></html>`;
+    const tocBody = `<html><body>
+      <a href="/series/beta/chapter-1">Chapter 1</a>
+    </body></html>`;
+    const fetch = fetchFrom({
+      [LANDING]: okRes(landingBody),
+      [TOC]: okRes(tocBody),
+      // feed guesses 404 → page-watch path
+    });
+    const { seriesId } = await addSeries({ url: LANDING }, fetch);
+    const source = await db.source.findFirstOrThrow({ where: { seriesId } });
+    expect(source.tocUrl).toBe(TOC);
+    expect(source.url).toBe(LANDING); // reading url unchanged
+  });
+
   test('WP-33: a feed series seeds its full TOC history at add, with TOC access', async () => {
     // Page advertises the feed AND lists the full chapter history (feed shows only a-1,a-2; TOC adds a-3 locked).
     const PAGE_HTML =
@@ -327,6 +348,32 @@ describe('page-watch source (real DB)', () => {
     expect(w1.access).toBe('LOCKED');
     expect(w1.becameFreeAt).toBeNull(); // reconcile is silent — not an unlock
   });
+
+  test('WP-37: a PAGE_WATCH source with tocUrl polls the TOC page, not the landing url', async () => {
+    const LANDING = 'https://pw.example/series/gamma/';
+    const TOC = 'https://pw.example/series/gamma/contents/';
+    const landingBody = `<html><body><a href="/series/gamma/contents/">Table of Contents</a></body></html>`;
+    const seedTocBody = `<html><body><a href="/series/gamma/chapter-1">Chapter 1</a></body></html>`;
+    // Add via page-watch; tocUrl is resolved at add (Task 3).
+    const { seriesId } = await addSeries(
+      { url: LANDING },
+      fetchFrom({ [LANDING]: okRes(landingBody), [TOC]: okRes(seedTocBody) }),
+    );
+    await db.source.updateMany({ where: { seriesId }, data: { lastCheckedAt: null } });
+
+    // On poll, only the TOC URL serves a new chapter; the landing url serves nothing new.
+    const polledTocBody = `<html><body>
+      <a href="/series/gamma/chapter-1">Chapter 1</a>
+      <a href="/series/gamma/chapter-2">Chapter 2</a>
+    </body></html>`;
+    const pollFetch = fetchFrom({
+      [LANDING]: okRes(landingBody),
+      [TOC]: okRes(polledTocBody),
+    });
+    await pollAllSources(pollFetch);
+    const urls = (await db.chapter.findMany({ where: { seriesId }, select: { url: true } })).map((c) => c.url);
+    expect(urls.some((u) => u.endsWith('/chapter-2'))).toBe(true);
+  });
 });
 
 describe('updateSeries (real DB)', () => {
@@ -580,6 +627,93 @@ describe('backfillFromToc (real DB)', () => {
     // null, since that's the field a real unlock stamps to trigger a "Now free" push (WP-20).
     // A set becameFreeAt here would mean this silent backfill created a push-worthy event.
     expect(chapters.find((c) => c.url === B1)!.becameFreeAt).toBeNull();
+  });
+
+  test('WP-37: backfill fetches a stored tocUrl, not the landing url', async () => {
+    const LANDING = 'https://bf.example/series/delta/';
+    const TOC = 'https://bf.example/series/delta/contents/';
+    const { seriesId } = await addSeries(
+      { url: LANDING },
+      fetchFrom({
+        [LANDING]: okRes(`<a href="/series/delta/contents/">Table of Contents</a>`),
+        [TOC]: okRes(`<a href="/series/delta/chapter-1">Chapter 1</a>`),
+      }),
+    );
+    // Backfill sees a fuller TOC at the TOC url; the landing url would 0-out.
+    const added = await backfillFromToc(
+      seriesId,
+      fetchFrom({
+        [LANDING]: okRes(`<a href="/series/delta/contents/">Table of Contents</a>`),
+        [TOC]: okRes(`<a href="/series/delta/chapter-1">Chapter 1</a><a href="/series/delta/chapter-2">Chapter 2</a>`),
+      }),
+    );
+    // The landing page's own body has no chapter anchors (only the TOC link), so add-time
+    // seeds zero chapters (Task 3 parses only the landing page, never the discovered tocUrl
+    // page) — both chapter-1 and chapter-2 are new here. This proves backfill reads the
+    // richer TOC page (via the stored tocUrl) rather than the landing url, which would 0-out.
+    expect(added.added).toBe(2);
+  });
+
+  test('WP-37: backfill self-heals a null tocUrl by discovering + persisting the TOC link', async () => {
+    // Simulate a pre-WP-37 series: create it, then blank its tocUrl.
+    const LANDING = 'https://heal.example/series/epsilon/';
+    const TOC = 'https://heal.example/series/epsilon/contents/';
+    const { seriesId } = await addSeries(
+      { url: LANDING },
+      fetchFrom({
+        [LANDING]: okRes(`<a href="/series/epsilon/contents/">Table of Contents</a>`),
+        [TOC]: okRes(`<a href="/series/epsilon/chapter-1">Chapter 1</a>`),
+      }),
+    );
+    await db.source.updateMany({ where: { seriesId }, data: { tocUrl: null } });
+
+    const added = await backfillFromToc(
+      seriesId,
+      fetchFrom({
+        [LANDING]: okRes(`<a href="/series/epsilon/contents/">Table of Contents</a>`),
+        [TOC]: okRes(`<a href="/series/epsilon/chapter-1">Chapter 1</a><a href="/series/epsilon/chapter-2">Chapter 2</a>`),
+      }),
+    );
+    // Same reasoning as the previous test: add-time seeded zero chapters (landing page has no
+    // chapter anchors of its own), so both chapter-1 and chapter-2 are new via the self-healed TOC.
+    expect(added.added).toBe(2);
+    const source = await db.source.findFirstOrThrow({ where: { seriesId } });
+    expect(source.tocUrl).toBe(TOC); // persisted for next time
+  });
+
+  test('WP-37: backfill via tocUrl diffs against stored chapters (skips an already-seen one)', async () => {
+    const LANDING = 'https://skip.example/series/theta/';
+    const TOC = 'https://skip.example/series/theta/contents/';
+    const { seriesId } = await addSeries(
+      { url: LANDING },
+      fetchFrom({
+        // Landing carries chapter-1 (seeded at add) AND the TOC link.
+        [LANDING]: okRes(
+          `<a href="/series/theta/chapter-1">Chapter 1</a><a href="/series/theta/contents/">Table of Contents</a>`,
+        ),
+        [TOC]: okRes(`<a href="/series/theta/chapter-1">Chapter 1</a>`),
+      }),
+    );
+    // Confirm add-time actually seeded chapter-1 (parseToc picks up the "Chapter 1" anchor
+    // on the landing page itself, unlike the other two WP-37 tests above, whose landing
+    // fixtures carry only the TOC link and so seed zero chapters).
+    const seeded = await db.chapter.findMany({ where: { seriesId } });
+    expect(seeded.map((c) => c.url)).toEqual(['https://skip.example/series/theta/chapter-1']);
+
+    const added = await backfillFromToc(
+      seriesId,
+      fetchFrom({
+        [LANDING]: okRes(
+          `<a href="/series/theta/chapter-1">Chapter 1</a><a href="/series/theta/contents/">Table of Contents</a>`,
+        ),
+        [TOC]: okRes(
+          `<a href="/series/theta/chapter-1">Chapter 1</a><a href="/series/theta/chapter-2">Chapter 2</a>`,
+        ),
+      }),
+    );
+    expect(added.added).toBe(1); // chapter-1 already stored → only chapter-2 is new
+    const chapters = await db.chapter.findMany({ where: { seriesId } });
+    expect(chapters).toHaveLength(2); // no duplicate chapter-1
   });
 });
 

@@ -5,6 +5,7 @@ import {
   chooseSeriesMatch,
   fallbackSeriesMatch,
   filterBySeriesMatch,
+  findTocUrl,
   type SeriesMatch,
 } from '../../lib/feeds/discover';
 import { parseToc, mergeFeedAndToc, withReadingPositions } from '../../lib/feeds/pageWatch';
@@ -29,6 +30,7 @@ export interface ResolvedSource {
   sourceUrl: string;
   host: string;
   feedUrl: string | null;
+  tocUrl: string | null; // WP-37: separate chapter-TOC page, when discoverable
   type: 'FEED' | 'PAGE_WATCH';
   match: SeriesMatch;
   chapters: FeedItem[];
@@ -117,7 +119,8 @@ export async function addSeries(input: AddSeriesInput, ports: AddSeriesPorts): P
         : match.type === 'WHOLE_FEED'
           ? (parsed.title ?? titleFromUrl(url)) // series' own feed → channel title is the novel
           : titleFromUrl(url)); // slug/path fallback → humanize the URL, not the site name
-    const core: ResolvedCore = { seriesTitle, sourceUrl: url, host, feedUrl, type: 'FEED', match, chapters };
+    const tocUrl = pageOk ? findTocUrl(page.body, url) : null;
+    const core: ResolvedCore = { seriesTitle, sourceUrl: url, host, feedUrl, tocUrl, type: 'FEED', match, chapters };
     return finalize(core, ports);
   }
 
@@ -125,11 +128,13 @@ export async function addSeries(input: AddSeriesInput, ports: AddSeriesPorts): P
   // poll diffs against a known set instead of re-reporting the whole backlog.
   if (pageOk) {
     const toc = parseToc(page.body, url);
+    const tocUrl = findTocUrl(page.body, url);
     const core: ResolvedCore = {
       seriesTitle: input.title ?? titleFromUrl(url),
       sourceUrl: url,
       host,
       feedUrl: null,
+      tocUrl,
       type: 'PAGE_WATCH',
       match: { type: 'WHOLE_FEED' },
       chapters: withReadingPositions(toc, toc),

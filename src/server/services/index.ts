@@ -6,6 +6,7 @@ import type { SeriesMatch } from '../../lib/feeds/discover';
 import type { FailureType } from '../../lib/health';
 import { diffChapters, canonicalUrl } from '../../lib/feeds/diff';
 import { parseToc, tocReadingOrder } from '../../lib/feeds/pageWatch';
+import { findTocUrl } from '../../lib/feeds/discover';
 import {
   pollAllSources as pollAllCore,
   sourceTierWhere,
@@ -75,6 +76,7 @@ function rowToPollable(row: {
   url: string;
   host: string;
   feedUrl: string | null;
+  tocUrl: string | null;
   matchType: string;
   matchValue: string | null;
   etag: string | null;
@@ -93,7 +95,7 @@ function rowToPollable(row: {
     seriesStatus: row.series.status,
     type: row.type,
     fetchMode: row.fetchMode,
-    fetchUrl: row.feedUrl ?? row.url,
+    fetchUrl: row.feedUrl ?? row.tocUrl ?? row.url, // WP-37: page-watch hits the TOC page
     match: toSeriesMatch(row.matchType, row.matchValue),
     etag: row.etag,
     lastModified: row.lastModified,
@@ -380,6 +382,7 @@ export function addSeries(input: AddSeriesInput, fetchImpl: FetchImpl = fetchPor
               host: r.host,
               type: r.type,
               feedUrl: r.feedUrl,
+              tocUrl: r.tocUrl, // WP-37
               matchType: r.match.type,
               matchValue: 'value' in r.match ? r.match.value : null,
             },
@@ -416,10 +419,27 @@ export async function backfillFromToc(
   if (!owned) return { added: 0, reconciled: 0 };
   const source = await db.source.findFirst({ where: { seriesId, isActive: true } });
   if (!source) return { added: 0, reconciled: 0 };
-  const res = await fetchImpl(source.url, {});
+  // WP-37: fetch the real TOC page. If tocUrl is unset (pre-WP-37 series, or a landing page
+  // that only later linked a TOC), self-heal: fetch the landing page, discover its TOC link,
+  // follow it one hop, and persist tocUrl so future backfills/polls go straight there.
+  let tocUrl = source.tocUrl ?? source.url;
+  let res = await fetchImpl(tocUrl, {});
   if (res.outcome !== 'SUCCESS' || res.notModified) return { added: 0, reconciled: 0 };
 
-  const toc = parseToc(res.body, source.url);
+  let discoveredTocUrl: string | null = null;
+  if (source.tocUrl == null) {
+    const link = findTocUrl(res.body, source.url);
+    if (link != null && link !== tocUrl) {
+      const followed = await fetchImpl(link, {});
+      if (followed.outcome === 'SUCCESS' && !followed.notModified) {
+        tocUrl = link;
+        res = followed;
+        discoveredTocUrl = link;
+      }
+    }
+  }
+
+  const toc = parseToc(res.body, tocUrl);
   const order = tocReadingOrder(toc);
   const storedRows = await db.chapter.findMany({
     where: { seriesId },
@@ -473,6 +493,9 @@ export async function backfillFromToc(
           const pos = order!.get(canonicalUrl(s.url));
           return pos != null ? [db.chapter.updateMany({ where: { id: s.id }, data: { position: pos } })] : [];
         })
+      : []),
+    ...(discoveredTocUrl != null
+      ? [db.source.update({ where: { id: source.id }, data: { tocUrl: discoveredTocUrl } })]
       : []),
   ]);
   return { added: diff.new.length, reconciled: diff.accessReconciled.length };
