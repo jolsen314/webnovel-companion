@@ -883,6 +883,13 @@ detection heuristic. **Not** covered by WP-36 (parseToc/page scoping) — this i
 decision. **Cleanup:** existing `WHOLE_FEED`-bound multi-novel series need re-pointing to page-watch + a prune of the
 cross-novel chapters (WP-38 `db:cleanup`).
 
+**Tooling gap found during the first prod cleanup (2026-08-10):** the WP-38 `db:cleanup` CLI can prune chapters and
+change a source `url`, but it has **no way to flip a source's *type*** — `set-source-url` only updates `url`/`host`,
+not `type`/`feedUrl`, so a `FEED`/`WHOLE_FEED` source can't be converted to `PAGE_WATCH` through the CLI. The first
+recovery had to do it as a **manual one-row DB update** (`type=PAGE_WATCH`, `feedUrl=null`, clear the stale feed
+`etag`/`lastModified`). Add a **`reclassify-source`** command (set `type`, clear `feedUrl`, reset validators — and
+optionally `deactivate-source`) so WP-49-style recoveries are fully tool-supported instead of hand-edited on prod.
+
 ## Backlog / open questions
 
 - **Notification privacy** *(implemented 2026-07-26)* — the work's name is kept out of the always-visible notification
@@ -912,6 +919,12 @@ cross-novel chapters (WP-38 `db:cleanup`).
 
 ## Changelog
 
+- **2026-08-10** — **First prod `db:cleanup`: de-contaminated a WHOLE_FEED-bound multi-novel series (WP-49 driver).**
+  Pruned 10 cross-novel phantom chapters (the site feed's rolling window, pulled in by `WHOLE_FEED`) and flipped the
+  source `FEED`/`WHOLE_FEED` → `PAGE_WATCH` so it stops re-contaminating and now catches the series' real updates (the
+  dense feed was rolling them off before we'd poll — the exact case WP-49/page-watch is for). The flip had to be a
+  **manual one-row DB update** — the CLI has no source-type reclassify → noted the `reclassify-source` gap on WP-49.
+  Series verified clean (141 chapters, no cross-novel strays, source `PAGE_WATCH`).
 - **2026-08-10** — **WP-48 done: Blogger feed-path in `guessFeedUrls`.** The function now offers Blogger's
   `/feeds/posts/default` (Atom) + `?alt=rss` (RSS) — **first** for `*.blogspot.com` (skips the WordPress `/feed/` 404s),
   **last** for every other host as a **universal fallback** that also rescues custom-domain / ccTLD Blogger (owner chose
