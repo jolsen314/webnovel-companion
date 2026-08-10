@@ -50,7 +50,8 @@ uncommitted notes." Real names/URLs live only in those local notes and in scratc
 > unlocks" override + transition reconcile — the end-to-end "now free" path for a CF-gated, feed-with-locked series.
 > Full priority order = the **▶ Active queue** table.
 >
-> **Recently landed (newest first):** WP-39b (deeper add-dedup, **re-scoped**: going-forward `tocUrl` page-watch
+> **Recently landed (newest first):** WP-48 (Blogger feed-path in `guessFeedUrls` — blogspot-first + universal-last
+> so a Blogger series binds by feed even when the Vercel page fetch is blocked) · WP-39b (deeper add-dedup, **re-scoped**: going-forward `tocUrl` page-watch
 > keying in `canonicalSeriesId`, pure `findSimilarTitle` + a **create-then-annotate** `similarTo` hint surfaced as a
 > non-blocking notice on the add page; the multi-novel matcher-type-flip is covered in spirit by the annotate net,
 > true multi-novel matcher intelligence is deferred; filed **WP-CLEANUP-UI** + **WP-WORKID** as follow-ups) ·
@@ -102,7 +103,6 @@ later-tier tables are reference only. `⭐` = load-bearing.
 | WP-34 | Feed→TOC switch to lock-monitoring — add-time lock detect (prefer PAGE_WATCH) + per-series "Track unlocks" + transition reconcile — **end-to-end "now free" CF-gated** | `NEXT` | WP-33, WP-19 |
 | WP-46 | Add-time under-fetch **and hard-fail** escalation — when `addSeries` seeds **≤5 chapters** (dense-feed window miss, or a TOC needing render/pagination) **or the plain page fetch fails outright** (CF-blocked from Vercel's IP → today it just throws "couldn't reach…"), retry via a proper fetch (RENDER / page-watch / follow-next-page) before seeding-or-throwing. Our **own render clears CF's JS managed challenge** (per the WP-40 spike — a real browser passes where a code-only GET can't) → **no third party**. Hard-fail drivers: a no-feed CF host + a JS-rendered CF host, both unaddable today. *(Re-scoped from dense-feed-reconcile; ongoing miss = WP-43.)* | `TODO` | WP-07, WP-17b |
 | WP-49 | Don't bind `WHOLE_FEED` to a **multi-novel advertised feed** — a WordPress post advertises the *site-wide* `/feed/` (multi-novel, `Uncategorized`, date-permalinks); when `chooseSeriesMatch` can't isolate the series, `addSeries` defaults to `WHOLE_FEED` and pulls **every** novel's chapters into the series (at add **and every poll**). Prefer **PAGE_WATCH** on the series post (clean, series-scoped) or a scoped fallback when the advertised feed looks multi-novel / can't be isolated. Shares WP-39b's "better multi-novel detection in the matcher" root; **not** covered by WP-36 (parseToc-only). Existing WHOLE_FEED-bound series need re-point + prune (WP-38). | `TODO` | WP-05, WP-07 |
-| WP-48 | Blogger feed-path in `guessFeedUrls` — it only guesses WordPress-style `/feed/` (404 on Blogger); add `{origin}/feeds/posts/default` (+`?alt=rss`) for `*.blogspot.com`, so a Blogger series binds to its feed **even when the page fetch fails** (advertised feeds are skipped when `pageOk` is false). Unblocks a Blogger source that's 200 + valid-feed + 357 chapters residentially yet throws from Vercel. Complements WP-46 (feed path is cheaper + 304-able for Blogger). | `TODO` | WP-05 |
 | WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` + schema + cron wiring **done**; **editor UI + push delivery (WP-09) remain** (picking up later) | `TODO` | WP-07, WP-10 |
 | WP-28 | Frontend styling & theming — ordering, feed-page vs library split, theme system (night default + cultivation ancient-scroll, sci-fi holographic-panel), long-title readability (wrap/clamp vs ellipsis) | `TODO` | WP-10 |
 | WP-18 | Completed shelf + backfill + "Move to Completed?" | `TODO` | WP-10 |
@@ -124,7 +124,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 ### ✅ Completed
 
 WP-00, WP-GH, WP-CI, WP-12 (bootstrap / CI / docs) · WP-01, WP-03 (pure diff / health) · WP-04, WP-05, WP-FE (schema, feed parse/discover, fetcher) · WP-06, WP-07, WP-08 (Next shell, services, API) · WP-09, WP-10, WP-AUTH, WP-11 (Web Push, library/detail UI, auth gate, deploy) · WP-17, WP-17b (page-watch + headless renderer) · WP-20 (paid→free "now free") · WP-33 (full-TOC backfill + `accessReconciled`) · WP-35 (TOC-order chapters + display toggle) · WP-36 (`parseToc` content scoping) · WP-38 (contaminated-series recovery script) · WP-42 (poll-once-per-feed + politeness) · WP-41 (poll time-budget guard + rotation) · WP-43 (frequent PLAIN-tier polling) · WP-27a (status-gated + cadence polling) · WP-39 (add-time dedup) · WP-37 (per-series chapter-TOC URL) ·
-WP-39b (deeper add-dedup, re-scoped: tocUrl page-watch keying + create-then-annotate).
+WP-39b (deeper add-dedup, re-scoped: tocUrl page-watch keying + create-then-annotate) · WP-48 (Blogger feed-path in `guessFeedUrls`).
 
 ### ⏭ Later tiers (M2–M4)
 
@@ -829,6 +829,15 @@ never Blogger's real `/feeds/posts/default`. So a perfectly good feed is unreach
 blocked** — no render needed, and the feed is 304-able. Pure change, test-first. (WP-46's render fallback would also
 rescue it by fetching the page, but the feed path is cheaper for Blogger.)
 
+**DONE (2026-08-10).** `guessFeedUrls` now offers Blogger's `/feeds/posts/default` (Atom) + `?alt=rss` (RSS) —
+**first** for a `*.blogspot.com` host (skips the two WordPress 404s), **last** for every other host as a **universal
+fallback**. That universal tail (owner decision) also rescues **custom-domain / ccTLD Blogger** blogs that hostname
+detection can't catch, making the blogspot check a pure speed optimization. No `addSeries` change (it already falls back
+to `guessFeedUrls` when `pageOk` is false) and no schema. Accepted low risk: a non-Blogger host that serves valid feed
+XML at exactly `/feeds/posts/default` could silently wrong-bind — mitigated by **strict-last** ordering + `looksLikeFeed`
+(rejects 404 HTML), rare for translator sites, and recoverable. Pure, unit-tested (blogspot-first + universal-last order,
+unparseable → `[]`).
+
 ### WP-47 — Client resubscribe on VAPID key mismatch (low priority)
 
 **Priority: low.** Only bites on an intentional VAPID key rotation, or a live device holding a subscription created
@@ -903,6 +912,13 @@ cross-novel chapters (WP-38 `db:cleanup`).
 
 ## Changelog
 
+- **2026-08-10** — **WP-48 done: Blogger feed-path in `guessFeedUrls`.** The function now offers Blogger's
+  `/feeds/posts/default` (Atom) + `?alt=rss` (RSS) — **first** for `*.blogspot.com` (skips the WordPress `/feed/` 404s),
+  **last** for every other host as a **universal fallback** that also rescues custom-domain / ccTLD Blogger (owner chose
+  universal-last over blogspot-only). So a Blogger series binds via its feed even when the page fetch is blocked from
+  Vercel — no render, 304-able. Pure change, no `addSeries`/schema change; the rare non-Blogger wrong-bind is held off by
+  strict-last ordering + `looksLikeFeed`. `NEXT` → WP-34 (dormant/CF-gated) or the freshly-filed WP-46/WP-49 add-path
+  fixes — owner's call.
 - **2026-08-10** — **Added WP-49 (WHOLE_FEED contamination on multi-novel advertised feeds).** Owner added a multi-novel
   WordPress series via its TOC post and got ~150 real chapters **plus** cross-novel chapters (another novel's "Ch. 57.1").
   Diagnosed + **confirmed in prod (Neon)**: a **`WHOLE_FEED`** binding to the site-wide `/feed/`. The post advertises the
