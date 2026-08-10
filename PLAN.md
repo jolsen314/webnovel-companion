@@ -101,6 +101,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 | WP-30 | Series title backfill from TOC — **backend core done (2026-07-31)**; **manual title-edit UI remains** (own follow-up; `titleIsManual` flag shipped and ready) | `TODO` | WP-17, WP-10 |
 | WP-34 | Feed→TOC switch to lock-monitoring — add-time lock detect (prefer PAGE_WATCH) + per-series "Track unlocks" + transition reconcile — **end-to-end "now free" CF-gated** | `NEXT` | WP-33, WP-19 |
 | WP-46 | Add-time under-fetch **and hard-fail** escalation — when `addSeries` seeds **≤5 chapters** (dense-feed window miss, or a TOC needing render/pagination) **or the plain page fetch fails outright** (CF-blocked from Vercel's IP → today it just throws "couldn't reach…"), retry via a proper fetch (RENDER / page-watch / follow-next-page) before seeding-or-throwing. Our **own render clears CF's JS managed challenge** (per the WP-40 spike — a real browser passes where a code-only GET can't) → **no third party**. Hard-fail drivers: a no-feed CF host + a JS-rendered CF host, both unaddable today. *(Re-scoped from dense-feed-reconcile; ongoing miss = WP-43.)* | `TODO` | WP-07, WP-17b |
+| WP-49 | Don't bind `WHOLE_FEED` to a **multi-novel advertised feed** — a WordPress post advertises the *site-wide* `/feed/` (multi-novel, `Uncategorized`, date-permalinks); when `chooseSeriesMatch` can't isolate the series, `addSeries` defaults to `WHOLE_FEED` and pulls **every** novel's chapters into the series (at add **and every poll**). Prefer **PAGE_WATCH** on the series post (clean, series-scoped) or a scoped fallback when the advertised feed looks multi-novel / can't be isolated. Shares WP-39b's "better multi-novel detection in the matcher" root; **not** covered by WP-36 (parseToc-only). Existing WHOLE_FEED-bound series need re-point + prune (WP-38). | `TODO` | WP-05, WP-07 |
 | WP-48 | Blogger feed-path in `guessFeedUrls` — it only guesses WordPress-style `/feed/` (404 on Blogger); add `{origin}/feeds/posts/default` (+`?alt=rss`) for `*.blogspot.com`, so a Blogger series binds to its feed **even when the page fetch fails** (advertised feeds are skipped when `pageOk` is false). Unblocks a Blogger source that's 200 + valid-feed + 357 chapters residentially yet throws from Vercel. Complements WP-46 (feed path is cheaper + 304-able for Blogger). | `TODO` | WP-05 |
 | WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` + schema + cron wiring **done**; **editor UI + push delivery (WP-09) remain** (picking up later) | `TODO` | WP-07, WP-10 |
 | WP-28 | Frontend styling & theming — ordering, feed-page vs library split, theme system (night default + cultivation ancient-scroll, sci-fi holographic-panel), long-title readability (wrap/clamp vs ellipsis) | `TODO` | WP-10 |
@@ -850,6 +851,29 @@ then re-`subscribe()` under the new key before posting** (recreate, don't re-pos
 genuinely self-healing on the client and ends the churn. Pure-ish client helper; test the key-compare in isolation.
 Depends on WP-09 (and the 403-prune hardening, `dc3cb6e`).
 
+### WP-49 — Don't bind `WHOLE_FEED` to a multi-novel advertised feed (prefer page-watch)
+
+**Motivation (owner testing, 2026-08-10):** a multi-novel WordPress series, added via its TOC **post** URL, came in with
+its ~150 real chapters **plus** a handful from *other* novels on the site (e.g. a different novel's "Ch. 57.1").
+Confirmed in prod (Neon): the source is a **`WHOLE_FEED`** binding to the site-wide `/feed/`.
+
+**Mechanism:** the post advertises the **site-wide** `/feed/` (every WordPress post does), which `addSeries` picks first
+and trusts. That feed is a rolling ~10-item window across **all** novels — items tagged `Uncategorized`, on date-based
+permalinks — so `chooseSeriesMatch` can't isolate the series (no per-novel category, no shared path prefix), and
+`match = positive ?? (usedGuesses ? fallback : WHOLE_FEED)` defaults to **`WHOLE_FEED`**. `filterBySeriesMatch` then
+returns the *entire* window and `mergeFeedAndToc` unions it with the (clean) page TOC → the series absorbs every novel's
+recent chapters. Worse, it's an **ongoing leak**: each poll re-pulls the current window (which may contain *none* of the
+tracked series' own chapters, only others'). The "advertised feed = the series' own feed → trust `WHOLE_FEED`"
+assumption is simply false on a multi-novel WordPress site.
+
+**Fix:** when a page-advertised feed **can't positively isolate** the series (positive `null`) **and looks multi-novel**
+(items span clearly distinct works / don't share the series path), **do not default to `WHOLE_FEED`** — prefer
+**PAGE_WATCH** (the source page is a series TOC post: clean, series-scoped, and its ongoing poll stays scoped) or a
+series-scoped fallback match. Shares WP-39b's root ("better multi-novel detection in the matcher") — coordinate the
+detection heuristic. **Not** covered by WP-36 (parseToc/page scoping) — this is the feed-vs-`WHOLE_FEED` *binding*
+decision. **Cleanup:** existing `WHOLE_FEED`-bound multi-novel series need re-pointing to page-watch + a prune of the
+cross-novel chapters (WP-38 `db:cleanup`).
+
 ## Backlog / open questions
 
 - **Notification privacy** *(implemented 2026-07-26)* — the work's name is kept out of the always-visible notification
@@ -879,6 +903,15 @@ Depends on WP-09 (and the 403-prune hardening, `dc3cb6e`).
 
 ## Changelog
 
+- **2026-08-10** — **Added WP-49 (WHOLE_FEED contamination on multi-novel advertised feeds).** Owner added a multi-novel
+  WordPress series via its TOC post and got ~150 real chapters **plus** cross-novel chapters (another novel's "Ch. 57.1").
+  Diagnosed + **confirmed in prod (Neon)**: a **`WHOLE_FEED`** binding to the site-wide `/feed/`. The post advertises the
+  site-wide feed (multi-novel, `Uncategorized`, date-permalinks); `chooseSeriesMatch` can't isolate the series, so
+  `addSeries` trusts `WHOLE_FEED` and merges the whole rolling window into the series — a one-time add snapshot **and** an
+  ongoing per-poll leak. New **WP-49**: don't default to `WHOLE_FEED` when a page-advertised feed can't isolate the series
+  and looks multi-novel — prefer PAGE_WATCH (the series post is clean) or a scoped fallback. Shares WP-39b's multi-novel-
+  detection root; not covered by WP-36 (parseToc-only). Existing bound series need re-point + prune (WP-38). `TODO`.
+  (Real-site detail in local, uncommitted notes.)
 - **2026-08-10** — **WP-39b done (re-scoped): tocUrl page-watch dedup + create-then-annotate.** (a)
   `canonicalSeriesId` now keys a page-watch series on `canonical(tocUrl ?? sourceUrl)` — going-forward only, no
   migration — so a home-URL add and a later TOC-URL add for the same series collapse into the existing
