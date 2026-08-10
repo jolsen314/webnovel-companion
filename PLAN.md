@@ -46,13 +46,16 @@ uncommitted notes." Real names/URLs live only in those local notes and in scratc
 
 ## Current focus
 
-> **NEXT: WP-30 — series title backfill from TOC + manual title edit.** Fix acronym/URL-derived and
-> site-name-from-feed-channel titles by auto-backfilling from the page-watch TOC (only overwriting an auto-derived
-> title, never a user edit), with a manual title-edit escape hatch. WP-37's reverse-info finding steers this one:
-> prefer the **landing page's** content heading over the standalone TOC page's title (which is a slug-abbreviation with
-> no `og:title`). See the **`### WP-30`** detail section below. Full priority order = the **▶ Active queue** table.
+> **NEXT: WP-39b — deeper add-dedup (residuals from WP-39).** (a) page-watch home-vs-TOC — unify a landing URL vs a
+> chapter-TOC URL for a no-feed series, now leanable on WP-37's TOC-URL identity and/or a WP-30-clean title match;
+> (b) multi-novel re-add type-flip across feed windows (WHOLE_FEED↔CATEGORY↔PATH_PREFIX); (c) two undetectably
+> multi-novel novels on one advertised feed both resolving to `#WHOLE_FEED` (false dedup). See the **`### WP-39b`**
+> row in the Active queue for detail. Full priority order = the **▶ Active queue** table.
 >
-> **Recently landed (newest first):** WP-37 (per-series chapter-TOC URL: auto-resolve at add, self-heal at backfill) ·
+> **Recently landed (newest first):** WP-30 (series title backfill from TOC — **backend core**: `extractSeriesTitle`
+> h1/og/title + host-matched suffix strip, `Series.titleIsManual`, add-time page-title precedence over a
+> site-name channel title, backfill self-heals a non-manual title from the landing page; **manual title-edit UI still
+> deferred** as its own follow-up) · WP-37 (per-series chapter-TOC URL: auto-resolve at add, self-heal at backfill) ·
 > WP-39 (add-time dedup via `canonicalSeriesId`) · WP-27a (reading-status cadence gating) · WP-43 (2h external
 > GitHub-Actions trigger, PLAIN tier) · WP-41 (poll time-budget guard + least-recently-polled rotation) · WP-42
 > (poll-once-per-feed + politeness). Full detail in the ✅ Completed table, each `### WP-NN` section, and the Changelog.
@@ -93,8 +96,8 @@ later-tier tables are reference only. `⭐` = load-bearing.
 
 | ID | Work package | Status | Depends on |
 |----|--------------|--------|------------|
-| WP-30 | Series title backfill from TOC (fix acronym/URL-derived **and site-name-from-feed-channel** titles) + manual title edit | `NEXT` | WP-17, WP-10 |
-| WP-39b | Deeper add-dedup (residuals from WP-39, all matcher/window-quality): (a) page-watch home-vs-TOC — unify a landing URL vs a chapter-TOC URL for a no-feed series (via WP-37's TOC-URL identity and/or a WP-30-clean title match); (b) multi-novel re-add **type-flip** across feed windows (WHOLE_FEED↔CATEGORY↔PATH_PREFIX) → a re-add can miss (false negative; WP-39 slugified the CATEGORY value, closing the name-vs-slug case, but the type-flip remains); (c) two *undetectably* multi-novel novels on one **advertised** feed both resolving to `#WHOLE_FEED` → false dedup (false positive) — real fix is better multi-novel detection in the matcher | `TODO` | WP-37, WP-30 |
+| WP-30 | Series title backfill from TOC — **backend core done (2026-07-31)**; **manual title-edit UI remains** (own follow-up; `titleIsManual` flag shipped and ready) | `TODO` | WP-17, WP-10 |
+| WP-39b | Deeper add-dedup (residuals from WP-39, all matcher/window-quality): (a) page-watch home-vs-TOC — unify a landing URL vs a chapter-TOC URL for a no-feed series (via WP-37's TOC-URL identity and/or a WP-30-clean title match); (b) multi-novel re-add **type-flip** across feed windows (WHOLE_FEED↔CATEGORY↔PATH_PREFIX) → a re-add can miss (false negative; WP-39 slugified the CATEGORY value, closing the name-vs-slug case, but the type-flip remains); (c) two *undetectably* multi-novel novels on one **advertised** feed both resolving to `#WHOLE_FEED` → false dedup (false positive) — real fix is better multi-novel detection in the matcher | `NEXT` | WP-37, WP-30 |
 | WP-34 | Feed→TOC switch to lock-monitoring — add-time lock detect (prefer PAGE_WATCH) + per-series "Track unlocks" + transition reconcile — **end-to-end "now free" CF-gated** | `TODO` | WP-33, WP-19 |
 | WP-46 | Add-time under-fetch escalation — when `addSeries` seeds **≤5 chapters** (dense-feed window miss, or a TOC needing render/pagination), escalate to a proper fetch (RENDER / page-watch / follow-next-page) to seed the full history at add. *(Re-scoped from the old WP-46 dense-feed-reconcile idea — the **ongoing** miss is now covered by WP-43; this is the **add-time** gap.)* | `TODO` | WP-07, WP-17 |
 | WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` + schema + cron wiring **done**; **editor UI + push delivery (WP-09) remain** (picking up later) | `TODO` | WP-07, WP-10 |
@@ -381,6 +384,27 @@ unless the row rhythm suffers. Keep the num + mark-read control aligned to the t
 centered on a tall one.
 
 ### WP-30 — Series title backfill from TOC + manual title edit
+
+**DONE (backend core, 2026-07-31).** Pure `extractSeriesTitle(html, {siteName?})` (`lib/feeds/title.ts`) reads
+`<h1>` → `og:title` → `<title>`, with a conservative **host-matched** suffix strip across pipe and
+hyphen/en-dash/em-dash separators (only strips a trailing `" | <Site>"`/`" – <Site>"` when it matches the source's
+own host) and returns `null` when there's no usable heading; a companion `matchesSiteName` does a loose
+case-insensitive compare (strips `www.`/TLD/non-alphanumerics) so a channel `<title>` that's just the site name is
+recognized as such. `Series.titleIsManual Boolean @default(false)` shipped as an additive migration. **At add-time**,
+stored-title precedence is now `input.title → page <h1>/og/title → per-path fallback`, and the WHOLE_FEED path no
+longer adopts a feed channel `<title>` that equals the site name — it falls back to the URL-slug title instead of
+mislabeling the series with its host's name. **At backfill-time** (`backfillFromToc`), a non-manual title is repaired
+from the **landing page** (landing-primary, per WP-37's reverse-info finding): the self-heal path (no `tocUrl` yet)
+reuses the already-fetched landing body for the title extraction at **zero extra fetch**; a backfill where `tocUrl`
+was already set does one extra `source.url` fetch just for the title. Silent — no push — and returns
+`titleUpdated?` from the backfill result. **Manual title-edit UI is still deferred as its own follow-up
+sub-project** — the detail-UI input + PATCH `/api/series/[id]` (extending `parseSeriesUpdate` to accept `title` and
+set `titleIsManual = true`) haven't been built yet; the `titleIsManual` flag shipped specifically so that follow-up
+has a clean flag to write to and auto-backfill already respects it (won't clobber a manually-set title once the UI
+exists). Enables a cleaner **WP-39b(a)** (page-watch home-vs-TOC dedup can now lean on a WP-30-clean title match, not
+just canonical URL). Unit tests for `extractSeriesTitle`/`matchesSiteName`; integration tests for the add-time
+preference (incl. the site-name-channel-title guard) and both backfill repair paths (self-heal-free and
+tocUrl-already-set) plus the manual-title-not-clobbered case.
 
 **Motivation (owner, 2026-07-26):** a series shows its title as an **acronym** (from the multi-novel add-time
 fallback, which derives the title from the URL slug — see "Add-time isolation fallback"), not the human title.
@@ -775,6 +799,20 @@ Depends on WP-09 (and the 403-prune hardening, `dc3cb6e`).
 
 ## Changelog
 
+- **2026-07-31** — **WP-30 backend core done: series title backfill from TOC.** Pure `extractSeriesTitle(html,
+  {siteName?})` (`lib/feeds/title.ts`) reads `<h1>` → `og:title` → `<title>`, with a conservative host-matched
+  suffix strip across pipe + hyphen/en-dash/em-dash separators (returns `null` on no usable heading), plus a loose
+  `matchesSiteName` (case-insensitive, strips `www.`/TLD/non-alphanumerics). Additive `Series.titleIsManual Boolean
+  @default(false)` migration. **Add-time:** stored-title precedence is `input.title → page <h1>/og/title → per-path
+  fallback`; the WHOLE_FEED path no longer adopts a feed channel `<title>` that equals the site name (falls back to
+  the URL-slug title instead). **Backfill (`backfillFromToc`):** repairs a non-manual title from the **landing
+  page** (landing-primary, per WP-37's reverse-info finding) — the self-heal path reuses the already-fetched landing
+  body at zero extra fetch; a `tocUrl`-already-set backfill does one extra `source.url` fetch for the title; silent
+  (no push); returns `titleUpdated?`. **Manual title-edit UI (detail-UI input + PATCH `/api/series/[id]` setting
+  `titleIsManual = true`) is deferred as its own follow-up sub-project** — the flag shipped so it's ready. Enables a
+  cleaner WP-39b(a) (page-watch home-vs-TOC dedup can lean on a WP-30-clean title match). Unit tests for
+  `extractSeriesTitle`/`matchesSiteName`; integration tests for add-time preference (incl. the site-name guard) and
+  both backfill repair paths + the manual-not-clobbered case. Typecheck clean.
 - **2026-07-31** — **WP-37 post-review hardening.** Dropped the bare `toc`/`index` tokens from `findTocUrl`'s
   anchor-text heuristic (`lib/feeds/discover.ts`) — a footer/nav link literally texted "Index" or "TOC" was
   resolving a spurious TOC URL for feed series; the heuristic set is now `table of contents` / `chapter list` /

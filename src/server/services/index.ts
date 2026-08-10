@@ -7,6 +7,7 @@ import type { FailureType } from '../../lib/health';
 import { diffChapters, canonicalUrl } from '../../lib/feeds/diff';
 import { parseToc, tocReadingOrder } from '../../lib/feeds/pageWatch';
 import { findTocUrl } from '../../lib/feeds/discover';
+import { extractSeriesTitle } from '../../lib/feeds/title';
 import {
   pollAllSources as pollAllCore,
   sourceTierWhere,
@@ -414,8 +415,11 @@ export function addSeries(input: AddSeriesInput, fetchImpl: FetchImpl = fetchPor
 export async function backfillFromToc(
   seriesId: string,
   fetchImpl: FetchImpl = fetchPort,
-): Promise<{ added: number; reconciled: number }> {
-  const owned = await db.series.findFirst({ where: { id: seriesId, userId: getCurrentUserId() }, select: { id: true } });
+): Promise<{ added: number; reconciled: number; titleUpdated?: string }> {
+  const owned = await db.series.findFirst({
+    where: { id: seriesId, userId: getCurrentUserId() },
+    select: { id: true, title: true, titleIsManual: true },
+  });
   if (!owned) return { added: 0, reconciled: 0 };
   const source = await db.source.findFirst({ where: { seriesId, isActive: true } });
   if (!source) return { added: 0, reconciled: 0 };
@@ -425,6 +429,10 @@ export async function backfillFromToc(
   let tocUrl = source.tocUrl ?? source.url;
   let res = await fetchImpl(tocUrl, {});
   if (res.outcome !== 'SUCCESS' || res.notModified) return { added: 0, reconciled: 0 };
+
+  // WP-30: the landing page (source.url) is the title source. On the self-heal path this first
+  // `res` IS the landing page — capture it before findTocUrl/follow reassigns `res` to the TOC body.
+  const landingBody: string | null = source.tocUrl == null ? res.body : null;
 
   let discoveredTocUrl: string | null = null;
   if (source.tocUrl == null) {
@@ -440,6 +448,18 @@ export async function backfillFromToc(
   }
 
   const toc = parseToc(res.body, tocUrl);
+
+  // Title source: the captured landing body (self-heal, free) → else one extra source.url fetch
+  // (tocUrl-set path) → else the TOC body we already have.
+  let titleBody = landingBody;
+  if (titleBody == null && !owned.titleIsManual) {
+    const landing = await fetchImpl(source.url, {});
+    titleBody = landing.outcome === 'SUCCESS' && !landing.notModified ? landing.body : res.body;
+  }
+  const extractedTitle = owned.titleIsManual ? null : extractSeriesTitle(titleBody ?? res.body, { siteName: source.host });
+  const titleUpdated =
+    !owned.titleIsManual && extractedTitle != null && extractedTitle !== owned.title ? extractedTitle : undefined;
+
   const order = tocReadingOrder(toc);
   const storedRows = await db.chapter.findMany({
     where: { seriesId },
@@ -497,6 +517,9 @@ export async function backfillFromToc(
     ...(discoveredTocUrl != null
       ? [db.source.update({ where: { id: source.id }, data: { tocUrl: discoveredTocUrl } })]
       : []),
+    ...(titleUpdated != null
+      ? [db.series.update({ where: { id: seriesId }, data: { title: titleUpdated } })]
+      : []),
   ]);
-  return { added: diff.new.length, reconciled: diff.accessReconciled.length };
+  return { added: diff.new.length, reconciled: diff.accessReconciled.length, titleUpdated };
 }

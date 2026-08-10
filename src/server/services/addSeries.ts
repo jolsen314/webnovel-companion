@@ -8,6 +8,7 @@ import {
   findTocUrl,
   type SeriesMatch,
 } from '../../lib/feeds/discover';
+import { extractSeriesTitle, matchesSiteName } from '../../lib/feeds/title';
 import { parseToc, mergeFeedAndToc, withReadingPositions } from '../../lib/feeds/pageWatch';
 import type { FeedItem } from '../../lib/feeds/diff';
 import type { PoliteResult } from '../../lib/feeds/fetch';
@@ -82,6 +83,7 @@ export async function addSeries(input: AddSeriesInput, ports: AddSeriesPorts): P
 
   const page = await ports.fetch(url);
   const pageOk = page.outcome === 'SUCCESS' && !page.notModified;
+  const pageTitle = pageOk ? extractSeriesTitle(page.body, { siteName: host }) : null;
 
   // Candidate feeds: advertised <link alternate> if we could read the page, else
   // common WordPress guesses. We try guesses even when the page fetch FAILED —
@@ -114,10 +116,12 @@ export async function addSeries(input: AddSeriesInput, ports: AddSeriesPorts): P
     const chapters = pageOk ? withReadingPositions(mergeFeedAndToc(feedChapters, toc), toc) : feedChapters;
     const seriesTitle =
       input.title ??
+      pageTitle ??
       (positive?.type === 'CATEGORY'
         ? positive.value // exact per-novel category = the novel's name
         : match.type === 'WHOLE_FEED'
-          ? (parsed.title ?? titleFromUrl(url)) // series' own feed → channel title is the novel
+          ? // channel title, unless it's just the site name → humanize the URL instead
+            (parsed.title != null && !matchesSiteName(parsed.title, host) ? parsed.title : titleFromUrl(url))
           : titleFromUrl(url)); // slug/path fallback → humanize the URL, not the site name
     const tocUrl = pageOk ? findTocUrl(page.body, url) : null;
     const core: ResolvedCore = { seriesTitle, sourceUrl: url, host, feedUrl, tocUrl, type: 'FEED', match, chapters };
@@ -130,7 +134,7 @@ export async function addSeries(input: AddSeriesInput, ports: AddSeriesPorts): P
     const toc = parseToc(page.body, url);
     const tocUrl = findTocUrl(page.body, url);
     const core: ResolvedCore = {
-      seriesTitle: input.title ?? titleFromUrl(url),
+      seriesTitle: input.title ?? pageTitle ?? titleFromUrl(url),
       sourceUrl: url,
       host,
       feedUrl: null,

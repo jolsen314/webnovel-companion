@@ -100,6 +100,9 @@ model Series {
   id                 String            @id @default(cuid())
   userId             String // bare owner scoping (no User table in MVP; see CONTEXT.md)
   title              String
+  // WP-30: true once the title was set by a manual user edit (deferred UI) — auto title-backfill
+  // never overwrites a manual title. Default false = auto-derived, safe to backfill.
+  titleIsManual      Boolean           @default(false)
   canonicalId        String? // NovelUpdates id / normalized URL — de-dup key
   language           Language          @default(OTHER)
   status             SeriesStatus      @default(READING) // shelf status

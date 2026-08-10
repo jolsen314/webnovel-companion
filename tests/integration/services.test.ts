@@ -116,6 +116,44 @@ describe('addSeries (real DB)', () => {
     expect(await db.series.count()).toBe(1);
     expect((await db.series.findFirstOrThrow()).canonicalId).toBe('translator.example/feed#WHOLE_FEED');
   });
+
+  test('WP-30: add adopts the page <h1> over a feed channel title that is the site name', async () => {
+    const URL = 'https://titlesite.example/series/omega/';
+    const FEED = 'https://titlesite.example/series/omega/feed';
+    // Page advertises a per-series feed; the feed channel <title> is the SITE name, but the page <h1> is the real series.
+    const page = `<html><head><link rel="alternate" type="application/rss+xml" href="${FEED}"></head>`
+      + `<body><h1>The Omega Chronicle</h1></body></html>`;
+    const feed = `<?xml version="1.0"?><rss version="2.0"><channel><title>TitleSite</title>`
+      + `<item><title>The Omega Chronicle Chapter 1</title><link>https://titlesite.example/omega-1/</link><guid>o1</guid></item>`
+      + `</channel></rss>`;
+    const { seriesId } = await addSeries({ url: URL }, fetchFrom({ [URL]: okRes(page), [FEED]: okRes(feed) }));
+    const series = await db.series.findFirstOrThrow({ where: { id: seriesId } });
+    expect(series.title).toBe('The Omega Chronicle'); // not "TitleSite"
+    expect(series.titleIsManual).toBe(false);
+  });
+
+  test('WP-30: page-watch add uses the page <h1> over the URL slug', async () => {
+    const URL = 'https://pw2.example/novels/xyz-acronym/';
+    const page = `<html><body><h1>Extremely Yielding Zenith</h1>`
+      + `<a href="/novels/xyz-acronym/chapter-1">Chapter 1</a></body></html>`;
+    const { seriesId } = await addSeries({ url: URL }, fetchFrom({ [URL]: okRes(page) }));
+    const series = await db.series.findFirstOrThrow({ where: { id: seriesId } });
+    expect(series.title).toBe('Extremely Yielding Zenith'); // not "Xyz Acronym"
+  });
+
+  test('WP-30: a WHOLE_FEED channel title that IS the site name falls back to the URL slug (guard)', async () => {
+    const URL = 'https://sitename.example/series/the-real-novel/';
+    const FEED = 'https://sitename.example/series/the-real-novel/feed';
+    // Landing page advertises the per-series feed but has NO heading → pageTitle is null.
+    const page = `<html><head><link rel="alternate" type="application/rss+xml" href="${FEED}"></head><body></body></html>`;
+    // The feed's channel <title> is the SITE name (matches the host via matchesSiteName).
+    const feed = `<?xml version="1.0"?><rss version="2.0"><channel><title>Sitename</title>`
+      + `<item><title>Chapter 1</title><link>https://sitename.example/the-real-novel/c1/</link><guid>g1</guid></item>`
+      + `</channel></rss>`;
+    const { seriesId } = await addSeries({ url: URL }, fetchFrom({ [URL]: okRes(page), [FEED]: okRes(feed) }));
+    const series = await db.series.findFirstOrThrow({ where: { id: seriesId } });
+    expect(series.title).toBe('The Real Novel'); // titleFromUrl slug, NOT "Sitename"
+  });
 });
 
 describe('listSeries (real DB)', () => {
@@ -714,6 +752,92 @@ describe('backfillFromToc (real DB)', () => {
     expect(added.added).toBe(1); // chapter-1 already stored → only chapter-2 is new
     const chapters = await db.chapter.findMany({ where: { seriesId } });
     expect(chapters).toHaveLength(2); // no duplicate chapter-1
+  });
+
+  test('WP-30: backfill repairs a non-manual title from the landing body (self-heal path, no extra fetch)', async () => {
+    const LANDING = 'https://bft.example/series/rho/';
+    const TOC = 'https://bft.example/series/rho/contents/';
+    // Add page-watch with a bad slug title (no <h1> at add) so the stored title is the slug.
+    const { seriesId } = await addSeries(
+      { url: LANDING },
+      fetchFrom({ [LANDING]: okRes(`<a href="/series/rho/contents/">Table of Contents</a>`) }),
+    );
+    await db.source.updateMany({ where: { seriesId }, data: { tocUrl: null } }); // force self-heal
+    // Count fetches; landing now HAS an <h1>; self-heal fetches landing (for the TOC link) → title is free.
+    const seen: string[] = [];
+    const fetch = ((u: string) => {
+      seen.push(u);
+      if (u === LANDING) return Promise.resolve(okRes(`<h1>The Rho Saga</h1><a href="/series/rho/contents/">Table of Contents</a>`));
+      if (u === TOC) return Promise.resolve(okRes(`<a href="/series/rho/chapter-1">Chapter 1</a>`));
+      return Promise.resolve({ outcome: 'HTTP_4XX', status: 404 } as PoliteResult);
+    }) as FetchImpl;
+    const result = await backfillFromToc(seriesId, fetch);
+    const series = await db.series.findFirstOrThrow({ where: { id: seriesId } });
+    expect(series.title).toBe('The Rho Saga');
+    expect(result.titleUpdated).toBe('The Rho Saga');
+    expect(seen.filter((u) => u === LANDING)).toHaveLength(1); // landing fetched once (for the TOC link) — no extra title fetch
+  });
+
+  test('WP-30: backfill does NOT overwrite a manual title', async () => {
+    const LANDING = 'https://bft2.example/series/sigma/';
+    const { seriesId } = await addSeries(
+      { url: LANDING },
+      fetchFrom({ [LANDING]: okRes(`<h1>Auto Name</h1><a href="/series/sigma/chapter-1">Chapter 1</a>`) }),
+    );
+    await db.series.updateMany({ where: { id: seriesId }, data: { title: 'My Hand-Fixed Name', titleIsManual: true } });
+    const result = await backfillFromToc(
+      seriesId,
+      fetchFrom({ [LANDING]: okRes(`<h1>Auto Name</h1><a href="/series/sigma/chapter-1">Chapter 1</a><a href="/series/sigma/chapter-2">Chapter 2</a>`) }),
+    );
+    const series = await db.series.findFirstOrThrow({ where: { id: seriesId } });
+    expect(series.title).toBe('My Hand-Fixed Name'); // untouched
+    expect(result.titleUpdated).toBeUndefined();
+  });
+
+  test('WP-30: backfill on a tocUrl-set series does the extra landing fetch to repair the title', async () => {
+    const LANDING = 'https://xf.example/series/tau/';
+    const TOC = 'https://xf.example/series/tau/contents/';
+    // Page-watch add with NO <h1> → stored title is the slug ("Tau").
+    const { seriesId } = await addSeries(
+      { url: LANDING },
+      fetchFrom({ [LANDING]: okRes(`<a href="/series/tau/chapter-1">Chapter 1</a>`) }),
+    );
+    const seeded = await db.series.findFirstOrThrow({ where: { id: seriesId } });
+    expect(seeded.title).toBe('Tau'); // confirm the slug fallback landed at add-time
+    await db.source.updateMany({ where: { seriesId }, data: { tocUrl: TOC } }); // force tocUrl-set path
+    const seen: string[] = [];
+    const fetch = ((u: string) => {
+      seen.push(u);
+      if (u === TOC) return Promise.resolve(okRes(`<a href="/series/tau/chapter-1">Chapter 1</a><a href="/series/tau/chapter-2">Chapter 2</a>`));
+      if (u === LANDING) return Promise.resolve(okRes(`<h1>The Tau Cycle</h1><a href="/series/tau/chapter-1">Chapter 1</a>`));
+      return Promise.resolve({ outcome: 'HTTP_4XX', status: 404 } as PoliteResult);
+    }) as FetchImpl;
+    const result = await backfillFromToc(seriesId, fetch);
+    const series = await db.series.findFirstOrThrow({ where: { id: seriesId } });
+    expect(series.title).toBe('The Tau Cycle'); // repaired from the extra landing fetch
+    expect(result.titleUpdated).toBe('The Tau Cycle');
+    expect(seen).toContain(TOC); // chapters fetched from the TOC url
+    expect(seen.filter((u) => u === LANDING)).toHaveLength(1); // exactly one extra title fetch
+  });
+
+  test('WP-30: backfill leaves the title unchanged when the extra landing fetch fails', async () => {
+    const LANDING = 'https://xf2.example/series/upsilon/';
+    const TOC = 'https://xf2.example/series/upsilon/contents/';
+    const { seriesId } = await addSeries(
+      { url: LANDING },
+      fetchFrom({ [LANDING]: okRes(`<a href="/series/upsilon/chapter-1">Chapter 1</a>`) }),
+    );
+    await db.source.updateMany({ where: { seriesId }, data: { tocUrl: TOC } });
+    const before = (await db.series.findFirstOrThrow({ where: { id: seriesId } })).title;
+    const fetch = ((u: string) => {
+      if (u === TOC) return Promise.resolve(okRes(`<a href="/series/upsilon/chapter-1">Chapter 1</a>`)); // TOC has NO heading
+      // LANDING (and anything else) fails → title falls back to the TOC body → extractSeriesTitle null → no update
+      return Promise.resolve({ outcome: 'HTTP_4XX', status: 404 } as PoliteResult);
+    }) as FetchImpl;
+    const result = await backfillFromToc(seriesId, fetch);
+    const series = await db.series.findFirstOrThrow({ where: { id: seriesId } });
+    expect(result.titleUpdated).toBeUndefined();
+    expect(series.title).toBe(before); // unchanged
   });
 });
 
