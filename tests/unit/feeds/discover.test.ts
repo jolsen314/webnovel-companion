@@ -48,6 +48,30 @@ describe('guessFeedUrls', () => {
     expect(guesses).toContain('https://site.example/novel/example-novel/feed/');
     expect(guesses).toContain('https://site.example/feed/');
   });
+
+  test('WP-48: a *.blogspot.com host offers Blogger feed paths FIRST', () => {
+    const guesses = guessFeedUrls('https://example-blog.blogspot.com/');
+    expect(guesses).toEqual([
+      'https://example-blog.blogspot.com/feeds/posts/default',
+      'https://example-blog.blogspot.com/feeds/posts/default?alt=rss',
+      'https://example-blog.blogspot.com/feed/',
+      'https://example-blog.blogspot.com/feed/',
+    ]);
+  });
+
+  test('WP-48: a non-blogspot host appends Blogger feed paths LAST (universal fallback)', () => {
+    const guesses = guessFeedUrls('https://site.example/novel/example-novel/');
+    expect(guesses).toEqual([
+      'https://site.example/novel/example-novel/feed/',
+      'https://site.example/feed/',
+      'https://site.example/feeds/posts/default',
+      'https://site.example/feeds/posts/default?alt=rss',
+    ]);
+  });
+
+  test('WP-48: an unparseable URL still returns an empty list', () => {
+    expect(guessFeedUrls('not a url')).toEqual([]);
+  });
 });
 
 describe('chooseSeriesMatch', () => {

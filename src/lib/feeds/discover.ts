@@ -224,7 +224,14 @@ export function guessFeedUrls(pageUrl: string): string[] {
   try {
     const u = new URL(pageUrl);
     const page = `${u.origin}${u.pathname.replace(/\/?$/, '/')}`; // ensure trailing slash
-    return [`${page}feed/`, `${u.origin}/feed/`];
+    const wp = [`${page}feed/`, `${u.origin}/feed/`]; // WordPress-style
+    // Blogger's blog-level feed (Atom + the RSS variant; rss-parser reads both).
+    const blogger = [`${u.origin}/feeds/posts/default`, `${u.origin}/feeds/posts/default?alt=rss`];
+    // *.blogspot.com → Blogger first (skip the WP 404s). Any other host → Blogger LAST, a universal
+    // last-resort that also rescues custom-domain / ccTLD Blogger. `looksLikeFeed` (in addSeries) plus
+    // strict-last ordering keep the rare non-Blogger wrong-bind risk small.
+    const isBlogspot = u.hostname === 'blogspot.com' || u.hostname.endsWith('.blogspot.com');
+    return isBlogspot ? [...blogger, ...wp] : [...wp, ...blogger];
   } catch {
     return [];
   }
