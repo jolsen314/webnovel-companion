@@ -154,6 +154,27 @@ describe('addSeries (real DB)', () => {
     const series = await db.series.findFirstOrThrow({ where: { id: seriesId } });
     expect(series.title).toBe('The Real Novel'); // titleFromUrl slug, NOT "Sitename"
   });
+
+  test('WP-39b: adding a title similar to an existing series returns a similarTo hint (still creates)', async () => {
+    // Series 1 — page-watch, title from the <h1>.
+    await addSeries(
+      { url: 'https://one.example/series/alpha/' },
+      fetchFrom({ 'https://one.example/series/alpha/': okRes(`<h1>Alpha Saga</h1><a href="/series/alpha/chapter-1">Chapter 1</a>`) }),
+    );
+    // Series 2 — DIFFERENT host (different canonicalId → creates), similar title ("The Alpha Saga").
+    const r2 = await addSeries(
+      { url: 'https://two.example/series/alpha/' },
+      fetchFrom({ 'https://two.example/series/alpha/': okRes(`<h1>The Alpha Saga</h1><a href="/series/alpha/chapter-1">Chapter 1</a>`) }),
+    );
+    expect(r2.alreadyExisting).toBe(false); // it WAS created, not blocked
+    expect(r2.similarTo?.title).toBe('Alpha Saga');
+    // A genuinely different title gets no hint.
+    const r3 = await addSeries(
+      { url: 'https://three.example/series/beta/' },
+      fetchFrom({ 'https://three.example/series/beta/': okRes(`<h1>Golden Sun</h1><a href="/series/beta/chapter-1">Chapter 1</a>`) }),
+    );
+    expect(r3.similarTo == null).toBe(true);
+  });
 });
 
 describe('listSeries (real DB)', () => {

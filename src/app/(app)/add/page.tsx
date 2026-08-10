@@ -9,11 +9,15 @@ export default function AddSeriesPage() {
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [similar, setSimilar] = useState<{ addedTitle: string; existing: { id: string; title: string } } | null>(
+    null,
+  );
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
     setError(null);
+    setSimilar(null);
     try {
       const res = await fetch('/api/series', {
         method: 'POST',
@@ -21,6 +25,16 @@ export default function AddSeriesPage() {
         body: JSON.stringify({ url: url.trim() }),
       });
       if (res.ok) {
+        const data = (await res.json().catch(() => ({}))) as {
+          title?: string;
+          similarTo?: { id: string; title: string };
+        };
+        if (data.similarTo) {
+          // Non-blocking: the series WAS added; just flag a possible duplicate.
+          setSimilar({ addedTitle: data.title ?? 'the series', existing: data.similarTo });
+          setBusy(false);
+          return;
+        }
         router.push('/');
         router.refresh();
         return;
@@ -37,6 +51,23 @@ export default function AddSeriesPage() {
     <section className="login">
       <p className="login__eyebrow">Add a series</p>
       <h1 className="login__title">Paste a series URL</h1>
+      {similar && (
+        <div className="notice" role="status">
+          <p>
+            Added <strong>{similar.addedTitle}</strong>. This looks similar to{' '}
+            <strong>{similar.existing.title}</strong>, which you already track — it may be the same work.
+          </p>
+          <div className="notice__actions">
+            <Link href={`/series/${similar.existing.id}`} className="btn">
+              Open “{similar.existing.title}”
+            </Link>
+            <Link href="/" className="btn btn--primary" onClick={() => router.refresh()}>
+              Keep both, go to library
+            </Link>
+          </div>
+          <p className="hero__note">Merging duplicates from the app is coming soon; for now the two are kept separate.</p>
+        </div>
+      )}
       <form className="login__form" onSubmit={onSubmit}>
         <input
           className="login__input"

@@ -46,13 +46,15 @@ uncommitted notes." Real names/URLs live only in those local notes and in scratc
 
 ## Current focus
 
-> **NEXT: WP-39b — deeper add-dedup (residuals from WP-39).** (a) page-watch home-vs-TOC — unify a landing URL vs a
-> chapter-TOC URL for a no-feed series, now leanable on WP-37's TOC-URL identity and/or a WP-30-clean title match;
-> (b) multi-novel re-add type-flip across feed windows (WHOLE_FEED↔CATEGORY↔PATH_PREFIX); (c) two undetectably
-> multi-novel novels on one advertised feed both resolving to `#WHOLE_FEED` (false dedup). See the **`### WP-39b`**
-> row in the Active queue for detail. Full priority order = the **▶ Active queue** table.
+> **NEXT: WP-34 — Feed→TOC switch to lock-monitoring.** Add-time lock detect (prefer PAGE_WATCH) + per-series "Track
+> unlocks" override + transition reconcile — the end-to-end "now free" path for a CF-gated, feed-with-locked series.
+> Full priority order = the **▶ Active queue** table.
 >
-> **Recently landed (newest first):** WP-30 (series title backfill from TOC — **backend core**: `extractSeriesTitle`
+> **Recently landed (newest first):** WP-39b (deeper add-dedup, **re-scoped**: going-forward `tocUrl` page-watch
+> keying in `canonicalSeriesId`, pure `findSimilarTitle` + a **create-then-annotate** `similarTo` hint surfaced as a
+> non-blocking notice on the add page; the multi-novel matcher-type-flip is covered in spirit by the annotate net,
+> true multi-novel matcher intelligence is deferred; filed **WP-CLEANUP-UI** + **WP-WORKID** as follow-ups) ·
+> WP-30 (series title backfill from TOC — **backend core**: `extractSeriesTitle`
 > h1/og/title + host-matched suffix strip, `Series.titleIsManual`, add-time page-title precedence over a
 > site-name channel title, backfill self-heals a non-manual title from the landing page; **manual title-edit UI still
 > deferred** as its own follow-up) · WP-37 (per-series chapter-TOC URL: auto-resolve at add, self-heal at backfill) ·
@@ -97,13 +99,13 @@ later-tier tables are reference only. `⭐` = load-bearing.
 | ID | Work package | Status | Depends on |
 |----|--------------|--------|------------|
 | WP-30 | Series title backfill from TOC — **backend core done (2026-07-31)**; **manual title-edit UI remains** (own follow-up; `titleIsManual` flag shipped and ready) | `TODO` | WP-17, WP-10 |
-| WP-39b | Deeper add-dedup (residuals from WP-39, all matcher/window-quality): (a) page-watch home-vs-TOC — unify a landing URL vs a chapter-TOC URL for a no-feed series (via WP-37's TOC-URL identity and/or a WP-30-clean title match); (b) multi-novel re-add **type-flip** across feed windows (WHOLE_FEED↔CATEGORY↔PATH_PREFIX) → a re-add can miss (false negative; WP-39 slugified the CATEGORY value, closing the name-vs-slug case, but the type-flip remains); (c) two *undetectably* multi-novel novels on one **advertised** feed both resolving to `#WHOLE_FEED` → false dedup (false positive) — real fix is better multi-novel detection in the matcher | `NEXT` | WP-37, WP-30 |
-| WP-34 | Feed→TOC switch to lock-monitoring — add-time lock detect (prefer PAGE_WATCH) + per-series "Track unlocks" + transition reconcile — **end-to-end "now free" CF-gated** | `TODO` | WP-33, WP-19 |
+| WP-34 | Feed→TOC switch to lock-monitoring — add-time lock detect (prefer PAGE_WATCH) + per-series "Track unlocks" + transition reconcile — **end-to-end "now free" CF-gated** | `NEXT` | WP-33, WP-19 |
 | WP-46 | Add-time under-fetch escalation — when `addSeries` seeds **≤5 chapters** (dense-feed window miss, or a TOC needing render/pagination), escalate to a proper fetch (RENDER / page-watch / follow-next-page) to seed the full history at add. *(Re-scoped from the old WP-46 dense-feed-reconcile idea — the **ongoing** miss is now covered by WP-43; this is the **add-time** gap.)* | `TODO` | WP-07, WP-17 |
 | WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` + schema + cron wiring **done**; **editor UI + push delivery (WP-09) remain** (picking up later) | `TODO` | WP-07, WP-10 |
 | WP-28 | Frontend styling & theming — ordering, feed-page vs library split, theme system (night default + cultivation ancient-scroll, sci-fi holographic-panel), long-title readability (wrap/clamp vs ellipsis) | `TODO` | WP-10 |
 | WP-18 | Completed shelf + backfill + "Move to Completed?" | `TODO` | WP-10 |
 | WP-19 | Non-destructive re-pointing + "find new source" helper (also: on a duplicate add (WP-39), optionally offer to attach the pasted URL as an **alternate source** on the existing series rather than only rejecting) | `TODO` | WP-16, WP-18 |
+| WP-CLEANUP-UI | In-app cleanup surfacing `db:cleanup` (delete/merge series, delete/reset chapters, edit source/TOC URL) — **merge** doubles as the manual same-work/different-translation resolver, the target of the add-page "Merge" affordance from WP-39b's create-then-annotate flow | `TODO` | WP-10 |
 | WP-16 | Host-level health aggregation (site-down vs novel-moved) | `TODO` | WP-03, WP-07 |
 | WP-13 | `lib/completion.ts` (pure) — plan-to-read heuristic | `TODO` | WP-00 |
 | WP-21 | Plan-to-read completion watch (wire WP-13 + notify) — compare **max chapter number** vs target, not post count | `TODO` | WP-13, WP-07 |
@@ -115,10 +117,12 @@ later-tier tables are reference only. `⭐` = load-bearing.
 | WP-32 | *(low)* `parseToc` robustness — follow split/paginated sibling TOCs (bounded "next chapters" hops) + **all non-chapter anchor filtering** (pagination + shortcut/CTA like "Last chapter"/"Read") + **URL-slug number authority** (trust a delimited `/chapter-<N>-` over a concatenated title number) | `TODO` | WP-17, WP-35 |
 | WP-45 | *(low)* JSON-adapter rung for static-SPA sources — read a site's static, 304-able chapter JSON directly instead of rendering; bespoke per source, only if the pattern recurs (RENDER handles it today) | `TODO` | WP-17b |
 | WP-47 | *(low)* Client resubscribe on VAPID key mismatch — `resyncSubscription` re-posts a stale browser sub whose `applicationServerKey` ≠ current key, so a 403-pruned sub churns (prune→re-add) and the client shows "subscribed" while receiving nothing; detect the key mismatch on load and unsubscribe + re-subscribe under the new key. Makes key rotation self-healing on the client | `TODO` | WP-09 |
+| WP-WORKID | *(low, future)* Map a source to a community novel-aggregator's canonical work ID (lists a work's alternative/translated titles) for automatic cross-translation identity — described generically here (no real aggregator name, anonymity rule) | `TODO` | WP-05, WP-17 |
 
 ### ✅ Completed
 
-WP-00, WP-GH, WP-CI, WP-12 (bootstrap / CI / docs) · WP-01, WP-03 (pure diff / health) · WP-04, WP-05, WP-FE (schema, feed parse/discover, fetcher) · WP-06, WP-07, WP-08 (Next shell, services, API) · WP-09, WP-10, WP-AUTH, WP-11 (Web Push, library/detail UI, auth gate, deploy) · WP-17, WP-17b (page-watch + headless renderer) · WP-20 (paid→free "now free") · WP-33 (full-TOC backfill + `accessReconciled`) · WP-35 (TOC-order chapters + display toggle) · WP-36 (`parseToc` content scoping) · WP-38 (contaminated-series recovery script) · WP-42 (poll-once-per-feed + politeness) · WP-41 (poll time-budget guard + rotation) · WP-43 (frequent PLAIN-tier polling) · WP-27a (status-gated + cadence polling) · WP-39 (add-time dedup) · WP-37 (per-series chapter-TOC URL).
+WP-00, WP-GH, WP-CI, WP-12 (bootstrap / CI / docs) · WP-01, WP-03 (pure diff / health) · WP-04, WP-05, WP-FE (schema, feed parse/discover, fetcher) · WP-06, WP-07, WP-08 (Next shell, services, API) · WP-09, WP-10, WP-AUTH, WP-11 (Web Push, library/detail UI, auth gate, deploy) · WP-17, WP-17b (page-watch + headless renderer) · WP-20 (paid→free "now free") · WP-33 (full-TOC backfill + `accessReconciled`) · WP-35 (TOC-order chapters + display toggle) · WP-36 (`parseToc` content scoping) · WP-38 (contaminated-series recovery script) · WP-42 (poll-once-per-feed + politeness) · WP-41 (poll time-budget guard + rotation) · WP-43 (frequent PLAIN-tier polling) · WP-27a (status-gated + cadence polling) · WP-39 (add-time dedup) · WP-37 (per-series chapter-TOC URL) ·
+WP-39b (deeper add-dedup, re-scoped: tocUrl page-watch keying + create-then-annotate).
 
 ### ⏭ Later tiers (M2–M4)
 
@@ -383,6 +387,13 @@ are the primary content), a **multi-line clamp** (`-webkit-line-clamp: 2` + full
 unless the row rhythm suffers. Keep the num + mark-read control aligned to the top of a wrapped row, not vertically
 centered on a tall one.
 
+**Add-page "similar series" notice polish (WP-39b follow-up, 2026-08-10).** When the add page shows the non-blocking
+"looks similar to X" notice ([`add/page.tsx`](<src/app/(app)/add/page.tsx>)), the URL input + "Add series" form stays
+mounted below it, so a second submit is possible while the notice is up. It's benign (a re-submit of the same URL hits
+hard-dedup → `alreadyExisting` 200 → redirect, so no duplicate), but it reads awkwardly stacked. Polish in the design
+pass: hide/disable the form (or clear the input) while the notice is shown, or fold the notice into a cleaner
+post-add result state.
+
 ### WP-30 — Series title backfill from TOC + manual title edit
 
 **DONE (backend core, 2026-07-31).** Pure `extractSeriesTitle(html, {siteName?})` (`lib/feeds/title.ts`) reads
@@ -640,6 +651,60 @@ applied; TOC-link discovery unit-tested (pure), and backfill-uses-tocUrl covered
 
 **Residual:** page-watch-only series with different landing vs chapter-TOC URLs (no shared feed) are not unified by canonical URL alone — title/url reconciliation is deferred as **WP-39b** (gated on WP-37's TOC-URL resolution and WP-30's title backfill). WP-19 noted for alternate-source-on-dup UX.
 
+### WP-39b — Deeper add-dedup (residuals from WP-39): tocUrl keying + create-then-annotate
+
+**DONE (re-scoped, 2026-08-10).** Shipped:
+- **(a) tocUrl page-watch keying.** `canonicalSeriesId` now keys a page-watch series on `canonical(tocUrl ?? sourceUrl)`
+  — **going-forward only, no migration/backfill** of existing rows. A home-URL add and a later TOC-URL add for the
+  same no-feed series now resolve to the same canonical id and collapse silently through the existing
+  `alreadyExisting` path (WP-39).
+- **Pure `findSimilarTitle`.** Normalized-equality + leading-token-prefix matching (drops a leading article, e.g.
+  "The"); deliberately **no fuzzy matching**. Documented limit: it **cannot** catch two *different translations* of
+  the same work (different title strings entirely) — that's out of scope here, see WP-WORKID below.
+- **Create-then-annotate.** An add whose title is similar to an existing series (per `findSimilarTitle`) still
+  **creates** the new series — it never blocks or auto-dedupes on title alone, too risky a false-positive — but the
+  result carries a `similarTo: {id, title}` hint. The add page renders a non-blocking notice ("Open the existing" /
+  "Keep both") so the possible duplicate is surfaced without gating the add. Merging from the app itself is
+  deferred (see WP-CLEANUP-UI).
+- **No schema change.**
+
+**Explicitly deferred / re-scoped from the original WP-39b scope:**
+- Original **(b)** multi-novel re-add matcher-**type-flip** (WHOLE_FEED↔CATEGORY↔PATH_PREFIX) across feed windows —
+  not separately fixed; covered **in spirit** by the annotate net (a flipped-matcher re-add still creates but gets
+  flagged via title similarity) rather than by a tighter canonical key.
+- Original **(c)** true multi-novel matcher intelligence (two undetectably-distinct novels on one advertised feed
+  both resolving to `#WHOLE_FEED`, i.e. false dedup) — **deferred**; revisit reactively if it actually bites (no
+  known live case yet).
+
+Filed two follow-ups out of this scoping: **WP-CLEANUP-UI** (the in-app merge that resolves a flagged `similarTo`,
+including the genuine same-work/different-translation case) and **WP-WORKID** (future, low — automatic
+cross-translation identity via a community aggregator's canonical work ID).
+
+### WP-CLEANUP-UI — In-app cleanup surface (delete/merge series, delete/reset chapters, edit URLs)
+
+**Motivation.** `db:cleanup` (WP-38) is a local-only CLI script; there's still no in-app way to fix a bad listing.
+WP-39b's create-then-annotate flow (the add page's "Merge" affordance on a `similarTo` hit) needs somewhere to land
+— merging two series (folding chapters/progress/source by canonical-URL union, or picking one to keep) is exactly
+`db:cleanup merge-series`'s logic, just reachable from the UI instead of a terminal.
+
+**Scope.** Surface the `db:cleanup` operations in the detail/library UI: delete series, merge series (doubles as
+the manual **same-work / different-translation resolver** — the case `findSimilarTitle` can't catch automatically),
+delete/reset chapters, edit a source's reading URL / TOC URL. `TODO`, depends on WP-10 (detail UI, done).
+
+### WP-WORKID — Cross-translation identity via a community aggregator's canonical work ID (future, low)
+
+**Motivation.** `findSimilarTitle` (WP-39b) matches on the title *string* and explicitly can't catch two different
+translations of the same work — e.g. two different translation groups' titles for the same source-language novel,
+which share no substring. A community novel-aggregator site indexes works by a canonical work ID and lists each
+work's alternative/translated titles; mapping our sources to that ID would let a second translation of an
+already-tracked work be recognized automatically instead of relying on title similarity or a manual merge.
+
+**Scope.** Add-time (or backfill) lookup: resolve a source to the aggregator's work ID, store it, and use it as an
+additional (stronger) key alongside `canonicalSeriesId`/`findSimilarTitle`. Kept **generic** in this doc — no real
+aggregator name (anonymity rule); real-site specifics belong in the local, uncommitted testing notes if/when this
+is picked up. `TODO`, low priority, future — depends on WP-05 (feed parse) / WP-17 (page-watch) for the fetch/parse
+plumbing to hang the lookup off of.
+
 ### WP-40 — Cheap CF bypass for static CF-blocked hosts (browser-fingerprint GET, not render)
 
 **Motivation (owner testing, 2026-07-27/28):** some hosts (e.g. the dense-feed WordPress translator behind Cloudflare)
@@ -799,6 +864,18 @@ Depends on WP-09 (and the 403-prune hardening, `dc3cb6e`).
 
 ## Changelog
 
+- **2026-08-10** — **WP-39b done (re-scoped): tocUrl page-watch dedup + create-then-annotate.** (a)
+  `canonicalSeriesId` now keys a page-watch series on `canonical(tocUrl ?? sourceUrl)` — going-forward only, no
+  migration — so a home-URL add and a later TOC-URL add for the same series collapse into the existing
+  `alreadyExisting` path. Pure `findSimilarTitle` (normalized-equality + leading-token-prefix, drops a leading
+  article) feeds a **create-then-annotate** flow: a title-similar add still creates the series, but the result
+  carries a `similarTo: {id,title}` hint, surfaced on the add page as a non-blocking "Open the existing / Keep
+  both" notice — merging from the app itself is deferred. Documented limit: `findSimilarTitle` cannot catch a
+  different *translation* of the same work. **No schema change.** Original (b) multi-novel matcher-type-flip is
+  covered in spirit by the annotate net (no tighter canonical key); original (c) true multi-novel matcher
+  intelligence is deferred, revisit reactively. Filed **WP-CLEANUP-UI** (in-app cleanup surfacing `db:cleanup`;
+  its merge doubles as the manual same-work/different-translation resolver) and **WP-WORKID** (future, low —
+  cross-translation identity via a community aggregator's canonical work ID). `NEXT` → WP-34.
 - **2026-07-31** — **WP-30 backend core done: series title backfill from TOC.** Pure `extractSeriesTitle(html,
   {siteName?})` (`lib/feeds/title.ts`) reads `<h1>` → `og:title` → `<title>`, with a conservative host-matched
   suffix strip across pipe + hyphen/en-dash/em-dash separators (returns `null` on no usable heading), plus a loose

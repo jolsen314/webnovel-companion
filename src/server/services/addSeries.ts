@@ -12,7 +12,7 @@ import { extractSeriesTitle, matchesSiteName } from '../../lib/feeds/title';
 import { parseToc, mergeFeedAndToc, withReadingPositions } from '../../lib/feeds/pageWatch';
 import type { FeedItem } from '../../lib/feeds/diff';
 import type { PoliteResult } from '../../lib/feeds/fetch';
-import { canonicalSeriesId } from '../../lib/dedup';
+import { canonicalSeriesId, findSimilarTitle } from '../../lib/dedup';
 
 /**
  * Add-time source resolution: given a URL the user pastes, discover a feed (or fall
@@ -42,12 +42,14 @@ export interface AddSeriesPorts {
   fetch: (url: string, opts?: { etag?: string | null; lastModified?: string | null }) => Promise<PoliteResult>;
   createSeries: (resolved: ResolvedSource) => Promise<{ seriesId: string }>;
   findSeriesByCanonicalId: (canonicalId: string) => Promise<{ seriesId: string } | null>; // WP-39
+  listExistingSeries: () => Promise<{ id: string; title: string }[]>; // WP-39b: for the similar-title annotate
 }
 
 export interface AddSeriesResult {
   seriesId: string;
   resolved: ResolvedSource;
   alreadyExisting: boolean; // WP-39
+  similarTo?: { id: string; title: string } | null; // WP-39b (create branch only)
 }
 
 function looksLikeFeed(body: string): boolean {
@@ -69,12 +71,13 @@ type ResolvedCore = Omit<ResolvedSource, 'canonicalId'>;
 
 /** Compute the dedup id, and create the series only if one with that id doesn't already exist. */
 async function finalize(core: ResolvedCore, ports: AddSeriesPorts): Promise<AddSeriesResult> {
-  const canonicalId = canonicalSeriesId({ feedUrl: core.feedUrl, sourceUrl: core.sourceUrl, match: core.match });
+  const canonicalId = canonicalSeriesId({ feedUrl: core.feedUrl, tocUrl: core.tocUrl, sourceUrl: core.sourceUrl, match: core.match });
   const resolved: ResolvedSource = { ...core, canonicalId };
   const existing = await ports.findSeriesByCanonicalId(canonicalId);
   if (existing) return { seriesId: existing.seriesId, resolved, alreadyExisting: true };
+  const similarTo = findSimilarTitle(resolved.seriesTitle, await ports.listExistingSeries());
   const { seriesId } = await ports.createSeries(resolved);
-  return { seriesId, resolved, alreadyExisting: false };
+  return { seriesId, resolved, alreadyExisting: false, similarTo };
 }
 
 export async function addSeries(input: AddSeriesInput, ports: AddSeriesPorts): Promise<AddSeriesResult> {

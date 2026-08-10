@@ -27,6 +27,7 @@ function ports(
     created,
     fetch: async (url) => map[url] ?? ({ outcome: 'HTTP_4XX', status: 404 } as PoliteResult),
     findSeriesByCanonicalId: async (canonicalId) => existing(canonicalId),
+    listExistingSeries: async () => [],
     createSeries: async (resolved) => {
       created.push(resolved);
       return { seriesId: 'new1' };

@@ -371,6 +371,8 @@ export function addSeries(input: AddSeriesInput, fetchImpl: FetchImpl = fetchPor
       const s = await db.series.findFirst({ where: { userId: getCurrentUserId(), canonicalId }, select: { id: true } });
       return s ? { seriesId: s.id } : null;
     },
+    listExistingSeries: async () =>
+      db.series.findMany({ where: { userId: getCurrentUserId() }, select: { id: true, title: true } }),
     createSeries: async (r) => {
       const series = await db.series.create({
         data: {
