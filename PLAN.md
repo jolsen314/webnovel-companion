@@ -100,7 +100,8 @@ later-tier tables are reference only. `⭐` = load-bearing.
 |----|--------------|--------|------------|
 | WP-30 | Series title backfill from TOC — **backend core done (2026-07-31)**; **manual title-edit UI remains** (own follow-up; `titleIsManual` flag shipped and ready) | `TODO` | WP-17, WP-10 |
 | WP-34 | Feed→TOC switch to lock-monitoring — add-time lock detect (prefer PAGE_WATCH) + per-series "Track unlocks" + transition reconcile — **end-to-end "now free" CF-gated** | `NEXT` | WP-33, WP-19 |
-| WP-46 | Add-time under-fetch escalation — when `addSeries` seeds **≤5 chapters** (dense-feed window miss, or a TOC needing render/pagination), escalate to a proper fetch (RENDER / page-watch / follow-next-page) to seed the full history at add. *(Re-scoped from the old WP-46 dense-feed-reconcile idea — the **ongoing** miss is now covered by WP-43; this is the **add-time** gap.)* | `TODO` | WP-07, WP-17 |
+| WP-46 | Add-time under-fetch **and hard-fail** escalation — when `addSeries` seeds **≤5 chapters** (dense-feed window miss, or a TOC needing render/pagination) **or the plain page fetch fails outright** (CF-blocked from Vercel's IP → today it just throws "couldn't reach…"), retry via a proper fetch (RENDER / page-watch / follow-next-page) before seeding-or-throwing. Our **own render clears CF's JS managed challenge** (per the WP-40 spike — a real browser passes where a code-only GET can't) → **no third party**. Hard-fail drivers: a no-feed CF host + a JS-rendered CF host, both unaddable today. *(Re-scoped from dense-feed-reconcile; ongoing miss = WP-43.)* | `TODO` | WP-07, WP-17b |
+| WP-48 | Blogger feed-path in `guessFeedUrls` — it only guesses WordPress-style `/feed/` (404 on Blogger); add `{origin}/feeds/posts/default` (+`?alt=rss`) for `*.blogspot.com`, so a Blogger series binds to its feed **even when the page fetch fails** (advertised feeds are skipped when `pageOk` is false). Unblocks a Blogger source that's 200 + valid-feed + 357 chapters residentially yet throws from Vercel. Complements WP-46 (feed path is cheaper + 304-able for Blogger). | `TODO` | WP-05 |
 | WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` + schema + cron wiring **done**; **editor UI + push delivery (WP-09) remain** (picking up later) | `TODO` | WP-07, WP-10 |
 | WP-28 | Frontend styling & theming — ordering, feed-page vs library split, theme system (night default + cultivation ancient-scroll, sci-fi holographic-panel), long-title readability (wrap/clamp vs ellipsis) | `TODO` | WP-10 |
 | WP-18 | Completed shelf + backfill + "Move to Completed?" | `TODO` | WP-10 |
@@ -813,6 +814,20 @@ site-specific, so this is a **bespoke adapter per source**, not generic — henc
 exist. Until then, render is the right call. Relates to WP-17b (render) and WP-27 (a *completed* static SPA is also a
 "render-once, then rarely re-poll" case).
 
+### WP-48 — Blogger feed-path in `guessFeedUrls`
+
+**Motivation (owner testing, 2026-08-10):** a Blogger (`*.blogspot.com`) series can't be added — throws "couldn't
+reach … or find a feed" — though residentially it's **200 under any UA, 0 redirects, 357 chapter links, and a valid
+advertised feed** (`/feeds/posts/default?alt=rss`). Two things combine: (1) the **page fetch fails from Vercel** (Google
+serves the datacenter IP a non-200), so `addSeries` never runs `discoverFeeds` — advertised feeds are read only when
+`pageOk`; (2) it falls to `guessFeedUrls`, which yields **WordPress-style `/feed/` (404 on Blogger)** and `${page}feed/`,
+never Blogger's real `/feeds/posts/default`. So a perfectly good feed is unreachable on the failure path → throw.
+
+**Fix:** in `guessFeedUrls` (`lib/feeds/discover.ts`), detect `*.blogspot.com` and add `{origin}/feeds/posts/default`
+(+ the `?alt=rss` variant) to the candidates. A Blogger series then binds via its feed **even when the page fetch is
+blocked** — no render needed, and the feed is 304-able. Pure change, test-first. (WP-46's render fallback would also
+rescue it by fetching the page, but the feed path is cheaper for Blogger.)
+
 ### WP-47 — Client resubscribe on VAPID key mismatch (low priority)
 
 **Priority: low.** Only bites on an intentional VAPID key rotation, or a live device holding a subscription created
@@ -876,6 +891,17 @@ Depends on WP-09 (and the 403-prune hardening, `dc3cb6e`).
   intelligence is deferred, revisit reactively. Filed **WP-CLEANUP-UI** (in-app cleanup surfacing `db:cleanup`;
   its merge doubles as the manual same-work/different-translation resolver) and **WP-WORKID** (future, low —
   cross-translation identity via a community aggregator's canonical work ID). `NEXT` → WP-34.
+- **2026-08-10** — **Three "couldn't reach or find a feed" add failures → extended WP-46 + added WP-48.** Owner
+  couldn't add three sites; all hit the `addSeries` **final throw** (only reached when `pageOk === false` AND no feed).
+  Two (a no-feed CF host + a JS-rendered CF host) are the **CF-on-Vercel add-path gap**: the plain fetch is challenged
+  from Vercel's datacenter IP (both 200 residentially), there's no usable feed, and add-time never escalates to render —
+  so **extended WP-46** to cover the *hard-fail* case (retry via **our own render** before throwing; render clears CF's
+  JS managed challenge, so **no third party** — the WP-40 cheap-bypass was the dead end, not render). The third (a
+  **Blogger** source) was the surprise: **not** Cloudflare, 200 under any UA, 357 chapters + a valid advertised feed —
+  yet it throws because (a) the page fetch fails from Vercel (Google serving the datacenter IP a non-200) and (b)
+  `guessFeedUrls` is **Blogger-blind** (guesses WordPress `/feed/` = 404, never `/feeds/posts/default`), so the
+  advertised feed is skipped on the failure path. → new **WP-48** (add the Blogger feed path to `guessFeedUrls`; cheap,
+  no render, 304-able). Both `TODO`. (Real-site detail in local, uncommitted notes.)
 - **2026-07-31** — **WP-30 backend core done: series title backfill from TOC.** Pure `extractSeriesTitle(html,
   {siteName?})` (`lib/feeds/title.ts`) reads `<h1>` → `og:title` → `<title>`, with a conservative host-matched
   suffix strip across pipe + hyphen/en-dash/em-dash separators (returns `null` on no usable heading), plus a loose
