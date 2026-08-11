@@ -46,9 +46,10 @@ uncommitted notes." Real names/URLs live only in those local notes and in scratc
 
 ## Current focus
 
-> **NEXT: WP-30 — series title backfill from TOC (manual title-edit UI).** Backend core (`extractSeriesTitle`,
-> `Series.titleIsManual`, add-time page-title precedence over a site-name channel title) landed 2026-07-31; the
-> **manual title-edit UI** is the remaining follow-up. Full priority order = the **▶ Active queue** table.
+> **NEXT: WP-34 — feed→TOC switch to lock-monitoring.** Add-time lock detect (prefer PAGE_WATCH) + a per-series
+> "Track unlocks" override + transition reconcile. Its end-to-end "now free" was CF-gated on the CF-unblock story,
+> which **landed with WP-46** (add-time render escalation), so WP-34 is now actionable. Full priority order = the
+> **▶ Active queue** table.
 >
 > **Recently landed (newest first):** WP-49 (page-watch divert for un-isolable multi-novel advertised feeds — when an
 > advertised feed can't be positively isolated and the series page is a real TOC, `addSeries` resolves to a
@@ -104,8 +105,8 @@ later-tier tables are reference only. `⭐` = load-bearing.
 
 | ID | Work package | Status | Depends on |
 |----|--------------|--------|------------|
-| WP-30 | Series title backfill from TOC — **backend core done (2026-07-31)**; **manual title-edit UI remains** (own follow-up; `titleIsManual` flag shipped and ready) | `NEXT` | WP-17, WP-10 |
-| WP-34 | Feed→TOC switch to lock-monitoring — add-time lock detect (prefer PAGE_WATCH) + per-series "Track unlocks" + transition reconcile — **end-to-end "now free" CF-gated** (dormant until the CF-unblock story lands — see WP-46) | `TODO` | WP-33, WP-19, WP-46 |
+| WP-34 | Feed→TOC switch to lock-monitoring — add-time lock detect (prefer PAGE_WATCH) + per-series "Track unlocks" + transition reconcile — **CF-unblock story (WP-46) has landed**, so the end-to-end "now free" is no longer gated | `NEXT` | WP-33, WP-19, WP-46 |
+| WP-30 | Series title backfill from TOC — **backend core done (2026-07-31)**; **manual title-edit UI remains** (own follow-up; `titleIsManual` flag shipped and ready) | `TODO` | WP-17, WP-10 |
 | WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` + schema + cron wiring **done**; **editor UI + push delivery (WP-09) remain** (picking up later) | `TODO` | WP-07, WP-10 |
 | WP-28 | Frontend styling & theming — ordering, feed-page vs library split, theme system (night default + cultivation ancient-scroll, sci-fi holographic-panel), long-title readability (wrap/clamp vs ellipsis) | `TODO` | WP-10 |
 | WP-18 | Completed shelf + backfill + "Move to Completed?" | `TODO` | WP-10 |
