@@ -400,6 +400,18 @@ hard-dedup → `alreadyExisting` 200 → redirect, so no duplicate), but it read
 pass: hide/disable the form (or clear the input) while the notice is shown, or fold the notice into a cleaner
 post-add result state.
 
+**HTML-entity-encoded titles must render as their glyphs (owner, 2026-08-11).** A title whose apostrophe shows as the
+raw entity `&#8217;` (e.g. *"…I&#8217;ll…"* instead of *"…I'll…"*) — also seen with `&#8216;`/`&#8220;`/`&#038;`/`&nbsp;`
+— reads as a code, not the character. **Root cause is extraction, not just display:** `extractSeriesTitle`
+([`lib/feeds/title.ts`](src/lib/feeds/title.ts)) pulls the page `<h1>`/`og:title`/`<title>` and stores it **without
+HTML-decoding**, so the entity is baked into the DB row (confirmed on a prod series). Two fixes, ideally both:
+**(a) primary — decode at extraction** (decode named + numeric HTML entities in `extractSeriesTitle`, and audit any
+other page-sourced text that isn't run through rss-parser's decoder); this cleans new adds, and the WP-30 non-manual
+title backfill self-heals existing rows on the next page read. **(b) catch-all — decode at display** in the
+library/detail title render, which fixes rows already stored encoded without waiting for a re-extract. Belongs partly
+in the data layer, filed here because the visible symptom + the display-decode safety net are frontend; coordinate the
+extraction half with WP-30.
+
 ### WP-30 — Series title backfill from TOC + manual title edit
 
 **DONE (backend core, 2026-07-31).** Pure `extractSeriesTitle(html, {siteName?})` (`lib/feeds/title.ts`) reads
