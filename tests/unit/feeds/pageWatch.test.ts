@@ -16,6 +16,15 @@ describe('parseToc — generic extraction', () => {
     ]);
   });
 
+  test('captures full-word "Episode" links (text and /episode-N/ href), not just the short "ep N" form', () => {
+    const html = `<html><body><main><ul>
+      <li><a href="/novel/x/episode-244-festival-of-the-gods-6/">Episode 244</a></li>
+      <li><a href="/novel/x/episode-245-festival-of-the-gods-7/">Episode 245</a></li>
+    </ul></main></body></html>`;
+
+    expect(parseToc(html, base).map((c) => c.number)).toEqual([244, 245]);
+  });
+
   test('ignores non-chapter links (nav, comments) and scripts', () => {
     const html = `<html><body>
       <nav><a href="/home">Home</a><a href="/genres">Genres</a></nav>
