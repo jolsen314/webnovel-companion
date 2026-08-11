@@ -923,6 +923,10 @@ optionally `deactivate-source`) so WP-49-style recoveries are fully tool-support
 
 ## Changelog
 
+- **2026-08-11** — **Fix: `parseToc` now matches the full word "Episode".** The two chapter-filter regexes in
+  `pageWatch.ts` (`CHAPTER_TEXT`/`CHAPTER_HREF`) matched `ch<d>` and the short `ep<d>` but not `episode`, so a TOC of
+  `Episode 244` → `/episode-244-…/` links captured **0** chapters. `parseChapterNumber` already knew `episode`; aligned
+  the filters with `ep → ep(?:isode)?` (optional, so short `ep N` still matches — no regression). Test-first.
 - **2026-08-11** — **WP-49 done: page-watch divert for un-isolable multi-novel advertised feeds.** In `addSeries`,
   when an **advertised** feed can't be positively isolated (`chooseSeriesMatch` null, not a guessed feed) and the
   series page is a **real TOC** (`parseToc` > `RENDER_ESCALATION_MAX`), resolve to a series-scoped `PAGE_WATCH`
