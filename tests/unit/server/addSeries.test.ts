@@ -383,6 +383,48 @@ describe('addSeries', () => {
     expect(result.resolved.type).toBe('FEED');
     expect(result.resolved.match).toEqual({ type: 'CATEGORY', value: 'Beta' });
   });
+
+  test('WP-49: a GUESSED feed is never diverted, even with a rich page TOC', async () => {
+    const url = 'https://wp.example/novel/omega2/';
+    const feedUrl = 'https://wp.example/feed/'; // the site-wide guess guessFeedUrls produces
+    const chapters = Array.from({ length: 6 }, (_, i) => `https://wp.example/novel/omega2/ch-${i + 1}/`);
+    // Page has NO advertised <link alternate> feed, but a rich TOC.
+    const toc = `<html><body><ul>${chapters.map((u, i) => `<li><a href="${u}">Chapter ${i + 1}</a></li>`).join('')}</ul></body></html>`;
+    const p = ports({
+      [url]: ok(toc),
+      // No category, date-permalink URLs not under the series path → chooseSeriesMatch returns null.
+      [feedUrl]: ok(
+        RSS(ITEM('o1', 'https://wp.example/2026/08/11/other-ch-1/') + ITEM('o2', 'https://wp.example/2026/08/11/misc-ch-9/')),
+      ),
+      // the page-level guess (…/novel/omega2/feed/) is left to default 404
+    });
+
+    const result = await addSeries({ url }, p);
+
+    // usedGuesses is true here, so cantIsolateAdvertised is false regardless of the rich TOC —
+    // must stay FEED (with a fallbackSeriesMatch), not divert to PAGE_WATCH.
+    expect(result.resolved.type).toBe('FEED');
+    expect(result.resolved.feedUrl).toBe(feedUrl);
+  });
+
+  test('WP-49: the exact =5 lower boundary (pageToc.length === RENDER_ESCALATION_MAX) stays FEED', async () => {
+    const url = 'https://wp.example/novel-toc/';
+    const feedUrl = 'https://wp.example/feed/';
+    const chapters = Array.from({ length: 5 }, (_, i) => `https://wp.example/novel-toc/ch-${i + 1}/`);
+    const p = ports({
+      // Site-wide feed: other novels, no category, date permalinks → chooseSeriesMatch returns null.
+      [feedUrl]: ok(
+        RSS(ITEM('o1', 'https://wp.example/2026/08/11/other-ch-1/') + ITEM('o2', 'https://wp.example/2026/08/11/misc-ch-9/')),
+      ),
+      [url]: ok(pageWithToc(feedUrl, chapters)),
+    });
+
+    const result = await addSeries({ url }, p);
+
+    // The guard is strict `> 5`; exactly 5 chapter links must NOT divert.
+    expect(result.resolved.type).toBe('FEED');
+    expect(result.resolved.match).toEqual({ type: 'WHOLE_FEED' });
+  });
 });
 
 describe('addSeries dedup (WP-39)', () => {
