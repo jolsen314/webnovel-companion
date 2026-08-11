@@ -46,12 +46,14 @@ uncommitted notes." Real names/URLs live only in those local notes and in scratc
 
 ## Current focus
 
-> **NEXT: WP-34 — feed→TOC switch to lock-monitoring.** Add-time lock detect (prefer PAGE_WATCH) + per-series
-> "Track unlocks" + transition reconcile. Its end-to-end "now free" was CF-gated and dormant until the CF-unblock
-> story landed — that story was **WP-46** (add-time render escalation, now done), so WP-34 is unblocked. Full
-> priority order = the **▶ Active queue** table.
+> **NEXT: WP-30 — series title backfill from TOC (manual title-edit UI).** Backend core (`extractSeriesTitle`,
+> `Series.titleIsManual`, add-time page-title precedence over a site-name channel title) landed 2026-07-31; the
+> **manual title-edit UI** is the remaining follow-up. Full priority order = the **▶ Active queue** table.
 >
-> **Recently landed (newest first):** WP-46 (add-time render escalation + poll regression guard — `addSeries` gained
+> **Recently landed (newest first):** WP-49 (page-watch divert for un-isolable multi-novel advertised feeds — when an
+> advertised feed can't be positively isolated and the series page is a real TOC, `addSeries` resolves to a
+> series-scoped PAGE_WATCH source, seeded from the page TOC, instead of defaulting to WHOLE_FEED) · WP-46 (add-time
+> render escalation + poll regression guard — `addSeries` gained
 > an optional `render` port; hard-fail and under-fetch both escalate to render and persist `fetchMode`; poll
 > escalation trigger tightened to a regression signal) · WP-48 (Blogger feed-path in `guessFeedUrls` — blogspot-first + universal-last
 > so a Blogger series binds by feed even when the Vercel page fetch is blocked) · WP-39b (deeper add-dedup, **re-scoped**: going-forward `tocUrl` page-watch
@@ -102,9 +104,8 @@ later-tier tables are reference only. `⭐` = load-bearing.
 
 | ID | Work package | Status | Depends on |
 |----|--------------|--------|------------|
-| WP-30 | Series title backfill from TOC — **backend core done (2026-07-31)**; **manual title-edit UI remains** (own follow-up; `titleIsManual` flag shipped and ready) | `TODO` | WP-17, WP-10 |
-| WP-34 | Feed→TOC switch to lock-monitoring — add-time lock detect (prefer PAGE_WATCH) + per-series "Track unlocks" + transition reconcile — **end-to-end "now free" CF-gated** (dormant until the CF-unblock story lands — see WP-46) | `NEXT` | WP-33, WP-19, WP-46 |
-| WP-49 | Don't bind `WHOLE_FEED` to a **multi-novel advertised feed** — a WordPress post advertises the *site-wide* `/feed/` (multi-novel, `Uncategorized`, date-permalinks); when `chooseSeriesMatch` can't isolate the series, `addSeries` defaults to `WHOLE_FEED` and pulls **every** novel's chapters into the series (at add **and every poll**). Prefer **PAGE_WATCH** on the series post (clean, series-scoped) or a scoped fallback when the advertised feed looks multi-novel / can't be isolated. Shares WP-39b's "better multi-novel detection in the matcher" root; **not** covered by WP-36 (parseToc-only). Existing WHOLE_FEED-bound series need re-point + prune (WP-38). | `TODO` | WP-05, WP-07 |
+| WP-30 | Series title backfill from TOC — **backend core done (2026-07-31)**; **manual title-edit UI remains** (own follow-up; `titleIsManual` flag shipped and ready) | `NEXT` | WP-17, WP-10 |
+| WP-34 | Feed→TOC switch to lock-monitoring — add-time lock detect (prefer PAGE_WATCH) + per-series "Track unlocks" + transition reconcile — **end-to-end "now free" CF-gated** (dormant until the CF-unblock story lands — see WP-46) | `TODO` | WP-33, WP-19, WP-46 |
 | WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` + schema + cron wiring **done**; **editor UI + push delivery (WP-09) remain** (picking up later) | `TODO` | WP-07, WP-10 |
 | WP-28 | Frontend styling & theming — ordering, feed-page vs library split, theme system (night default + cultivation ancient-scroll, sci-fi holographic-panel), long-title readability (wrap/clamp vs ellipsis) | `TODO` | WP-10 |
 | WP-18 | Completed shelf + backfill + "Move to Completed?" | `TODO` | WP-10 |
@@ -126,7 +127,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 ### ✅ Completed
 
 WP-00, WP-GH, WP-CI, WP-12 (bootstrap / CI / docs) · WP-01, WP-03 (pure diff / health) · WP-04, WP-05, WP-FE (schema, feed parse/discover, fetcher) · WP-06, WP-07, WP-08 (Next shell, services, API) · WP-09, WP-10, WP-AUTH, WP-11 (Web Push, library/detail UI, auth gate, deploy) · WP-17, WP-17b (page-watch + headless renderer) · WP-20 (paid→free "now free") · WP-33 (full-TOC backfill + `accessReconciled`) · WP-35 (TOC-order chapters + display toggle) · WP-36 (`parseToc` content scoping) · WP-38 (contaminated-series recovery script) · WP-42 (poll-once-per-feed + politeness) · WP-41 (poll time-budget guard + rotation) · WP-43 (frequent PLAIN-tier polling) · WP-27a (status-gated + cadence polling) · WP-39 (add-time dedup) · WP-37 (per-series chapter-TOC URL) ·
-WP-39b (deeper add-dedup, re-scoped: tocUrl page-watch keying + create-then-annotate) · WP-48 (Blogger feed-path in `guessFeedUrls`) · WP-46 (add-time render escalation + poll regression guard).
+WP-39b (deeper add-dedup, re-scoped: tocUrl page-watch keying + create-then-annotate) · WP-48 (Blogger feed-path in `guessFeedUrls`) · WP-46 (add-time render escalation + poll regression guard) · WP-49 (page-watch divert for un-isolable multi-novel advertised feeds).
 
 ### ⏭ Later tiers (M2–M4)
 
@@ -921,6 +922,17 @@ optionally `deactivate-source`) so WP-49-style recoveries are fully tool-support
 
 ## Changelog
 
+- **2026-08-11** — **WP-49 done: page-watch divert for un-isolable multi-novel advertised feeds.** In `addSeries`,
+  when an **advertised** feed can't be positively isolated (`chooseSeriesMatch` null, not a guessed feed) and the
+  series page is a **real TOC** (`parseToc` > `RENDER_ESCALATION_MAX`), resolve to a series-scoped `PAGE_WATCH`
+  source (`feedUrl` null, seeded from the page TOC) instead of defaulting to `WHOLE_FEED` — which had ingested every
+  novel on a site-wide `/feed/`. The page TOC is parsed once and reused (merge / divert check / page-watch seed);
+  `chooseSeriesMatch` is unchanged. **Limit:** a tiny brand-new series (TOC ≤ 5) still WHOLE_FEEDs until it grows.
+  **Deferred:** acronym/slug-prefix feed-matcher intelligence (fragile, and page-watch is the better source anyway;
+  the series *is* identifiable in the feed by acronym, but density + fragility make the matcher not worth it) →
+  folds into WP-39b / WP-WORKID; page-blocked multi-novel feeds; existing contaminated series (→ WP-38 /
+  `db:cleanup`; the `reclassify-source` CLI gap stays → WP-CLEANUP-UI). Consequence: a diverted series polls on the
+  general (daily) cadence, not WP-43's 2h PLAIN-FEED trigger — fine for slow multi-novel series.
 - **2026-08-10** — **WP-46 done: add-time render escalation + poll regression guard.** `addSeries` gained an optional
   `render` port (our own `/api/render`, no third party). Two escalations: (1) **hard-fail** — when the plain page is
   CF-blocked and no feed is reachable, render once and re-resolve the rendered body (a rendered TOC → PAGE_WATCH

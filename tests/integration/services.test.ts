@@ -207,6 +207,25 @@ describe('addSeries (real DB)', () => {
       expect(source.fetchMode).toBe('RENDER');
     });
   });
+
+  test('WP-49: an un-isolable multi-novel advertised feed + a real page TOC persists a PAGE_WATCH source', async () => {
+    const url = 'https://wp.example/novel-toc/';
+    const feedUrl = 'https://wp.example/feed/';
+    const chapterUrls = Array.from({ length: 6 }, (_, i) => `https://wp.example/novel-toc/ch-${i + 1}/`);
+    const page = `<html><head><link rel="alternate" type="application/rss+xml" href="${feedUrl}"></head><body><ul>${chapterUrls
+      .map((u, i) => `<li><a href="${u}">Chapter ${i + 1}</a></li>`)
+      .join('')}</ul></body></html>`;
+    const feed = RSS(ITEM('o1', 'https://wp.example/2026/08/11/other-ch-1/') + ITEM('o2', 'https://wp.example/2026/08/11/misc-ch-9/'));
+
+    const { seriesId } = await addSeries({ url }, fetchFrom({ [url]: okRes(page), [feedUrl]: okRes(feed) }));
+
+    const source = await db.source.findFirstOrThrow({ where: { seriesId } });
+    expect(source.type).toBe('PAGE_WATCH');
+    expect(source.feedUrl).toBeNull();
+
+    const chapters = await db.chapter.findMany({ where: { seriesId }, orderBy: { url: 'asc' } });
+    expect(chapters.map((c) => c.url)).toEqual([...chapterUrls].sort()); // the TOC's chapters, no cross-novel strays
+  });
 });
 
 describe('listSeries (real DB)', () => {
