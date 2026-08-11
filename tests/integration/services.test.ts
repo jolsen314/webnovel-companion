@@ -175,6 +175,38 @@ describe('addSeries (real DB)', () => {
     );
     expect(r3.similarTo == null).toBe(true);
   });
+
+  describe('WP-46: add-time render escalation', () => {
+    const WATCH_URL = 'https://reader.example/series/omega/';
+    const W1 = 'https://reader.example/series/omega/chapter-1/';
+    const W2 = 'https://reader.example/series/omega/chapter-2/';
+    const TOC = (rows: string) => `<html><body><ul>${rows}</ul></body></html>`;
+    const ROW = (url: string, locked = false) =>
+      `<li${locked ? ' class="premium"' : ''}><a href="${url}">Chapter</a></li>`;
+
+    test('WP-46: an under-reading plain TOC at add adopts render and persists fetchMode RENDER', async () => {
+      const { seriesId } = await addSeries(
+        { url: WATCH_URL },
+        fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1))) }), // plain reads 1
+        fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1) + ROW(W2))) }), // render reads 2 (more)
+      );
+      const source = await db.source.findFirstOrThrow({ where: { seriesId } });
+      expect(source.fetchMode).toBe('RENDER');
+      expect(await db.chapter.count({ where: { seriesId } })).toBe(2);
+    });
+
+    test('WP-46: a hard-fail add recovered by render persists a PAGE_WATCH RENDER source', async () => {
+      const url = 'https://cf.example/series/omega/';
+      const { seriesId } = await addSeries(
+        { url },
+        fetchFrom({ [url]: { outcome: 'HTTP_4XX', status: 403 } as PoliteResult }), // page + feeds blocked
+        fetchFrom({ [url]: okRes(TOC(ROW('https://cf.example/series/omega/chapter-1/'))) }),
+      );
+      const source = await db.source.findFirstOrThrow({ where: { seriesId } });
+      expect(source.type).toBe('PAGE_WATCH');
+      expect(source.fetchMode).toBe('RENDER');
+    });
+  });
 });
 
 describe('listSeries (real DB)', () => {
@@ -358,9 +390,13 @@ describe('page-watch source (real DB)', () => {
     expect(chapters.find((c) => c.url === W3)!.access).toBe('LOCKED');
   });
 
-  test('a plain page-watch that under-reads escalates the source to RENDER (when a renderer is available)', async () => {
-    const { seriesId } = await addSeries({ url: WATCH_URL }, fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1))) }));
-    // A tiny plain TOC (1 chapter ≤ 5) + a renderer available → persist fetchMode = RENDER for next time.
+  test('a plain page-watch that regresses below stored escalates the source to RENDER (renderer available)', async () => {
+    // Seed 3 chapters plainly (no render port at add → stays PLAIN, stored = 3).
+    const { seriesId } = await addSeries(
+      { url: WATCH_URL },
+      fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1) + ROW(W2) + ROW(W3))) }),
+    );
+    // Next poll's plain read returns only 1 chapter (the TOC failed to render) → 1 < 3 → escalate.
     await pollAllSources(fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1))) }), async () => okRes(TOC(ROW(W1))));
 
     expect((await db.source.findFirstOrThrow({ where: { seriesId } })).fetchMode).toBe('RENDER');

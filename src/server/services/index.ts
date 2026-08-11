@@ -364,9 +364,14 @@ export function sendTestNotification(ports: PushSendPorts = pushSendPorts()): Pr
 }
 
 /** Resolve a pasted URL to a feed (or page-watch) and create the Series + Source. */
-export function addSeries(input: AddSeriesInput, fetchImpl: FetchImpl = fetchPort): Promise<AddSeriesResult> {
+export function addSeries(
+  input: AddSeriesInput,
+  fetchImpl: FetchImpl = fetchPort,
+  renderImpl: FetchImpl | undefined = renderPort(),
+): Promise<AddSeriesResult> {
   return addSeriesCore(input, {
     fetch: fetchImpl,
+    render: renderImpl,
     findSeriesByCanonicalId: async (canonicalId) => {
       const s = await db.series.findFirst({ where: { userId: getCurrentUserId(), canonicalId }, select: { id: true } });
       return s ? { seriesId: s.id } : null;
@@ -384,6 +389,7 @@ export function addSeries(input: AddSeriesInput, fetchImpl: FetchImpl = fetchPor
               url: r.sourceUrl,
               host: r.host,
               type: r.type,
+              fetchMode: r.fetchMode, // WP-46
               feedUrl: r.feedUrl,
               tocUrl: r.tocUrl, // WP-37
               matchType: r.match.type,

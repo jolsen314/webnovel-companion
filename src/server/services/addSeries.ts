@@ -13,6 +13,7 @@ import { parseToc, mergeFeedAndToc, withReadingPositions } from '../../lib/feeds
 import type { FeedItem } from '../../lib/feeds/diff';
 import type { PoliteResult } from '../../lib/feeds/fetch';
 import { canonicalSeriesId, findSimilarTitle } from '../../lib/dedup';
+import { RENDER_ESCALATION_MAX } from './poll';
 
 /**
  * Add-time source resolution: given a URL the user pastes, discover a feed (or fall
@@ -33,6 +34,7 @@ export interface ResolvedSource {
   feedUrl: string | null;
   tocUrl: string | null; // WP-37: separate chapter-TOC page, when discoverable
   type: 'FEED' | 'PAGE_WATCH';
+  fetchMode: 'PLAIN' | 'RENDER'; // WP-46: RENDER when the source needs our headless renderer
   match: SeriesMatch;
   chapters: FeedItem[];
   canonicalId: string; // WP-39
@@ -40,6 +42,7 @@ export interface ResolvedSource {
 
 export interface AddSeriesPorts {
   fetch: (url: string, opts?: { etag?: string | null; lastModified?: string | null }) => Promise<PoliteResult>;
+  render?: (url: string, opts?: { etag?: string | null; lastModified?: string | null }) => Promise<PoliteResult>; // WP-46: headless renderer, last resort
   createSeries: (resolved: ResolvedSource) => Promise<{ seriesId: string }>;
   findSeriesByCanonicalId: (canonicalId: string) => Promise<{ seriesId: string } | null>; // WP-39
   listExistingSeries: () => Promise<{ id: string; title: string }[]>; // WP-39b: for the similar-title annotate
@@ -84,73 +87,116 @@ export async function addSeries(input: AddSeriesInput, ports: AddSeriesPorts): P
   const { url } = input;
   const host = new URL(url).host;
 
-  const page = await ports.fetch(url);
-  const pageOk = page.outcome === 'SUCCESS' && !page.notModified;
-  const pageTitle = pageOk ? extractSeriesTitle(page.body, { siteName: host }) : null;
+  /** Resolve a fetched page into a FEED or PAGE_WATCH source, or null when neither a feed nor
+   *  the page itself is reachable. `bodyMode` records whether `pageResult` came from a headless
+   *  render, so a PAGE_WATCH resolution can persist RENDER (a feed is always fetched plainly). */
+  const resolveFrom = async (
+    pageResult: PoliteResult,
+    bodyMode: 'PLAIN' | 'RENDER',
+  ): Promise<AddSeriesResult | null> => {
+    const pageOk = pageResult.outcome === 'SUCCESS' && !pageResult.notModified;
+    const pageBody = pageOk ? pageResult.body : '';
+    const pageTitle = pageOk ? extractSeriesTitle(pageBody, { siteName: host }) : null;
 
-  // Candidate feeds: advertised <link alternate> if we could read the page, else
-  // common WordPress guesses. We try guesses even when the page fetch FAILED —
-  // Cloudflare frequently challenges the HTML page while `/feed/` still serves.
-  const advertised = pageOk ? discoverFeeds(page.body, url).map((f) => f.url) : [];
-  const candidates = advertised.length > 0 ? advertised : guessFeedUrls(url);
+    // Candidate feeds: advertised <link alternate> if we could read the page, else common
+    // WordPress/Blogger guesses. Guesses are tried even when the page fetch FAILED —
+    // Cloudflare frequently challenges the HTML page while `/feed/` still serves. But only on the
+    // PLAIN pass: `guessFeedUrls` is a pure function of the URL, so on the RENDER pass (reached
+    // only after the plain pass already tried and failed those same guesses) re-guessing is
+    // wasted — only an advertised feed in the rendered body is new information worth fetching.
+    const advertised = pageOk ? discoverFeeds(pageBody, url).map((f) => f.url) : [];
+    const candidates = advertised.length > 0 ? advertised : bodyMode === 'PLAIN' ? guessFeedUrls(url) : [];
 
-  let feedUrl: string | null = null;
-  let feedBody: string | null = null;
-  for (const candidate of candidates) {
-    const r = await ports.fetch(candidate);
-    if (r.outcome === 'SUCCESS' && !r.notModified && looksLikeFeed(r.body)) {
-      feedUrl = candidate;
-      feedBody = r.body;
-      break;
+    let feedUrl: string | null = null;
+    let feedBody: string | null = null;
+    for (const candidate of candidates) {
+      const r = await ports.fetch(candidate);
+      if (r.outcome === 'SUCCESS' && !r.notModified && looksLikeFeed(r.body)) {
+        feedUrl = candidate;
+        feedBody = r.body;
+        break;
+      }
+    }
+
+    // A feed is reachable → track via FEED (works even if the page itself was blocked). A feed
+    // is fetched plainly at poll time (render never helps XML), so FEED is always PLAIN.
+    if (feedUrl !== null && feedBody !== null) {
+      const parsed = await parseFeed(feedBody);
+      const usedGuesses = advertised.length === 0;
+      const positive = chooseSeriesMatch(parsed.items, url);
+      const match = positive ?? (usedGuesses ? fallbackSeriesMatch(parsed.items, url) : { type: 'WHOLE_FEED' });
+      const feedChapters = filterBySeriesMatch(parsed.items, match);
+      const toc = pageOk ? parseToc(pageBody, url) : [];
+      const chapters = pageOk ? withReadingPositions(mergeFeedAndToc(feedChapters, toc), toc) : feedChapters;
+      const seriesTitle =
+        input.title ??
+        pageTitle ??
+        (positive?.type === 'CATEGORY'
+          ? positive.value
+          : match.type === 'WHOLE_FEED'
+            ? (parsed.title != null && !matchesSiteName(parsed.title, host) ? parsed.title : titleFromUrl(url))
+            : titleFromUrl(url));
+      const tocUrl = pageOk ? findTocUrl(pageBody, url) : null;
+      const core: ResolvedCore = {
+        seriesTitle, sourceUrl: url, host, feedUrl, tocUrl, type: 'FEED', fetchMode: 'PLAIN', match, chapters,
+      };
+      return finalize(core, ports);
+    }
+
+    // No feed, but the page loads → page-watch mode. Seed from the TOC so the first poll diffs
+    // against a known set instead of re-reporting the whole backlog.
+    if (pageOk) {
+      const tocUrl = findTocUrl(pageBody, url);
+      let toc = parseToc(pageBody, url);
+      let fetchMode: 'PLAIN' | 'RENDER' = bodyMode;
+      // Under-fetch: a plain TOC that reads almost nothing is usually a JS-rendered list that
+      // didn't render. Render it and keep the rendered chapters only if there are strictly more.
+      // Skipped when we already rendered (bodyMode === 'RENDER') — no double render.
+      if (bodyMode === 'PLAIN' && ports.render && toc.length <= RENDER_ESCALATION_MAX) {
+        const rendered = await ports.render(tocUrl ?? url);
+        if (rendered.outcome === 'SUCCESS' && !rendered.notModified) {
+          const rtoc = parseToc(rendered.body, tocUrl ?? url);
+          if (rtoc.length > toc.length) {
+            toc = rtoc;
+            fetchMode = 'RENDER';
+          }
+        }
+      }
+      const core: ResolvedCore = {
+        seriesTitle: input.title ?? pageTitle ?? titleFromUrl(url),
+        sourceUrl: url,
+        host,
+        feedUrl: null,
+        tocUrl,
+        type: 'PAGE_WATCH',
+        fetchMode,
+        match: { type: 'WHOLE_FEED' },
+        chapters: withReadingPositions(toc, toc),
+      };
+      return finalize(core, ports);
+    }
+
+    return null;
+  };
+
+  const plain = await ports.fetch(url);
+  const resolved = await resolveFrom(plain, 'PLAIN');
+  if (resolved) return resolved;
+
+  // Hard-fail: neither the page nor any feed was reachable plainly. Our own render clears
+  // Cloudflare's JS managed challenge (WP-40 spike), so try it once before giving up.
+  if (ports.render) {
+    const rendered = await ports.render(url);
+    if (rendered.outcome === 'SUCCESS' && !rendered.notModified) {
+      const viaRender = await resolveFrom(rendered, 'RENDER');
+      if (viaRender) return viaRender;
     }
   }
 
-  // A feed is reachable → track via FEED (works even if the page itself was blocked).
-  if (feedUrl !== null && feedBody !== null) {
-    const parsed = await parseFeed(feedBody);
-    const usedGuesses = advertised.length === 0;
-    const positive = chooseSeriesMatch(parsed.items, url);
-    // A page-advertised feed is the series' own feed → trust WHOLE_FEED. A guessed
-    // site-wide feed we can't isolate → a series-scoped guess that captures nothing
-    // now but fills in when the series next publishes (WP-RC escalates if it never does).
-    const match = positive ?? (usedGuesses ? fallbackSeriesMatch(parsed.items, url) : { type: 'WHOLE_FEED' });
-    const feedChapters = filterBySeriesMatch(parsed.items, match);
-    const toc = pageOk ? parseToc(page.body, url) : [];
-    const chapters = pageOk ? withReadingPositions(mergeFeedAndToc(feedChapters, toc), toc) : feedChapters;
-    const seriesTitle =
-      input.title ??
-      pageTitle ??
-      (positive?.type === 'CATEGORY'
-        ? positive.value // exact per-novel category = the novel's name
-        : match.type === 'WHOLE_FEED'
-          ? // channel title, unless it's just the site name → humanize the URL instead
-            (parsed.title != null && !matchesSiteName(parsed.title, host) ? parsed.title : titleFromUrl(url))
-          : titleFromUrl(url)); // slug/path fallback → humanize the URL, not the site name
-    const tocUrl = pageOk ? findTocUrl(page.body, url) : null;
-    const core: ResolvedCore = { seriesTitle, sourceUrl: url, host, feedUrl, tocUrl, type: 'FEED', match, chapters };
-    return finalize(core, ports);
-  }
-
-  // No feed, but the page loads → page-watch mode. Seed from the TOC so the first
-  // poll diffs against a known set instead of re-reporting the whole backlog.
-  if (pageOk) {
-    const toc = parseToc(page.body, url);
-    const tocUrl = findTocUrl(page.body, url);
-    const core: ResolvedCore = {
-      seriesTitle: input.title ?? pageTitle ?? titleFromUrl(url),
-      sourceUrl: url,
-      host,
-      feedUrl: null,
-      tocUrl,
-      type: 'PAGE_WATCH',
-      match: { type: 'WHOLE_FEED' },
-      chapters: withReadingPositions(toc, toc),
-    };
-    return finalize(core, ports);
-  }
-
-  // Neither the page nor any feed is reachable.
+  // Only claim a render attempt when we actually had a renderer (prod always does; local/tests may not).
   throw new Error(
-    `Couldn’t reach ${host} or find a feed for it — the site may be blocking automated requests (e.g. Cloudflare).`,
+    ports.render
+      ? `Couldn’t reach ${host} or find a feed for it, even after a render attempt — the site may be blocking automated requests (e.g. Cloudflare).`
+      : `Couldn’t reach ${host} or find a feed for it — the site may be blocking automated requests (e.g. Cloudflare).`,
   );
 }

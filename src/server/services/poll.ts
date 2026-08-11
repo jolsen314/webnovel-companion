@@ -239,7 +239,7 @@ export function chooseConditionalState(
 }
 
 /** A plain page-watch yielding at most this many chapters reads as "the list didn't render". */
-const RENDER_ESCALATION_MAX = 5;
+export const RENDER_ESCALATION_MAX = 5;
 
 /** The post-fetch half of a poll: given a `PoliteResult` already fetched for `src` (solo or
  *  shared across a `PollGroup`), apply health scoring and — on a fresh SUCCESS — parse, filter
@@ -266,21 +266,30 @@ export async function processFetched(
     } else {
       etag = res.etag ?? etag;
       lastModified = res.lastModified ?? lastModified;
+      const stored = await ports.loadStoredChapters(src.seriesId);
       // FEED: parse the feed and isolate this series. PAGE_WATCH: parse the TOC
       // (already series-scoped) — its chapters carry FREE/LOCKED access.
       let mine: FeedItem[];
       if (src.type === 'PAGE_WATCH') {
         mine = parseToc(res.body, src.fetchUrl);
-        // A plain page-watch returning almost nothing is usually a JS-rendered TOC that
-        // didn't render — escalate to the headless renderer, if one is available.
-        if (ports.renderFetch && src.fetchMode === 'PLAIN' && mine.length <= RENDER_ESCALATION_MAX) {
+        // Escalate only when a plain read comes back SMALLER than what we already stored — a
+        // real "the TOC stopped rendering" signal. A genuinely small series (read == stored)
+        // never regresses, so it is never pinned to expensive renders. (WP-46)
+        // NOTE: this flip is deferred and one-way — once a source escalates to RENDER it stays
+        // RENDER, so a single transient truncated read can pin it; accepted tradeoff, still
+        // strictly less aggressive than the old unconditional ≤5 trigger.
+        if (
+          ports.renderFetch &&
+          src.fetchMode === 'PLAIN' &&
+          mine.length <= RENDER_ESCALATION_MAX &&
+          mine.length < stored.length
+        ) {
           escalateToRender = true;
         }
       } else {
         const parsed = await parseFeed(res.body);
         mine = filterBySeriesMatch(parsed.items, src.match);
       }
-      const stored = await ports.loadStoredChapters(src.seriesId);
       const diff = diffChapters(stored, mine);
       newChapters = diff.new;
       becameFree = diff.becameFree;

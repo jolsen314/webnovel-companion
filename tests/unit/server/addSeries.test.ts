@@ -21,21 +21,50 @@ const ok = (body: string): PoliteResult => ({
 function ports(
   map: Record<string, PoliteResult>,
   existing: (canonicalId: string) => { seriesId: string } | null = () => null,
-): AddSeriesPorts & { created: ResolvedSource[] } {
+  render?: Record<string, PoliteResult>,
+): AddSeriesPorts & { created: ResolvedSource[]; renderCalls: string[]; fetchCalls: string[] } {
   const created: ResolvedSource[] = [];
-  return {
+  const renderCalls: string[] = [];
+  const fetchCalls: string[] = [];
+  const base = {
     created,
-    fetch: async (url) => map[url] ?? ({ outcome: 'HTTP_4XX', status: 404 } as PoliteResult),
-    findSeriesByCanonicalId: async (canonicalId) => existing(canonicalId),
+    renderCalls,
+    fetchCalls,
+    fetch: async (url: string) => {
+      fetchCalls.push(url);
+      return map[url] ?? ({ outcome: 'HTTP_4XX', status: 404 } as PoliteResult);
+    },
+    findSeriesByCanonicalId: async (canonicalId: string) => existing(canonicalId),
     listExistingSeries: async () => [],
-    createSeries: async (resolved) => {
+    createSeries: async (resolved: ResolvedSource) => {
       created.push(resolved);
       return { seriesId: 'new1' };
+    },
+  };
+  if (!render) return base;
+  return {
+    ...base,
+    render: async (url: string) => {
+      renderCalls.push(url);
+      return render[url] ?? ({ outcome: 'HTTP_4XX', status: 404 } as PoliteResult);
     },
   };
 }
 
 describe('addSeries', () => {
+  test('a normally-resolved source carries fetchMode PLAIN', async () => {
+    const url = 'https://translator.example/novel/alpha/';
+    const feedUrl = 'https://translator.example/feed/';
+    const p = ports({
+      [url]: ok(PAGE(feedUrl)),
+      [feedUrl]: ok(RSS(ITEM('g1', 'https://translator.example/alpha-1/'))),
+    });
+
+    const result = await addSeries({ url }, p);
+
+    expect(result.resolved.fetchMode).toBe('PLAIN');
+  });
+
   test('page advertises a feed → resolves a FEED source with its chapters', async () => {
     const url = 'https://translator.example/novel/alpha/';
     const feedUrl = 'https://translator.example/feed/';
@@ -153,6 +182,146 @@ describe('addSeries', () => {
     const p = ports({ [url]: { outcome: 'DNS' } }); // page dead, all feed guesses 404 by default
 
     await expect(addSeries({ url }, p)).rejects.toThrow(/reach|feed/i);
+  });
+
+  test('hard-fail: page + feeds blocked, but render recovers the TOC → PAGE_WATCH, fetchMode RENDER', async () => {
+    const url = 'https://cf.example/series/omega/';
+    const rendered = `<html><body><h1>Omega</h1><ul>
+      <li><a href="https://cf.example/series/omega/chapter-1/">Chapter 1</a></li>
+      <li><a href="https://cf.example/series/omega/chapter-2/">Chapter 2</a></li>
+    </ul></body></html>`;
+    const p = ports(
+      { [url]: { outcome: 'HTTP_4XX', status: 403 } as PoliteResult }, // page CF-blocked; feeds 404 by default
+      () => null,
+      { [url]: ok(rendered) }, // our render clears the challenge
+    );
+
+    const result = await addSeries({ url }, p);
+
+    expect(result.resolved.type).toBe('PAGE_WATCH');
+    expect(result.resolved.fetchMode).toBe('RENDER');
+    expect(result.resolved.seriesTitle).toBe('Omega'); // from the rendered <h1>
+    expect(result.resolved.chapters.map((c) => c.url)).toEqual([
+      'https://cf.example/series/omega/chapter-1/',
+      'https://cf.example/series/omega/chapter-2/',
+    ]);
+    expect(p.renderCalls).toEqual([url]);
+  });
+
+  test('hard-fail: the render pass does not re-fetch the URL-derived feed guesses the plain pass already tried', async () => {
+    const url = 'https://cf.example/series/omega/';
+    const rendered = `<html><body><h1>Omega</h1><ul>
+      <li><a href="https://cf.example/series/omega/chapter-1/">Chapter 1</a></li>
+    </ul></body></html>`;
+    const p = ports(
+      { [url]: { outcome: 'HTTP_4XX', status: 403 } as PoliteResult }, // page + all feed guesses fail
+      () => null,
+      { [url]: ok(rendered) }, // render recovers a feedless TOC → PAGE_WATCH
+    );
+
+    await addSeries({ url }, p);
+
+    // guessFeedUrls(url) is a pure function of the URL, so the render pass's guesses are identical
+    // to the plain pass's already-failed ones. No URL should be fetched twice.
+    expect(new Set(p.fetchCalls).size).toBe(p.fetchCalls.length);
+  });
+
+  test('hard-fail: render reveals a non-guessable advertised feed → FEED source, fetchMode PLAIN', async () => {
+    const url = 'https://cf.example/novel/psi/';
+    const feedUrl = 'https://cf.example/custom-feed.xml'; // not one guessFeedUrls would produce
+    const p = ports(
+      {
+        [url]: { outcome: 'HTTP_4XX', status: 403 } as PoliteResult,
+        [feedUrl]: ok(RSS(ITEM('g1', 'https://cf.example/psi-1/', 'Psi'))),
+      },
+      () => null,
+      { [url]: ok(PAGE(feedUrl)) }, // rendered body advertises the feed
+    );
+
+    const result = await addSeries({ url }, p);
+
+    expect(result.resolved.type).toBe('FEED');
+    expect(result.resolved.feedUrl).toBe(feedUrl);
+    expect(result.resolved.fetchMode).toBe('PLAIN'); // the feed serves plainly
+  });
+
+  test('hard-fail: render also fails → throws', async () => {
+    const url = 'https://cf.example/novel/void/';
+    const p = ports(
+      { [url]: { outcome: 'HTTP_4XX', status: 403 } as PoliteResult },
+      () => null,
+      { [url]: { outcome: 'HTTP_4XX', status: 403 } as PoliteResult }, // render blocked too
+    );
+
+    await expect(addSeries({ url }, p)).rejects.toThrow(/render attempt/i);
+  });
+
+  test('under-fetch: plain TOC ≤5 and render yields more → adopt rendered chapters, fetchMode RENDER', async () => {
+    const url = 'https://reader.example/series/rho/';
+    const plainToc = `<html><body><ul>
+      <li><a href="https://reader.example/series/rho/chapter-1/">Chapter 1</a></li>
+    </ul></body></html>`;
+    const renderedToc = `<html><body><ul>${Array.from(
+      { length: 8 },
+      (_, i) => `<li><a href="https://reader.example/series/rho/chapter-${i + 1}/">Chapter ${i + 1}</a></li>`,
+    ).join('')}</ul></body></html>`;
+    const p = ports({ [url]: ok(plainToc) }, () => null, { [url]: ok(renderedToc) });
+
+    const result = await addSeries({ url }, p);
+
+    expect(result.resolved.type).toBe('PAGE_WATCH');
+    expect(result.resolved.fetchMode).toBe('RENDER');
+    expect(result.resolved.chapters).toHaveLength(8);
+    expect(p.renderCalls).toEqual([url]); // no tocUrl on the page → renders url
+  });
+
+  test('under-fetch: plain TOC ≤5 and render yields no more → keep plain, fetchMode PLAIN', async () => {
+    const url = 'https://reader.example/series/sigma/';
+    const plainToc = `<html><body><ul>
+      <li><a href="https://reader.example/series/sigma/chapter-1/">Chapter 1</a></li>
+      <li><a href="https://reader.example/series/sigma/chapter-2/">Chapter 2</a></li>
+    </ul></body></html>`;
+    const renderedToc = `<html><body><ul>
+      <li><a href="https://reader.example/series/sigma/chapter-1/">Chapter 1</a></li>
+    </ul></body></html>`; // fewer — render didn't help
+    const p = ports({ [url]: ok(plainToc) }, () => null, { [url]: ok(renderedToc) });
+
+    const result = await addSeries({ url }, p);
+
+    expect(result.resolved.fetchMode).toBe('PLAIN');
+    expect(result.resolved.chapters).toHaveLength(2);
+    expect(p.renderCalls).toEqual([url]); // we tried, but kept plain
+  });
+
+  test('rich plain TOC (>5) → no render call, fetchMode PLAIN', async () => {
+    const url = 'https://reader.example/series/tau/';
+    const richToc = `<html><body><ul>${Array.from(
+      { length: 7 },
+      (_, i) => `<li><a href="https://reader.example/series/tau/chapter-${i + 1}/">Chapter ${i + 1}</a></li>`,
+    ).join('')}</ul></body></html>`;
+    const p = ports({ [url]: ok(richToc) }, () => null, { [url]: ok('<ul></ul>') });
+
+    const result = await addSeries({ url }, p);
+
+    expect(result.resolved.fetchMode).toBe('PLAIN');
+    expect(result.resolved.chapters).toHaveLength(7);
+    expect(p.renderCalls).toEqual([]); // never rendered — plain was already rich
+  });
+
+  test('FEED branch never render-escalates, even when it seeds few chapters', async () => {
+    const url = 'https://translator.example/novel/upsilon/';
+    const feedUrl = 'https://translator.example/feed/';
+    const p = ports(
+      { [url]: ok(PAGE(feedUrl)), [feedUrl]: ok(RSS(ITEM('g1', 'https://translator.example/ups-1/'))) },
+      () => null,
+      { [url]: ok('<ul></ul>') },
+    );
+
+    const result = await addSeries({ url }, p);
+
+    expect(result.resolved.type).toBe('FEED');
+    expect(result.resolved.fetchMode).toBe('PLAIN');
+    expect(p.renderCalls).toEqual([]); // feed is the source of truth; no render
   });
 });
 

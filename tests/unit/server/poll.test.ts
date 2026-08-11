@@ -206,13 +206,28 @@ describe('pollSource', () => {
     expect(effects.newChapters.map((c) => c.url)).toEqual(['https://x.example/render-1/']);
   });
 
-  test('escalates a PAGE_WATCH source to RENDER when a plain fetch yields ≤5 chapters and a renderer exists', async () => {
-    const p = renderPorts(ok(toc('https://x.example/a/chapter-1/')), ok('<ul></ul>'));
+  test('escalates a PAGE_WATCH source to RENDER when a plain read regresses below stored', async () => {
+    const stored = [
+      { guid: 's1', url: 'https://x.example/a/chapter-1/' },
+      { guid: 's2', url: 'https://x.example/a/chapter-2/' },
+      { guid: 's3', url: 'https://x.example/a/chapter-3/' },
+    ];
+    const p = renderPorts(ok(toc('https://x.example/a/chapter-1/')), ok('<ul></ul>'), stored);
     const effects = await pollSource(
       source({ type: 'PAGE_WATCH', fetchMode: 'PLAIN', fetchUrl: 'https://x.example/a/', match: { type: 'WHOLE_FEED' } }),
       p,
     );
-    expect(effects.escalateToRender).toBe(true);
+    expect(effects.escalateToRender).toBe(true); // plain read 1 < stored 3
+  });
+
+  test('does not escalate a genuinely small series (plain read == stored count)', async () => {
+    const stored = [{ guid: 's1', url: 'https://x.example/a/chapter-1/' }];
+    const p = renderPorts(ok(toc('https://x.example/a/chapter-1/')), ok('<ul></ul>'), stored);
+    const effects = await pollSource(
+      source({ type: 'PAGE_WATCH', fetchMode: 'PLAIN', fetchUrl: 'https://x.example/a/', match: { type: 'WHOLE_FEED' } }),
+      p,
+    );
+    expect(effects.escalateToRender).toBe(false); // plain read 1, stored 1 → no regression
   });
 
   test('does not escalate when the plain TOC is already rich (>5 chapters)', async () => {

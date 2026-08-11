@@ -46,13 +46,14 @@ uncommitted notes." Real names/URLs live only in those local notes and in scratc
 
 ## Current focus
 
-> **NEXT: WP-46 — add-time under-fetch & hard-fail escalation.** When `addSeries` under-seeds (≤5 chapters) or the
-> plain page fetch fails outright (CF-blocked from Vercel's IP), retry via our own render (which clears CF's JS
-> managed challenge — no third party) before seeding-or-throwing, so today's unaddable no-feed/JS-rendered CF hosts
-> can be added. **WP-34 moved below it** — WP-34's end-to-end "now free" is CF-gated and dormant until this
-> CF-unblock story (WP-46) lands. Full priority order = the **▶ Active queue** table.
+> **NEXT: WP-34 — feed→TOC switch to lock-monitoring.** Add-time lock detect (prefer PAGE_WATCH) + per-series
+> "Track unlocks" + transition reconcile. Its end-to-end "now free" was CF-gated and dormant until the CF-unblock
+> story landed — that story was **WP-46** (add-time render escalation, now done), so WP-34 is unblocked. Full
+> priority order = the **▶ Active queue** table.
 >
-> **Recently landed (newest first):** WP-48 (Blogger feed-path in `guessFeedUrls` — blogspot-first + universal-last
+> **Recently landed (newest first):** WP-46 (add-time render escalation + poll regression guard — `addSeries` gained
+> an optional `render` port; hard-fail and under-fetch both escalate to render and persist `fetchMode`; poll
+> escalation trigger tightened to a regression signal) · WP-48 (Blogger feed-path in `guessFeedUrls` — blogspot-first + universal-last
 > so a Blogger series binds by feed even when the Vercel page fetch is blocked) · WP-39b (deeper add-dedup, **re-scoped**: going-forward `tocUrl` page-watch
 > keying in `canonicalSeriesId`, pure `findSimilarTitle` + a **create-then-annotate** `similarTo` hint surfaced as a
 > non-blocking notice on the add page; the multi-novel matcher-type-flip is covered in spirit by the annotate net,
@@ -102,8 +103,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 | ID | Work package | Status | Depends on |
 |----|--------------|--------|------------|
 | WP-30 | Series title backfill from TOC — **backend core done (2026-07-31)**; **manual title-edit UI remains** (own follow-up; `titleIsManual` flag shipped and ready) | `TODO` | WP-17, WP-10 |
-| WP-46 | Add-time under-fetch **and hard-fail** escalation — when `addSeries` seeds **≤5 chapters** (dense-feed window miss, or a TOC needing render/pagination) **or the plain page fetch fails outright** (CF-blocked from Vercel's IP → today it just throws "couldn't reach…"), retry via a proper fetch (RENDER / page-watch / follow-next-page) before seeding-or-throwing. Our **own render clears CF's JS managed challenge** (per the WP-40 spike — a real browser passes where a code-only GET can't) → **no third party**. Hard-fail drivers: a no-feed CF host + a JS-rendered CF host, both unaddable today. *(Re-scoped from dense-feed-reconcile; ongoing miss = WP-43.)* | `NEXT` | WP-07, WP-17b |
-| WP-34 | Feed→TOC switch to lock-monitoring — add-time lock detect (prefer PAGE_WATCH) + per-series "Track unlocks" + transition reconcile — **end-to-end "now free" CF-gated** (dormant until the CF-unblock story lands — see WP-46) | `TODO` | WP-33, WP-19, WP-46 |
+| WP-34 | Feed→TOC switch to lock-monitoring — add-time lock detect (prefer PAGE_WATCH) + per-series "Track unlocks" + transition reconcile — **end-to-end "now free" CF-gated** (dormant until the CF-unblock story lands — see WP-46) | `NEXT` | WP-33, WP-19, WP-46 |
 | WP-49 | Don't bind `WHOLE_FEED` to a **multi-novel advertised feed** — a WordPress post advertises the *site-wide* `/feed/` (multi-novel, `Uncategorized`, date-permalinks); when `chooseSeriesMatch` can't isolate the series, `addSeries` defaults to `WHOLE_FEED` and pulls **every** novel's chapters into the series (at add **and every poll**). Prefer **PAGE_WATCH** on the series post (clean, series-scoped) or a scoped fallback when the advertised feed looks multi-novel / can't be isolated. Shares WP-39b's "better multi-novel detection in the matcher" root; **not** covered by WP-36 (parseToc-only). Existing WHOLE_FEED-bound series need re-point + prune (WP-38). | `TODO` | WP-05, WP-07 |
 | WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` + schema + cron wiring **done**; **editor UI + push delivery (WP-09) remain** (picking up later) | `TODO` | WP-07, WP-10 |
 | WP-28 | Frontend styling & theming — ordering, feed-page vs library split, theme system (night default + cultivation ancient-scroll, sci-fi holographic-panel), long-title readability (wrap/clamp vs ellipsis) | `TODO` | WP-10 |
@@ -126,7 +126,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 ### ✅ Completed
 
 WP-00, WP-GH, WP-CI, WP-12 (bootstrap / CI / docs) · WP-01, WP-03 (pure diff / health) · WP-04, WP-05, WP-FE (schema, feed parse/discover, fetcher) · WP-06, WP-07, WP-08 (Next shell, services, API) · WP-09, WP-10, WP-AUTH, WP-11 (Web Push, library/detail UI, auth gate, deploy) · WP-17, WP-17b (page-watch + headless renderer) · WP-20 (paid→free "now free") · WP-33 (full-TOC backfill + `accessReconciled`) · WP-35 (TOC-order chapters + display toggle) · WP-36 (`parseToc` content scoping) · WP-38 (contaminated-series recovery script) · WP-42 (poll-once-per-feed + politeness) · WP-41 (poll time-budget guard + rotation) · WP-43 (frequent PLAIN-tier polling) · WP-27a (status-gated + cadence polling) · WP-39 (add-time dedup) · WP-37 (per-series chapter-TOC URL) ·
-WP-39b (deeper add-dedup, re-scoped: tocUrl page-watch keying + create-then-annotate) · WP-48 (Blogger feed-path in `guessFeedUrls`).
+WP-39b (deeper add-dedup, re-scoped: tocUrl page-watch keying + create-then-annotate) · WP-48 (Blogger feed-path in `guessFeedUrls`) · WP-46 (add-time render escalation + poll regression guard).
 
 ### ⏭ Later tiers (M2–M4)
 
@@ -921,6 +921,17 @@ optionally `deactivate-source`) so WP-49-style recoveries are fully tool-support
 
 ## Changelog
 
+- **2026-08-10** — **WP-46 done: add-time render escalation + poll regression guard.** `addSeries` gained an optional
+  `render` port (our own `/api/render`, no third party). Two escalations: (1) **hard-fail** — when the plain page is
+  CF-blocked and no feed is reachable, render once and re-resolve the rendered body (a rendered TOC → PAGE_WATCH
+  `fetchMode: 'RENDER'`; a revealed advertised feed → FEED PLAIN) before throwing; (2) **under-fetch** — a plain
+  PAGE_WATCH TOC reading ≤5 renders and keeps the rendered chapters only if strictly more, persisting `fetchMode`
+  accordingly. `ResolvedSource.fetchMode` is now persisted on the `Source` row. Separately, the **poll escalation
+  trigger** changed from `read ≤ 5` to `read ≤ 5 AND read < stored count` (a memory-free regression signal), so a
+  genuinely-small series is never pinned to RENDER. Add path refactored into an inner `resolveFrom(pageResult,
+  bodyMode)` run once on the plain fetch and once on the rendered body. **Limits:** silent-growth-behind-JS (plain
+  never regresses) isn't auto-caught — remedy is a one-time render-backfill, which bumps `stored` and thereby arms the
+  regression guard; a periodic render-reconcile is a possible future WP. Full detail in the WP-46 design spec.
 - **2026-08-10** — **Reprioritized: WP-46 → `NEXT`, WP-34 moved below it.** WP-34's end-to-end "now free" is
   CF-gated and dormant until the CF-unblock story lands; that story is WP-46 (add-time render escalation clears CF's
   JS challenge). So WP-46 is the actionable next, and WP-34 now lists WP-46 as a dependency.
