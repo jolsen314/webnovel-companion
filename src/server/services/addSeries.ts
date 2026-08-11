@@ -97,6 +97,9 @@ export async function addSeries(input: AddSeriesInput, ports: AddSeriesPorts): P
     const pageOk = pageResult.outcome === 'SUCCESS' && !pageResult.notModified;
     const pageBody = pageOk ? pageResult.body : '';
     const pageTitle = pageOk ? extractSeriesTitle(pageBody, { siteName: host }) : null;
+    // Parse the page's own chapter list once (empty when the page didn't load). Reused by the
+    // feed↔TOC merge, the WP-49 divert check, and the page-watch seed below.
+    const pageToc = pageOk ? parseToc(pageBody, url) : [];
 
     // Candidate feeds: advertised <link alternate> if we could read the page, else common
     // WordPress/Blogger guesses. Guesses are tried even when the page fetch FAILED —
@@ -124,30 +127,39 @@ export async function addSeries(input: AddSeriesInput, ports: AddSeriesPorts): P
       const parsed = await parseFeed(feedBody);
       const usedGuesses = advertised.length === 0;
       const positive = chooseSeriesMatch(parsed.items, url);
-      const match = positive ?? (usedGuesses ? fallbackSeriesMatch(parsed.items, url) : { type: 'WHOLE_FEED' });
-      const feedChapters = filterBySeriesMatch(parsed.items, match);
-      const toc = pageOk ? parseToc(pageBody, url) : [];
-      const chapters = pageOk ? withReadingPositions(mergeFeedAndToc(feedChapters, toc), toc) : feedChapters;
-      const seriesTitle =
-        input.title ??
-        pageTitle ??
-        (positive?.type === 'CATEGORY'
-          ? positive.value
-          : match.type === 'WHOLE_FEED'
-            ? (parsed.title != null && !matchesSiteName(parsed.title, host) ? parsed.title : titleFromUrl(url))
-            : titleFromUrl(url));
-      const tocUrl = pageOk ? findTocUrl(pageBody, url) : null;
-      const core: ResolvedCore = {
-        seriesTitle, sourceUrl: url, host, feedUrl, tocUrl, type: 'FEED', fetchMode: 'PLAIN', match, chapters,
-      };
-      return finalize(core, ports);
+      // WP-49: an ADVERTISED feed we can't positively isolate is almost always the site-wide,
+      // multi-novel `/feed/`. WHOLE_FEED-ing it ingests every other novel's chapters. If the page
+      // is itself a real chapter list, prefer page-watch (series-scoped) over the contaminated
+      // feed — fall through to the PAGE_WATCH branch below. A guessed feed, or a page that isn't
+      // a real TOC, keeps today's behavior.
+      const cantIsolateAdvertised = positive === null && !usedGuesses;
+      if (!(cantIsolateAdvertised && pageToc.length > RENDER_ESCALATION_MAX)) {
+        const match = positive ?? (usedGuesses ? fallbackSeriesMatch(parsed.items, url) : { type: 'WHOLE_FEED' });
+        const feedChapters = filterBySeriesMatch(parsed.items, match);
+        const toc = pageToc;
+        const chapters = pageOk ? withReadingPositions(mergeFeedAndToc(feedChapters, toc), toc) : feedChapters;
+        const seriesTitle =
+          input.title ??
+          pageTitle ??
+          (positive?.type === 'CATEGORY'
+            ? positive.value
+            : match.type === 'WHOLE_FEED'
+              ? (parsed.title != null && !matchesSiteName(parsed.title, host) ? parsed.title : titleFromUrl(url))
+              : titleFromUrl(url));
+        const tocUrl = pageOk ? findTocUrl(pageBody, url) : null;
+        const core: ResolvedCore = {
+          seriesTitle, sourceUrl: url, host, feedUrl, tocUrl, type: 'FEED', fetchMode: 'PLAIN', match, chapters,
+        };
+        return finalize(core, ports);
+      }
+      // else: advertised multi-novel feed we can't isolate + the page is a real TOC → page-watch it.
     }
 
     // No feed, but the page loads → page-watch mode. Seed from the TOC so the first poll diffs
     // against a known set instead of re-reporting the whole backlog.
     if (pageOk) {
       const tocUrl = findTocUrl(pageBody, url);
-      let toc = parseToc(pageBody, url);
+      let toc = pageToc;
       let fetchMode: 'PLAIN' | 'RENDER' = bodyMode;
       // Under-fetch: a plain TOC that reads almost nothing is usually a JS-rendered list that
       // didn't render. Render it and keep the rendered chapters only if there are strictly more.

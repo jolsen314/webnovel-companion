@@ -323,6 +323,66 @@ describe('addSeries', () => {
     expect(result.resolved.fetchMode).toBe('PLAIN');
     expect(p.renderCalls).toEqual([]); // feed is the source of truth; no render
   });
+
+  // A page that BOTH advertises a feed and is itself a chapter list (a TOC post).
+  const pageWithToc = (feedHref: string, chapterUrls: string[]) =>
+    `<html><head><link rel="alternate" type="application/rss+xml" href="${feedHref}"></head><body><ul>${chapterUrls
+      .map((u, i) => `<li><a href="${u}">Chapter ${i + 1}</a></li>`)
+      .join('')}</ul></body></html>`;
+
+  test('WP-49: advertised multi-novel feed we cannot isolate + a real page TOC → PAGE_WATCH, not WHOLE_FEED', async () => {
+    const url = 'https://wp.example/novel-toc/';
+    const feedUrl = 'https://wp.example/feed/';
+    const chapters = Array.from({ length: 6 }, (_, i) => `https://wp.example/novel-toc/ch-${i + 1}/`);
+    const p = ports({
+      // Site-wide feed: other novels, no category, date permalinks → chooseSeriesMatch returns null.
+      [feedUrl]: ok(
+        RSS(ITEM('o1', 'https://wp.example/2026/08/11/other-ch-1/') + ITEM('o2', 'https://wp.example/2026/08/11/misc-ch-9/')),
+      ),
+      [url]: ok(pageWithToc(feedUrl, chapters)),
+    });
+
+    const result = await addSeries({ url }, p);
+
+    expect(result.resolved.type).toBe('PAGE_WATCH');
+    expect(result.resolved.feedUrl).toBeNull();
+    expect(result.resolved.fetchMode).toBe('PLAIN');
+    expect(result.resolved.match).toEqual({ type: 'WHOLE_FEED' }); // page-watch is already series-scoped
+    // Seeded from the page TOC, not the feed (order-independent: the other novels' feed items are absent).
+    expect([...result.resolved.chapters.map((c) => c.url)].sort()).toEqual([...chapters].sort());
+  });
+
+  test('WP-49: advertised feed we cannot isolate but the page is NOT a TOC (≤5 links) → stays FEED WHOLE_FEED', async () => {
+    const url = 'https://wp.example/novel-toc/';
+    const feedUrl = 'https://wp.example/feed/';
+    const p = ports({
+      [feedUrl]: ok(RSS(ITEM('o1', 'https://wp.example/2026/08/11/other-ch-1/'))),
+      // Page advertises the feed but has only 2 chapter-ish links → not a real TOC.
+      [url]: ok(pageWithToc(feedUrl, ['https://wp.example/novel-toc/ch-1/', 'https://wp.example/novel-toc/ch-2/'])),
+    });
+
+    const result = await addSeries({ url }, p);
+
+    expect(result.resolved.type).toBe('FEED');
+    expect(result.resolved.feedUrl).toBe(feedUrl);
+    expect(result.resolved.match).toEqual({ type: 'WHOLE_FEED' });
+  });
+
+  test('WP-49: a positive CATEGORY match is never diverted, even with a rich page TOC', async () => {
+    const url = 'https://wp.example/novel/beta/';
+    const feedUrl = 'https://wp.example/feed/';
+    const chapters = Array.from({ length: 6 }, (_, i) => `https://wp.example/novel/beta/ch-${i + 1}/`);
+    const p = ports({
+      // A per-novel category matching the series slug → chooseSeriesMatch returns CATEGORY (not null).
+      [feedUrl]: ok(RSS(ITEM('g1', 'https://wp.example/beta-1/', 'Beta') + ITEM('g2', 'https://wp.example/other-1/', 'Other Tale'))),
+      [url]: ok(pageWithToc(feedUrl, chapters)),
+    });
+
+    const result = await addSeries({ url }, p);
+
+    expect(result.resolved.type).toBe('FEED');
+    expect(result.resolved.match).toEqual({ type: 'CATEGORY', value: 'Beta' });
+  });
 });
 
 describe('addSeries dedup (WP-39)', () => {
