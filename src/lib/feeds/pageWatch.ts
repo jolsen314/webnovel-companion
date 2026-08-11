@@ -34,8 +34,8 @@ export interface SiteTocConfig {
   lockText?: string[];
 }
 
-const CHAPTER_TEXT = /chapter|\bch\.?\s*\d|\bep\.?\s*\d|第\s*\d+\s*[章话]/i;
-const CHAPTER_HREF = /chapter|\/ch(?:apter)?[-_/]?\d|\/ep[-_/]?\d|\/v\d+\/\d+/i;
+const CHAPTER_TEXT = /chapter|\bch\.?\s*\d|\bep(?:isode)?\.?\s*\d|第\s*\d+\s*[章话]/i;
+const CHAPTER_HREF = /chapter|\/ch(?:apter)?[-_/]?\d|\/ep(?:isode)?[-_/]?\d|\/v\d+\/\d+/i;
 const LOCK_CLASS = /class=["'][^"']*(?:lock|premium|vip|coin)[^"']*["']|fa-lock/i;
 const LOCK_TEXT = /locked|premium|\bvip\b|\bcoins?\b|🔒|🔐|unlock/i;
 /** Page chrome that must not contribute chapters — sidebars / "recent entries" widgets / nav / footer. */
