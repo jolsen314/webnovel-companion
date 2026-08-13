@@ -133,7 +133,11 @@ export async function addSeries(input: AddSeriesInput, ports: AddSeriesPorts): P
       // feed — fall through to the PAGE_WATCH branch below. A guessed feed, or a page that isn't
       // a real TOC, keeps today's behavior.
       const cantIsolateAdvertised = positive === null && !usedGuesses;
-      if (!(cantIsolateAdvertised && pageToc.length > RENDER_ESCALATION_MAX)) {
+      // WP-34: a readable page TOC that shows LOCKED chapters → prefer page-watch (track unlocks),
+      // even when the feed is isolable — the unlock event lives only in the TOC, not the feed.
+      const tocHasLocks = pageToc.some((c) => c.access === 'LOCKED');
+      const divertToPageWatch = (cantIsolateAdvertised && pageToc.length > RENDER_ESCALATION_MAX) || tocHasLocks;
+      if (!divertToPageWatch) {
         const match = positive ?? (usedGuesses ? fallbackSeriesMatch(parsed.items, url) : { type: 'WHOLE_FEED' });
         const feedChapters = filterBySeriesMatch(parsed.items, match);
         const toc = pageToc;

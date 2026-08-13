@@ -48,6 +48,7 @@ export default async function SeriesPage({ params }: { params: Promise<{ id: str
         rating={series.rating}
         chapters={chapters}
         lastReadChapterId={series.progress?.lastReadChapterId ?? null}
+        sourceType={active?.type ?? 'PAGE_WATCH'}
       />
     </section>
   );

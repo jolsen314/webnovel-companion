@@ -57,6 +57,19 @@ describe('parseToc — generic extraction', () => {
     expect(parseToc(html, base).map((c) => c.number)).toEqual([1]);
   });
 
+  test('drops unrendered dotted-expression stubs like href="chapter.permalink"', () => {
+    const html = `<html><body><main><ul>
+      <li><a href="chapter.permalink">Chapter</a></li>
+      <li><a href="/novel/x/chapter-1/">Chapter 1</a></li>
+      <li><a href="/novel/x/chapter-2/">Chapter 2</a></li>
+    </ul></main></body></html>`;
+
+    expect(parseToc(html, base).map((c) => c.url)).toEqual([
+      'https://site.example/novel/x/chapter-1/',
+      'https://site.example/novel/x/chapter-2/',
+    ]);
+  });
+
   test('Madara/lightnovel: dedupes the icon+link pair and uses the number from .epl-num / url', () => {
     // Two anchors to the same chapter (Madara emits an icon link + a title link with an empty-text title attr).
     const html = `<div class="eplister"><ul>

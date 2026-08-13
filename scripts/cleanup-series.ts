@@ -15,6 +15,8 @@ import {
   mergeSeries,
   listSeriesForCleanup,
   backfillFromToc,
+  reclassifySource,
+  renderPort,
 } from '../src/server/services/index';
 
 class UsageError extends Error {}
@@ -29,7 +31,8 @@ Commands:
   reset-chapters <seriesId>
   set-source-url <sourceId> <url>
   merge-series --from <fromId> --into <intoId>
-  backfill <seriesId>
+  backfill <seriesId> [--render]
+  reclassify-source <sourceId> [--render]
 
 Without --apply, mutating commands print a dry-run plan and make no changes.
 "list" is always read-only.`);
@@ -167,24 +170,52 @@ async function cmdMergeSeries(args: string[], apply: boolean): Promise<void> {
   console.log(`Merged: moved ${result.movedChapters} chapter(s); source series deleted: ${result.deleted}.`);
 }
 
-async function cmdBackfill(seriesId: string | undefined, apply: boolean): Promise<void> {
+async function cmdReclassifySource(sourceId: string | undefined, render: boolean, apply: boolean): Promise<void> {
+  if (!sourceId) throw new UsageError('reclassify-source requires <sourceId>');
+  const userId = getCurrentUserId();
+  const src = await db.source.findFirst({
+    where: { id: sourceId, series: { userId } },
+    select: { id: true, type: true, feedUrl: true, fetchMode: true },
+  });
+  if (!src) {
+    console.log(`No source ${sourceId} found for the current user.`);
+    return;
+  }
+  if (!apply) {
+    console.log(`[dry run] reclassify-source would flip source ${sourceId}:`);
+    console.log(
+      `  type ${src.type} → PAGE_WATCH; feedUrl ${src.feedUrl ?? '—'} → null; matcher → WHOLE_FEED; fetchMode ${src.fetchMode}${render ? ' → RENDER' : ' (unchanged)'}`,
+    );
+    console.log('Re-run with --apply to update.');
+    return;
+  }
+  const res = await reclassifySource(sourceId, { render });
+  console.log(res.updated ? `Reclassified source ${sourceId} → PAGE_WATCH${render ? '/RENDER' : ''}.` : `Source ${sourceId} not found.`);
+}
+
+async function cmdBackfill(seriesId: string | undefined, render: boolean, apply: boolean): Promise<void> {
   if (!seriesId) throw new UsageError('backfill requires <seriesId>');
+  if (render && !renderPort()) {
+    throw new UsageError(
+      'backfill --render needs RENDER_URL (+ RENDER_SECRET) in the env (point it at the deployed /api/render).',
+    );
+  }
   if (!apply) {
     console.log(
-      `[dry run] backfill would fetch series ${seriesId}'s active source page and add any older chapters ` +
-        `missing from the feed window, reconciling FREE/LOCKED access. No network request is made in dry-run mode.`,
+      `[dry run] backfill would fetch series ${seriesId}'s active source page${render ? ' via the renderer' : ''} and add missing chapters, reconciling FREE/LOCKED. No network request in dry-run.`,
     );
     console.log('Re-run with --apply to fetch and apply.');
     return;
   }
-  const result = await backfillFromToc(seriesId);
+  const result = await backfillFromToc(seriesId, render ? renderPort() : undefined);
   console.log(`Backfill complete: added ${result.added} chapter(s), reconciled ${result.reconciled}.`);
 }
 
 async function main(): Promise<void> {
   const [, , cmd, ...rest] = process.argv;
   const apply = rest.includes('--apply');
-  const args = rest.filter((a) => a !== '--apply');
+  const render = rest.includes('--render');
+  const args = rest.filter((a) => a !== '--apply' && a !== '--render');
 
   switch (cmd) {
     case 'list':
@@ -200,7 +231,9 @@ async function main(): Promise<void> {
     case 'merge-series':
       return cmdMergeSeries(args, apply);
     case 'backfill':
-      return cmdBackfill(args[0], apply);
+      return cmdBackfill(args[0], render, apply);
+    case 'reclassify-source':
+      return cmdReclassifySource(args[0], render, apply);
     default:
       throw new UsageError(cmd ? `Unknown command: ${cmd}` : 'No command given');
   }

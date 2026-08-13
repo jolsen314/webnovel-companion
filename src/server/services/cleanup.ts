@@ -55,6 +55,28 @@ export async function setSourceUrl(sourceId: string, url: string): Promise<{ upd
   return { updated: true };
 }
 
+/** Flip an owned source FEED→PAGE_WATCH: deactivate the feed, drop the series matcher, and
+ *  (when `render`) set RENDER — for CF/JS TOCs the plain fetch can't read (WP-34). */
+export async function reclassifySource(
+  sourceId: string,
+  opts: { render?: boolean } = {},
+): Promise<{ updated: boolean }> {
+  const userId = getCurrentUserId();
+  const owned = await db.source.findFirst({ where: { id: sourceId, series: { userId } }, select: { id: true } });
+  if (!owned) return { updated: false };
+  await db.source.update({
+    where: { id: sourceId },
+    data: {
+      type: 'PAGE_WATCH',
+      feedUrl: null,
+      matchType: 'WHOLE_FEED',
+      matchValue: null,
+      ...(opts.render ? { fetchMode: 'RENDER' as const } : {}),
+    },
+  });
+  return { updated: true };
+}
+
 /**
  * Fold a duplicate series (`from`) into the correct one (`into`): unique chapters (by
  * canonical URL) move over, duplicates are dropped with `from`, and `from` is deleted —

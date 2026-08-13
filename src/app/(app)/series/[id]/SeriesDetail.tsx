@@ -27,6 +27,7 @@ export function SeriesDetail(props: {
   rating: number | null;
   chapters: ChapterLite[];
   lastReadChapterId: string | null;
+  sourceType: 'FEED' | 'PAGE_WATCH';
 }) {
   const router = useRouter();
   const [status, setStatus] = useState<Status>(props.status);
@@ -34,6 +35,7 @@ export function SeriesDetail(props: {
   const [lastRead, setLastRead] = useState<string | null>(props.lastReadChapterId);
   const [busy, setBusy] = useState(false);
   const [backfillMessage, setBackfillMessage] = useState<string | null>(null);
+  const [switchMessage, setSwitchMessage] = useState<string | null>(null);
   // Initialized to 'oldest' to match the server render; the stored preference (if any) is
   // applied in an effect after mount, so there's no hydration mismatch.
   const [mode, setMode] = useState<ChapterDisplayMode>('oldest');
@@ -65,11 +67,27 @@ export function SeriesDetail(props: {
     try {
       const res = await fetch(`/api/series/${props.id}/backfill`, { method: 'POST' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const result = (await res.json()) as { added: number; reconciled: number };
-      setBackfillMessage(`Added ${result.added} · updated ${result.reconciled}`);
+      const result = (await res.json()) as { added: number; reconciled: number; rendered?: boolean };
+      setBackfillMessage(`Added ${result.added} · updated ${result.reconciled}${result.rendered ? ' · rendered' : ''}`);
       router.refresh();
     } catch {
       setBackfillMessage('Backfill failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function trackUnlocks() {
+    setBusy(true);
+    setSwitchMessage(null);
+    try {
+      const res = await fetch(`/api/series/${props.id}/switch`, { method: 'POST' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const r = (await res.json()) as { added: number; fetchMode: string; rendered: boolean };
+      setSwitchMessage(`Switched · ${r.added} chapters${r.rendered ? ' · rendered' : ''}`);
+      router.refresh();
+    } catch {
+      setSwitchMessage('Switch failed');
     } finally {
       setBusy(false);
     }
@@ -131,6 +149,16 @@ export function SeriesDetail(props: {
             </span>
           )}
         </div>
+
+        {props.sourceType === 'FEED' && (
+          <div className="control">
+            <span className="control__label">Lock-monitoring</span>
+            <button type="button" className="control__action" disabled={busy} onClick={() => void trackUnlocks()}>
+              Track unlocks (switch to TOC)
+            </button>
+            {switchMessage && <span className="control__hint" role="status">{switchMessage}</span>}
+          </div>
+        )}
 
         <div className="control">
           <span className="control__label">Show</span>

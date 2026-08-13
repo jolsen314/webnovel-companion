@@ -67,7 +67,9 @@ export function parseToc(html: string, baseUrl: string, config?: SiteTocConfig):
     const $el = $(el);
     const href = $el.attr('href');
     if (!href) return;
-    if (/[{}]|\$\{/.test(href)) return; // unrendered client-side template stub (e.g. "…/{{chapter_slug}}/")
+    // Unrendered client-side template stub: "{{chapter_slug}}"/"${…}", or a bare dotted-identifier
+    // expression like "chapter.permalink" (an Alpine/Vue `x-bind:href` value that didn't render).
+    if (/[{}]|\$\{/.test(href) || /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/.test(href.trim())) return;
     let url: string;
     try {
       url = new URL(href, baseUrl).toString();

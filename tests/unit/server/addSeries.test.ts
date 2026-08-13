@@ -425,6 +425,41 @@ describe('addSeries', () => {
     expect(result.resolved.type).toBe('FEED');
     expect(result.resolved.match).toEqual({ type: 'WHOLE_FEED' });
   });
+
+  test('WP-34: a feed whose page TOC shows a LOCKED chapter → PAGE_WATCH (track unlocks), even with a feed', async () => {
+    const url = 'https://paid.example/novel/x/';
+    const feedUrl = 'https://paid.example/feed/';
+    const page = `<html><head><link rel="alternate" type="application/rss+xml" href="${feedUrl}"></head><body><ul>
+      <li><a href="https://paid.example/novel/x/ch-1/">Chapter 1</a></li>
+      <li class="premium"><a href="https://paid.example/novel/x/ch-2/">Chapter 2</a></li>
+    </ul></body></html>`;
+    const p = ports({
+      [url]: ok(page),
+      [feedUrl]: ok(RSS(ITEM('g1', 'https://paid.example/novel/x/ch-1/'))),
+    });
+
+    const result = await addSeries({ url }, p);
+
+    expect(result.resolved.type).toBe('PAGE_WATCH');
+    expect(result.resolved.feedUrl).toBeNull();
+    expect(result.resolved.chapters.map((c) => c.access)).toEqual(['FREE', 'LOCKED']);
+  });
+
+  test('WP-34: a feed whose page TOC is all FREE stays FEED (no lock → no divert)', async () => {
+    const url = 'https://free.example/novel/y/';
+    const feedUrl = 'https://free.example/feed/';
+    const page = `<html><head><link rel="alternate" type="application/rss+xml" href="${feedUrl}"></head><body><ul>
+      <li><a href="https://free.example/novel/y/ch-1/">Chapter 1</a></li>
+    </ul></body></html>`;
+    const p = ports({
+      [url]: ok(page),
+      [feedUrl]: ok(RSS(ITEM('g1', 'https://free.example/novel/y/ch-1/'))),
+    });
+
+    const result = await addSeries({ url }, p);
+
+    expect(result.resolved.type).toBe('FEED');
+  });
 });
 
 describe('addSeries dedup (WP-39)', () => {

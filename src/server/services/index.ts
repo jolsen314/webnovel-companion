@@ -38,7 +38,16 @@ import { getNotificationPrefs } from './notificationPrefs';
 export { listSeries, getSeries, updateSeries } from './series';
 export { savePushSubscription } from './push';
 export { getNotificationPrefs, updateNotificationPrefs, type NotificationPrefsView } from './notificationPrefs';
-export { pruneChapters, deleteSeries, resetChapters, setSourceUrl, mergeSeries, listSeriesForCleanup } from './cleanup';
+export {
+  pruneChapters,
+  deleteSeries,
+  resetChapters,
+  setSourceUrl,
+  mergeSeries,
+  listSeriesForCleanup,
+  reclassifySource,
+} from './cleanup';
+import { reclassifySource } from './cleanup';
 
 /**
  * Prisma/HTTP bindings for the poll + add-series orchestration. The logic lives in
@@ -57,7 +66,7 @@ const fetchPort: FetchImpl = (url, opts) =>
   politeFetch(url, { etag: opts?.etag ?? undefined, lastModified: opts?.lastModified ?? undefined });
 
 /** The headless-render fetch port, or undefined when no renderer is configured (WP-17b). */
-function renderPort(): FetchImpl | undefined {
+export function renderPort(): FetchImpl | undefined {
   const endpoint = process.env.RENDER_URL;
   if (!endpoint) return undefined;
   return makeRenderFetch({ endpoint, secret: process.env.RENDER_SECRET });
@@ -530,4 +539,58 @@ export async function backfillFromToc(
       : []),
   ]);
   return { added: diff.new.length, reconciled: diff.accessReconciled.length, titleUpdated };
+}
+
+/** Shared plain→render escalation for a TOC backfill: read plain first; if that produced
+ *  nothing (CF-blocked / empty) and a renderer is available, retry via render. When render
+ *  recovers chapters and the series' active source is PAGE_WATCH, persist fetchMode RENDER —
+ *  a FEED source polls its feed plainly, so the render here was a one-time TOC read, not a
+ *  standing fetch-mode change. Silent — backfill fires no pushes. Used by both the in-app
+ *  "Backfill from TOC" button and `switchToPageWatch`'s post-flip seed. */
+export async function backfillWithEscalation(
+  seriesId: string,
+  ports: { fetchImpl?: FetchImpl; renderImpl?: FetchImpl } = {},
+): Promise<{ added: number; reconciled: number; rendered: boolean; titleUpdated?: string }> {
+  const fetchImpl = ports.fetchImpl ?? fetchPort;
+  const renderImpl = 'renderImpl' in ports ? ports.renderImpl : renderPort();
+  const plain = await backfillFromToc(seriesId, fetchImpl);
+  if (!(renderImpl && plain.added === 0 && plain.reconciled === 0)) {
+    return { added: plain.added, reconciled: plain.reconciled, rendered: false, titleUpdated: plain.titleUpdated };
+  }
+  const r = await backfillFromToc(seriesId, renderImpl);
+  if (r.added === 0 && r.reconciled === 0) {
+    return { added: 0, reconciled: 0, rendered: false, titleUpdated: r.titleUpdated ?? plain.titleUpdated };
+  }
+  // Render recovered chapters. Persist RENDER only for a PAGE_WATCH source — a FEED source polls its
+  // feed plainly; the render here was a one-time TOC read.
+  const userId = getCurrentUserId();
+  const src = await db.source.findFirst({ where: { seriesId, isActive: true, series: { userId } }, select: { id: true, type: true } });
+  if (src?.type === 'PAGE_WATCH') {
+    await db.source.update({ where: { id: src.id }, data: { fetchMode: 'RENDER' } });
+  }
+  return { added: r.added, reconciled: r.reconciled, rendered: true, titleUpdated: r.titleUpdated };
+}
+
+/** WP-34 "Track unlocks": flip the active FEED source to PAGE_WATCH and silently seed the TOC.
+ *  Reads plain first; if that produced nothing (CF-blocked / empty) and a renderer is available,
+ *  retries via render and persists fetchMode RENDER. Silent — backfill fires no pushes. */
+export async function switchToPageWatch(
+  seriesId: string,
+  ports: { fetchImpl?: FetchImpl; renderImpl?: FetchImpl } = {},
+): Promise<{ ok: boolean; added: number; reconciled: number; fetchMode: 'PLAIN' | 'RENDER'; rendered: boolean }> {
+  const userId = getCurrentUserId();
+  const source = await db.source.findFirst({
+    where: { seriesId, isActive: true, series: { userId } },
+    select: { id: true, type: true },
+  });
+  if (!source || source.type !== 'FEED') {
+    return { ok: false, added: 0, reconciled: 0, fetchMode: 'PLAIN', rendered: false };
+  }
+
+  await reclassifySource(source.id); // → PAGE_WATCH / PLAIN
+  const b = await backfillWithEscalation(seriesId, ports);
+  // Report the source's actual persisted fetchMode (the ratchet never downgrades, so a
+  // pre-RENDER source that didn't escalate this switch still reports RENDER).
+  const { fetchMode } = await db.source.findUniqueOrThrow({ where: { id: source.id }, select: { fetchMode: true } });
+  return { ok: true, added: b.added, reconciled: b.reconciled, fetchMode, rendered: b.rendered };
 }

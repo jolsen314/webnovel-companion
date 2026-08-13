@@ -11,6 +11,9 @@ import {
   updateSeries,
   savePushSubscription,
   backfillFromToc,
+  backfillWithEscalation,
+  reclassifySource,
+  switchToPageWatch,
   type FetchImpl,
 } from '../../src/server/services';
 import { db } from '../../src/server/db';
@@ -88,20 +91,20 @@ describe('addSeries (real DB)', () => {
   });
 
   test('WP-33: a feed series seeds its full TOC history at add, with TOC access', async () => {
-    // Page advertises the feed AND lists the full chapter history (feed shows only a-1,a-2; TOC adds a-3 locked).
+    // Page advertises the feed AND lists the full chapter history (feed shows only a-1,a-2; TOC adds a-3).
     const PAGE_HTML =
       `<html><head><link rel="alternate" type="application/rss+xml" href="${FEED_URL}"></head>` +
       `<body><ul>` +
       `<li><a href="${C1}">Chapter 1</a></li>` +
       `<li><a href="${C2}">Chapter 2</a></li>` +
-      `<li class="premium"><a href="${C3}">Chapter 3</a></li>` +
+      `<li><a href="${C3}">Chapter 3</a></li>` +
       `</ul></body></html>`;
     const fetch = fetchFrom({ [PAGE_URL]: okRes(PAGE_HTML), [FEED_URL]: okRes(RSS(ITEM('g1', C1) + ITEM('g2', C2))) });
     const { seriesId } = await addSeries({ url: PAGE_URL }, fetch);
 
     const chapters = await db.chapter.findMany({ where: { seriesId }, orderBy: { url: 'asc' } });
     expect(chapters.map((c) => c.url)).toEqual([C1, C2, C3]); // a-3 backfilled from the TOC
-    expect(chapters.find((c) => c.url === C3)!.access).toBe('LOCKED');
+    expect(chapters.find((c) => c.url === C3)!.access).toBe('FREE');
     expect(chapters.find((c) => c.url === C1)!.guid).toBe('g1'); // overlap kept the feed guid
   });
 
@@ -1184,5 +1187,197 @@ describe('pollAllSources tier filter (real DB, WP-43)', () => {
     const effects = await pollAllSources(fetch, undefined, undefined, 'all');
 
     expect(effects).toHaveLength(3);
+  });
+});
+
+describe('reclassifySource (real DB, WP-34)', () => {
+  test('WP-34: reclassifySource flips a FEED source to PAGE_WATCH (render → fetchMode RENDER)', async () => {
+    const url = 'https://paid.example/novel/z/';
+    const feedUrl = 'https://paid.example/feed/';
+    const { seriesId } = await addSeries(
+      { url },
+      fetchFrom({ [url]: okRes(PAGE(feedUrl)), [feedUrl]: okRes(RSS(ITEM('g1', 'https://paid.example/z-1/'))) }),
+    );
+    const before = await db.source.findFirstOrThrow({ where: { seriesId } });
+    expect(before.type).toBe('FEED');
+
+    const res = await reclassifySource(before.id, { render: true });
+    expect(res.updated).toBe(true);
+
+    const after = await db.source.findFirstOrThrow({ where: { seriesId } });
+    expect(after.type).toBe('PAGE_WATCH');
+    expect(after.feedUrl).toBeNull();
+    expect(after.matchType).toBe('WHOLE_FEED');
+    expect(after.matchValue).toBeNull();
+    expect(after.fetchMode).toBe('RENDER');
+  });
+
+  test('WP-34: reclassifySource without render keeps fetchMode PLAIN', async () => {
+    const url = 'https://free.example/novel/w/';
+    const feedUrl = 'https://free.example/feed/';
+    const { seriesId } = await addSeries(
+      { url },
+      fetchFrom({ [url]: okRes(PAGE(feedUrl)), [feedUrl]: okRes(RSS(ITEM('g1', 'https://free.example/w-1/'))) }),
+    );
+    const src = await db.source.findFirstOrThrow({ where: { seriesId } });
+
+    await reclassifySource(src.id);
+
+    const after = await db.source.findFirstOrThrow({ where: { seriesId } });
+    expect(after.type).toBe('PAGE_WATCH');
+    expect(after.fetchMode).toBe('PLAIN');
+  });
+
+  test('WP-34: reclassifySource without render does not reset an already-RENDER source to PLAIN (one-way ratchet)', async () => {
+    const url = 'https://ratchet.example/novel/q/';
+    const feedUrl = 'https://ratchet.example/feed/';
+    const { seriesId } = await addSeries(
+      { url },
+      fetchFrom({ [url]: okRes(PAGE(feedUrl)), [feedUrl]: okRes(RSS(ITEM('g1', 'https://ratchet.example/q-1/'))) }),
+    );
+    const src = await db.source.findFirstOrThrow({ where: { seriesId } });
+    await db.source.update({ where: { id: src.id }, data: { fetchMode: 'RENDER' } });
+
+    await reclassifySource(src.id);
+
+    const after = await db.source.findFirstOrThrow({ where: { seriesId } });
+    expect(after.type).toBe('PAGE_WATCH');
+    expect(after.fetchMode).toBe('RENDER'); // untouched, not forced back to PLAIN
+  });
+
+  test('WP-34: switchToPageWatch flips FEED→PAGE_WATCH and render-seeds a CF TOC silently', async () => {
+    const url = 'https://paid.example/novel/q/';
+    const feedUrl = 'https://paid.example/feed/';
+    // Add as FEED with an EMPTY feed window → 0 chapters seeded (clean baseline for the switch).
+    const { seriesId } = await addSeries(
+      { url },
+      fetchFrom({ [url]: okRes(PAGE(feedUrl)), [feedUrl]: okRes(RSS('')) }),
+    );
+
+    // Plain fetch of the TOC fails (CF-blocked); render returns the real TOC.
+    const plain = fetchFrom({}); // everything 404 → backfill reads nothing
+    const rendered = fetchFrom({
+      [url]: okRes(`<html><body><ul>
+        <li><a href="https://paid.example/novel/q/ch-1/">Chapter 1</a></li>
+        <li class="premium"><a href="https://paid.example/novel/q/ch-2/">Chapter 2</a></li>
+      </ul></body></html>`),
+    });
+
+    const res = await switchToPageWatch(seriesId, { fetchImpl: plain, renderImpl: rendered });
+
+    expect(res.ok).toBe(true);
+    expect(res.rendered).toBe(true);
+    expect(res.fetchMode).toBe('RENDER');
+    const src = await db.source.findFirstOrThrow({ where: { seriesId } });
+    expect(src.type).toBe('PAGE_WATCH');
+    expect(src.fetchMode).toBe('RENDER');
+    const chapters = await db.chapter.findMany({ where: { seriesId }, orderBy: { url: 'asc' } });
+    expect(chapters.map((c) => c.url)).toEqual([
+      'https://paid.example/novel/q/ch-1/',
+      'https://paid.example/novel/q/ch-2/',
+    ]);
+    expect(chapters.find((c) => c.url.endsWith('ch-2/'))!.access).toBe('LOCKED');
+  });
+
+  test('WP-34: switchToPageWatch with a plain-readable TOC stays PLAIN (no render)', async () => {
+    const url = 'https://free.example/novel/r/';
+    const feedUrl = 'https://free.example/feed/';
+    const { seriesId } = await addSeries(
+      { url },
+      fetchFrom({ [url]: okRes(PAGE(feedUrl)), [feedUrl]: okRes(RSS('')) }),
+    );
+    const plain = fetchFrom({
+      [url]: okRes(`<html><body><ul><li><a href="https://free.example/novel/r/ch-1/">Chapter 1</a></li></ul></body></html>`),
+    });
+
+    const res = await switchToPageWatch(seriesId, { fetchImpl: plain, renderImpl: fetchFrom({}) });
+
+    expect(res.rendered).toBe(false);
+    expect(res.fetchMode).toBe('PLAIN');
+    expect((await db.source.findFirstOrThrow({ where: { seriesId } })).fetchMode).toBe('PLAIN');
+  });
+
+  test('WP-34: switchToPageWatch reports the source actual fetchMode (a pre-RENDER source stays/reports RENDER)', async () => {
+    const url = 'https://free.example/novel/s/';
+    const feedUrl = 'https://free.example/feed/';
+    const { seriesId } = await addSeries({ url }, fetchFrom({ [url]: okRes(PAGE(feedUrl)), [feedUrl]: okRes(RSS('')) }));
+    await db.source.updateMany({ where: { seriesId }, data: { fetchMode: 'RENDER' } }); // simulate a prior escalation
+    const plain = fetchFrom({ [url]: okRes(`<html><body><ul><li><a href="https://free.example/novel/s/ch-1/">Chapter 1</a></li></ul></body></html>`) });
+
+    const res = await switchToPageWatch(seriesId, { fetchImpl: plain, renderImpl: fetchFrom({}) });
+
+    expect(res.rendered).toBe(false);       // plain succeeded → no escalation this switch
+    expect(res.fetchMode).toBe('RENDER');   // reports the actual persisted mode (ratchet kept RENDER)
+    expect((await db.source.findFirstOrThrow({ where: { seriesId } })).fetchMode).toBe('RENDER');
+  });
+});
+
+describe('backfillWithEscalation (real DB, WP-34)', () => {
+  const TOC = (rows: string) => `<html><body><ul>${rows}</ul></body></html>`;
+  const ROW = (url: string, locked = false) =>
+    `<li${locked ? ' class="premium"' : ''}><a href="${url}">Chapter</a></li>`;
+
+  test('PAGE_WATCH CF series: plain reads nothing, render seeds the TOC → rendered:true, fetchMode RENDER', async () => {
+    const url = 'https://cfsite.example/novel/omega/';
+    // No feed, no readable chapter list → resolves PAGE_WATCH with 0 chapters (clean baseline).
+    const { seriesId } = await addSeries({ url }, fetchFrom({ [url]: okRes('<html><body>Coming soon</body></html>') }));
+    const before = await db.source.findFirstOrThrow({ where: { seriesId } });
+    expect(before.type).toBe('PAGE_WATCH');
+    expect(before.fetchMode).toBe('PLAIN');
+
+    const plain = fetchFrom({}); // TOC url 404s → plain backfill reads nothing
+    const rendered = fetchFrom({
+      [url]: okRes(TOC(ROW('https://cfsite.example/novel/omega/ch-1/') + ROW('https://cfsite.example/novel/omega/ch-2/', true))),
+    });
+
+    const res = await backfillWithEscalation(seriesId, { fetchImpl: plain, renderImpl: rendered });
+
+    expect(res.rendered).toBe(true);
+    expect(res.added).toBe(2);
+    expect(res.reconciled).toBe(0);
+    const chapters = await db.chapter.findMany({ where: { seriesId }, orderBy: { url: 'asc' } });
+    expect(chapters).toHaveLength(2);
+    expect(chapters.find((c) => c.url.endsWith('ch-2/'))!.access).toBe('LOCKED');
+    const src = await db.source.findFirstOrThrow({ where: { seriesId } });
+    expect(src.fetchMode).toBe('RENDER');
+  });
+
+  test('FEED series: plain fails, render seeds → rendered:true, chapters seeded, fetchMode stays PLAIN (not flipped)', async () => {
+    const url = 'https://feedsite.example/novel/beta/';
+    const feedUrl = 'https://feedsite.example/feed/';
+    const { seriesId } = await addSeries({ url }, fetchFrom({ [url]: okRes(PAGE(feedUrl)), [feedUrl]: okRes(RSS('')) }));
+    const before = await db.source.findFirstOrThrow({ where: { seriesId } });
+    expect(before.type).toBe('FEED');
+    expect(before.fetchMode).toBe('PLAIN');
+
+    const plain = fetchFrom({}); // TOC url (= source.url) 404s → plain backfill reads nothing
+    const rendered = fetchFrom({
+      [url]: okRes(TOC(ROW('https://feedsite.example/novel/beta/ch-1/') + ROW('https://feedsite.example/novel/beta/ch-2/'))),
+    });
+
+    const res = await backfillWithEscalation(seriesId, { fetchImpl: plain, renderImpl: rendered });
+
+    expect(res.rendered).toBe(true);
+    expect(res.added).toBe(2);
+    const chapters = await db.chapter.findMany({ where: { seriesId } });
+    expect(chapters).toHaveLength(2);
+    const src = await db.source.findFirstOrThrow({ where: { seriesId } });
+    expect(src.type).toBe('FEED'); // untouched
+    expect(src.fetchMode).toBe('PLAIN'); // a FEED source is NOT flipped to RENDER
+  });
+
+  test('plain-readable series: plain reads the TOC → rendered:false, no fetchMode change', async () => {
+    const url = 'https://plainsite.example/novel/gamma/';
+    const { seriesId } = await addSeries({ url }, fetchFrom({ [url]: okRes('<html><body>Coming soon</body></html>') }));
+    const before = await db.source.findFirstOrThrow({ where: { seriesId } });
+    expect(before.type).toBe('PAGE_WATCH');
+
+    const plain = fetchFrom({ [url]: okRes(TOC(ROW('https://plainsite.example/novel/gamma/ch-1/'))) });
+    const res = await backfillWithEscalation(seriesId, { fetchImpl: plain, renderImpl: fetchFrom({}) });
+
+    expect(res.rendered).toBe(false);
+    expect(res.added).toBe(1);
+    const src = await db.source.findFirstOrThrow({ where: { seriesId } });
+    expect(src.fetchMode).toBe('PLAIN');
   });
 });
