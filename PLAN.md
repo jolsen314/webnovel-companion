@@ -111,6 +111,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 | WP-30 | Series title backfill from TOC — **backend core done (2026-07-31)**; **manual title-edit UI remains** (own follow-up; `titleIsManual` flag shipped and ready) | `NEXT` | WP-17, WP-10 |
 | WP-51 | Client-side delete series — per-series **Delete** on the detail page → new `DELETE /api/series/[id]` → the existing `deleteSeries` service (already backs `db:cleanup delete-series`). Confirm-gated (irreversible: series + sources + chapters + progress). Split out of **WP-CLEANUP-UI** for a quick win; **merge** + reset/edit-source stay there | `TODO` | WP-10, WP-AUTH |
 | WP-50 | Reject no-chapter / non-TOC adds — `addSeries` will create a series with **0 chapters** from a page that isn't a chapter list (a single-chapter link, a site's "browse/all-series" index, an arbitrary page), littering the library with empty junk. Guard: a **PAGE_WATCH** resolution seeding **0 chapters** (plain, and render if a renderer is available) is **rejected** with a helpful message ("this doesn't look like a chapter list — paste the series' contents/TOC page") instead of silently creating an empty series. Must **not** reject the legit FEED empties (valid series-scoped match but empty/not-in-window feed → fills in later, WP-43) | `TODO` | WP-07, WP-46 |
+| WP-45 | **API-first adapter for render sources** — probe a source for a **chapter data API** (JSON/REST or static file) and read it directly instead of render + interaction/scrape. Three shapes seen: a **plain public REST API** (*eliminates render*; returns free+premium + per-chapter access & an unlock-schedule timestamp → native WP-20 + unlock *prediction*), a **CF-gated REST API** (all chapters + per-chapter lock, but still needs render to reach), and a **static JSON file**. Generalizes the old static-SPA-only scope; biggest wins on the JS/paid sources. **Priority raised** — a network probe showed the main render/interaction sources expose such APIs | `TODO` | WP-17b, WP-20 |
 | WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` + schema + cron wiring **done**; **editor UI + push delivery (WP-09) remain** (picking up later) | `TODO` | WP-07, WP-10 |
 | WP-28 | Frontend styling & theming — ordering, feed-page vs library split, theme system (night default + cultivation ancient-scroll, sci-fi holographic-panel), long-title readability (wrap/clamp vs ellipsis) | `TODO` | WP-10 |
 | WP-18 | Completed shelf + backfill + "Move to Completed?" | `TODO` | WP-10 |
@@ -123,11 +124,10 @@ later-tier tables are reference only. `⭐` = load-bearing.
 | WP-14 | `lib/dedup.ts` (pure) — "already read this?" | `TODO` | WP-00 |
 | WP-15 | `lib/search.ts` (pure) — filter/query building | `TODO` | WP-00 |
 | WP-EXPORT | One-click data export (`/api/export` → JSON) — own-your-data insurance | `TODO` | WP-AUTH |
-| WP-31 | *(low)* Tab-structured premium TOCs — renderer clicks Free/Premium tabs + tab-membership access marking (unblocks WP-20 "now free" where locked chapters live behind a tab) | `TODO` | WP-17b, WP-20 |
 | WP-32 | *(low)* `parseToc` robustness — follow split/paginated sibling TOCs (bounded "next chapters" hops) + **all non-chapter anchor filtering** (pagination + shortcut/CTA like "Last chapter"/"Read") + **URL-slug number authority** (trust a delimited `/chapter-<N>-` over a concatenated title number) | `TODO` | WP-17, WP-35 |
-| WP-45 | *(low)* JSON-adapter rung for static-SPA sources — read a site's static, 304-able chapter JSON directly instead of rendering; bespoke per source, only if the pattern recurs (RENDER handles it today) | `TODO` | WP-17b |
 | WP-47 | *(low)* Client resubscribe on VAPID key mismatch — `resyncSubscription` re-posts a stale browser sub whose `applicationServerKey` ≠ current key, so a 403-pruned sub churns (prune→re-add) and the client shows "subscribed" while receiving nothing; detect the key mismatch on load and unsubscribe + re-subscribe under the new key. Makes key rotation self-healing on the client | `TODO` | WP-09 |
 | WP-WORKID | *(low, future)* Map a source to a community novel-aggregator's canonical work ID (lists a work's alternative/translated titles) for automatic cross-translation identity — described generically here (no real aggregator name, anonymity rule) | `TODO` | WP-05, WP-17 |
+| WP-31 | *(low — see WP-45)* Renderer per-host interaction descriptor — clicks Free/Premium **tabs** (+ tab-membership access) **and client-side numbered pagination** ("Prev/Next" TOCs that replace ~50/page → click Next & union pages). **Only for interaction sites with NO data API** — where a source exposes a chapter API, **WP-45 supersedes this** (a probe found the main tab/pagination sources *do* have APIs → dropped in priority). | `TODO` | WP-17b, WP-20 |
 
 ### ✅ Completed
 
@@ -463,6 +463,13 @@ fallback, which derives the title from the URL slug — see "Add-time isolation 
   already yields a decent name) or an item-title common prefix / the `<link rel=alternate>` title attr. Distinct from
   the acronym-slug case (that was a *failed* page fetch → `titleFromUrl` slug); here the fetch succeeded and a real
   feed's channel title was the culprit.
+- **Third cause — the page's only `<h1>` is a consent/cookie banner (owner testing, 2026-08-13: a render-cleared
+  WordPress source).** `extractSeriesTitle` reads `<h1>` first, but on some sites the sole `<h1>` is a **CCPA/consent-
+  manager banner** ("Opt out of the sale or sharing of personal information", "We value your privacy", cookie strings)
+  — the series name is in **no** heading, only `<title>`. So the stored title becomes the consent-banner text.
+  **Fix:** treat a boilerplate/consent-banner `<h1>` as *not a title* (small known-phrase reject-list, and/or skip an
+  `<h1>` inside a consent/cookie container) and fall through to `og:title` → `<title>` (the existing host-matched
+  suffix strip then yields the right name). Cheap, and it also hardens the h1-first path generally.
 
 ### WP-31 — Tab-structured premium TOCs (renderer tab capture + tab-membership access)
 
@@ -488,6 +495,19 @@ production renderer both **under-captures** and **mis-classifies**, so WP-20's "
 2. **Tab-aware access classification.** A `SiteTocConfig` rule (or tab-scoped parse) marking premium-tab chapters
    `LOCKED`, free-tab `FREE`, since row markers don't exist. This is the concrete "real locked TOC" that WP-20
    deferred its lock-detection tuning to.
+3. **Client-side numbered pagination — a third interaction the per-host descriptor must cover (owner testing,
+   2026-08-13: a render-cleared WordPress source).** Its TOC is an **Alpine.js** component rendering **~50 chapters per
+   page** with **"Previous"/"Next"** buttons (`@click`, `href="#"`) — *not* "load more". The renderer's loop only clicks
+   `load more|show more|more chapters`, so it captured page 1 (~50 of ~200). And Next **replaces** the visible 50
+   (pagination, not append), so the interaction must **click Next and *union* chapters across pages** until Next is gone
+   — reading the final DOM alone isn't enough. Same `clickWhileVisible`/accumulate vocabulary as `readTabs`.
+   **Better fix where a data API exists — verified on this source (2026-08-13):** its "Next" calls a custom WP-REST
+   endpoint (`/wp-json/<ns>/v1/chapters?category=<termId>&per_page=100&page=N`) returning **`{title, permalink,
+   locked, price}` per chapter** — all N chapters in ⌈total/100⌉ calls from the CF-cleared browser context, **and the
+   per-chapter `locked` field feeds WP-20 directly** (no DOM lock-marker scraping — strictly better than the generic
+   `parseToc` lock heuristics for this site). An static-json adapter beats click-through here; keep click-"Next"-and-union
+   as the fallback for sites with no such API. (Distinct from WP-32's *server-side* sibling-page "next chapters"
+   following, which needs no renderer.)
 
 **Note:** contradicts the WP-17b "validated ~261 links" changelog line — production `route.ts` lands on the Free tab,
 so that figure was free-only or taken differently; re-confirm with a prod `/api/render` curl when picked up. **Gets its
@@ -507,7 +527,9 @@ navigation to a *new URL*.
 1. **Follow-next-page in page-watch (the durable fix).** After parsing a TOC, follow anchors whose text matches
    `next chapters?|older|newer` (case-insensitive), for a **bounded** number of hops, and **union** the chapters
    across pages. Generic — handles this site and any future split TOCs. (Rejected: watch only the "front" slug — it
-   rolls to a new slug and breaks silently; register both slugs manually — brittle as pages grow.)
+   rolls to a new slug and breaks silently; register both slugs manually — brittle as pages grow.) **This is the
+   *server-side* pagination flavor** (anchors to new URLs, no renderer). The *client-side/JS* flavor — an Alpine
+   "Prev/Next" TOC that swaps ~50/page in place — is a **renderer** interaction and lives in **WP-31**, not here.
 2. **Filter non-chapter anchors polluting `parseToc` — this WP owns ALL anchor-level filtering.** (WP-36's region
    scoping, done, drops sidebar/nav/footer *containers*; this is the in-content anchor-level pass — keep it in one
    place, not scattered.) Two flavors seen so far:
@@ -815,12 +837,32 @@ sources into their own bounded pass. Cheap, and it's a **latent correctness** is
 the moment there are more sources than fit in 60s — worth doing before it bites, not after. Pairs with WP-27 (cadence
 gating trims the daily set) and WP-40 (making CF-static cheap/304 shrinks per-source cost).
 
-### WP-45 — JSON-adapter rung for static-SPA sources (low priority)
+### WP-45 — API-first adapter for render sources (generalized from static-SPA JSON)
 
-**Priority: low — only worth building if this pattern recurs** (more than the single source seen 2026-07-30). RENDER
-already handles it generically; this is purely a cost optimization.
+**Priority raised (2026-08-13).** Originally scoped to one static-JSON SPA and filed low. A **network probe across the
+render/interaction sources** changed that: several expose a **chapter data API** that's far better than render +
+DOM-scrape/interaction — some **eliminate render entirely** and even carry the paid→free **unlock schedule**. So an
+**API-first adapter** — *probe for a chapter data source before defaulting to render + interaction* — is now a real
+strategy, not a one-off. **Three shapes seen (anonymized):**
+- **A plain, public REST API** (JS-rendered paid source): one un-authed GET returns **all** chapters (free + premium,
+  by volume) with per-chapter `isFree` / **`freeAt` (scheduled-unlock timestamp)** / `price`. **No CF, no render, no
+  tab-clicking** → this source should leave the render tier entirely; it moots **WP-31**'s tab-capture *and* gives
+  native **WP-20** unlocks *and* predicted unlocks (better than WP-29 guessing). Biggest win.
+- **A CF-gated REST API** (WordPress paid source): returns all chapters + per-chapter `locked`, but the endpoint is
+  **behind the CF challenge** — reachable only from the CF-cleared browser (still needs render), though it skips the
+  Alpine pagination click-through and the DOM lock-marker heuristics once past CF.
+- **A static JSON file** (the original 2026-07-30 SPA): plain, `etag`/304-able, CORS-open; adapter reads it directly.
+- **Not universal:** some render sources **embed** their chapter data in-page and expose **no** API (a load-more source
+  fetched only banners/similar-projects) → those still need render + interaction. And **static-HTML sources don't need
+  this** (chapters already in the HTML). So the adapter is opportunistic, discovered per source.
 
-**Motivation (owner testing, 2026-07-30):** a **static SPA** (a Cloudflare Pages host) returns only a ~2.4 KB shell on
+**Work:** a per-source **API descriptor** (endpoint template + field mapping: url/permalink, number, title, access
+`isFree`/`locked`, unlock `freeAt`) tried **before** render; falls back to render + interaction when no API is found.
+Feed the access/`freeAt` fields straight into WP-20. Bespoke per source, but the payoff (drop render, native unlocks)
+is now high enough to prioritize. Relates to WP-17b (render fallback), WP-20 (access/unlocks), WP-31 (superseded where
+an API exists), WP-27 (a completed source is also "fetch-once, rarely re-poll").
+
+**Original motivation (owner testing, 2026-07-30):** a **static SPA** (a Cloudflare Pages host) returns only a ~2.4 KB shell on
 plain fetch — an empty chapter container + a single **"Read" CTA** — and injects its full chapter list (hundreds)
 *client-side* from a **static JSON data file** the shell points at (`data-title="…/<slug>.json"`). So `parseToc` on the
 plain HTML captures just the CTA; the chapters are invisible without JS. **RENDER captures them all** (validated: the JS
@@ -831,9 +873,9 @@ fills the list, not virtualized), and the WP-17b escalation self-heals it (plain
 directly (chapter url from an index field, number from the `"Ch N: …"` title, series title from a sibling meta JSON),
 skipping the headless render entirely: cheap, conditional-GET-friendly, and **correct titles** (render's first-wins
 dedupe otherwise labels ch 1 with the "Read" CTA text — the WP-32 anchor issue). **Cost:** the JSON shape is
-site-specific, so this is a **bespoke adapter per source**, not generic — hence only justified once several such sites
-exist. Until then, render is the right call. Relates to WP-17b (render) and WP-27 (a *completed* static SPA is also a
-"render-once, then rarely re-poll" case).
+site-specific, so this is a **bespoke adapter per source**, not generic. *(2026-08-13: this static-JSON case was the
+first of the three shapes above; the probe finding several more — including render-eliminating and access-carrying
+APIs — is what raised the overall priority.)*
 
 ### WP-48 — Blogger feed-path in `guessFeedUrls`
 
@@ -939,6 +981,29 @@ optionally `deactivate-source`) so WP-49-style recoveries are fully tool-support
 
 ## Changelog
 
+- **2026-08-13** — **API-first probe across render sources → raised WP-45, lowered WP-31.** Checked whether the
+  JS/render/interaction sources expose a **chapter data API** to skip render + tab/pagination/load-more. Result varied:
+  a JS paid source has a **plain public REST API** (no CF, no auth) returning all free+premium chapters with
+  `isFree`/`freeAt`(scheduled-unlock)/`price` → **eliminates render**, moots its tab-capture, and gives native WP-20 +
+  predicted unlocks; a WordPress paid source has a **CF-gated** REST API (all + `locked`, still needs render to reach);
+  the earlier static-JSON SPA is a third shape. But a load-more source **embeds** its data (no API), and static-HTML
+  sources don't need one. So **WP-45 was generalized** from "static-SPA JSON" to a broad **API-first adapter** (probe
+  for a data source before render + interaction; feed access/`freeAt` into WP-20) and **moved up** the queue; **WP-31**
+  (renderer tab/pagination interaction) was **moved down** and marked *superseded by WP-45 where a source has an API*
+  (the main tab/pagination sources do). Also verified a split-TOC source has **no** API (sitemap 500 / `wp-json` 401 /
+  empty feeds) → its follow-next-page (WP-32) stands. (Real-site detail in local, uncommitted notes.)
+- **2026-08-13** — **Folded two render-source findings into WP-30 + WP-31 (from a render-cleared WordPress source).**
+  A newly-RENDER series came in with a wrong title and only ~50 of ~200 chapters. **(1) Title:** the page's *only*
+  `<h1>` was a **CCPA/consent-manager banner** ("Opt out of the sale…"); `extractSeriesTitle` (h1-first) grabbed it —
+  the real name was only in `<title>`. → **WP-30** gains a "third cause": reject boilerplate/consent-banner h1s and
+  fall through to `og:title`/`<title>`. **(2) Pagination:** the TOC is **Alpine.js client-side pagination** (~50/page,
+  "Prev/Next" `@click`, not "load more") that **replaces** the page → the renderer only got page 1. → **WP-31** (now
+  the general renderer per-host interaction descriptor) gains a third interaction: click "Next" and **union across
+  pages** — but the **better fix (verified)** is the site's **WP-REST chapters API**, which returns all chapters *and*
+  a per-chapter **`locked`** flag → full list + native **WP-20** access in a few JSON calls, no DOM scraping;
+  cross-referenced from WP-32 (which owns the *server-side* sibling-page flavor). Both `TODO`. Also **corrected the
+  source's classification** in local notes: render **clears** it → it's the render-clearable class (server-side WP-20
+  unlocks feasible), not the anti-headless "needs-unblocker" set.
 - **2026-08-13** — **Filed WP-50 + WP-51 (small add-path/cleanup WPs), slotted just below WP-30 (owner).** **WP-50** —
   reject no-chapter / non-TOC adds: `addSeries` silently creates an empty (0-chapter) series from a chapter link,
   a "browse all series" index, or an arbitrary page; guard a PAGE_WATCH-0-chapter resolution (plain + render) with a
