@@ -514,6 +514,30 @@ describe('updateSeries (real DB)', () => {
   test('returns null for a series that is not the current user’s', async () => {
     expect(await updateSeries('nonexistent-id', { status: 'DROPPED' })).toBeNull();
   });
+
+  test('WP-30: setting title pins titleIsManual, and backfill then leaves it alone', async () => {
+    const LANDING = 'https://ut.example/series/omega/';
+    const { seriesId } = await addSeries(
+      { url: LANDING },
+      fetchFrom({ [LANDING]: okRes(`<h1>Auto Name</h1><a href="/series/omega/chapter-1">Chapter 1</a>`) }),
+    );
+
+    const result = await updateSeries(seriesId, { title: 'My Hand-Fixed Name' });
+    expect(result).not.toBeNull();
+
+    const afterEdit = await db.series.findFirstOrThrow({ where: { id: seriesId } });
+    expect(afterEdit.title).toBe('My Hand-Fixed Name');
+    expect(afterEdit.titleIsManual).toBe(true);
+
+    // Auto-backfill must not clobber the hand-fix.
+    const backfill = await backfillFromToc(
+      seriesId,
+      fetchFrom({ [LANDING]: okRes(`<h1>Auto Name</h1><a href="/series/omega/chapter-1">Chapter 1</a><a href="/series/omega/chapter-2">Chapter 2</a>`) }),
+    );
+    const afterBackfill = await db.series.findFirstOrThrow({ where: { id: seriesId } });
+    expect(afterBackfill.title).toBe('My Hand-Fixed Name');
+    expect(backfill.titleUpdated).toBeUndefined();
+  });
 });
 
 describe('evaluateSchedules (real DB)', () => {

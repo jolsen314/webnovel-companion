@@ -46,12 +46,14 @@ uncommitted notes." Real names/URLs live only in those local notes and in scratc
 
 ## Current focus
 
-> **NEXT: WP-30 — series title backfill from TOC, manual title-edit UI.** Backend core landed 2026-07-31
-> (`extractSeriesTitle` h1/og/title + host-matched suffix strip, `Series.titleIsManual`, add-time/backfill title
-> precedence); the remaining piece is the in-app manual title-edit UI. Full priority order = the **▶ Active queue**
-> table.
+> **NEXT: WP-51 — client-side delete series.** Per-series **Delete** on the detail page → new
+> `DELETE /api/series/[id]` → the existing `deleteSeries` service (already backs `db:cleanup delete-series`);
+> confirm-gated since it's irreversible (series + sources + chapters + progress). Full priority order = the
+> **▶ Active queue** table.
 >
-> **Recently landed (newest first):** WP-34 (feed→TOC switch to lock-monitoring — add-time lock detect diverts a
+> **Recently landed (newest first):** WP-30 (series title backfill **complete** — manual title-edit UI: inline
+> detail-page h1 edit → PATCH title → `titleIsManual` pinned so auto-backfill won't clobber it) · WP-34 (feed→TOC
+> switch to lock-monitoring — add-time lock detect diverts a
 > readable locked-TOC feed to PAGE_WATCH; a `reclassifySource` flip primitive + `switchToPageWatch` power a detail-page
 > **"Track unlocks"** button and CLI `reclassify-source [--render]`; render-clears-CF validated against a real CF site
 > as a subset case) · WP-49 (page-watch divert for un-isolable multi-novel advertised feeds — when an
@@ -64,10 +66,7 @@ uncommitted notes." Real names/URLs live only in those local notes and in scratc
 > keying in `canonicalSeriesId`, pure `findSimilarTitle` + a **create-then-annotate** `similarTo` hint surfaced as a
 > non-blocking notice on the add page; the multi-novel matcher-type-flip is covered in spirit by the annotate net,
 > true multi-novel matcher intelligence is deferred; filed **WP-CLEANUP-UI** + **WP-WORKID** as follow-ups) ·
-> WP-30 (series title backfill from TOC — **backend core**: `extractSeriesTitle`
-> h1/og/title + host-matched suffix strip, `Series.titleIsManual`, add-time page-title precedence over a
-> site-name channel title, backfill self-heals a non-manual title from the landing page; **manual title-edit UI still
-> deferred** as its own follow-up) · WP-37 (per-series chapter-TOC URL: auto-resolve at add, self-heal at backfill) ·
+> WP-37 (per-series chapter-TOC URL: auto-resolve at add, self-heal at backfill) ·
 > WP-39 (add-time dedup via `canonicalSeriesId`) · WP-27a (reading-status cadence gating) · WP-43 (2h external
 > GitHub-Actions trigger, PLAIN tier) · WP-41 (poll time-budget guard + least-recently-polled rotation) · WP-42
 > (poll-once-per-feed + politeness). Full detail in the ✅ Completed table, each `### WP-NN` section, and the Changelog.
@@ -108,11 +107,11 @@ later-tier tables are reference only. `⭐` = load-bearing.
 
 | ID | Work package | Status | Depends on |
 |----|--------------|--------|------------|
-| WP-30 | Series title backfill from TOC — **backend core done (2026-07-31)**; **manual title-edit UI remains** (own follow-up; `titleIsManual` flag shipped and ready) | `NEXT` | WP-17, WP-10 |
-| WP-51 | Client-side delete series — per-series **Delete** on the detail page → new `DELETE /api/series/[id]` → the existing `deleteSeries` service (already backs `db:cleanup delete-series`). Confirm-gated (irreversible: series + sources + chapters + progress). Split out of **WP-CLEANUP-UI** for a quick win; **merge** + reset/edit-source stay there | `TODO` | WP-10, WP-AUTH |
+| WP-51 | Client-side delete series — per-series **Delete** on the detail page → new `DELETE /api/series/[id]` → the existing `deleteSeries` service (already backs `db:cleanup delete-series`). Confirm-gated (irreversible: series + sources + chapters + progress). Split out of **WP-CLEANUP-UI** for a quick win; **merge** + reset/edit-source stay there | `NEXT` | WP-10, WP-AUTH |
 | WP-50 | Reject no-chapter / non-TOC adds — `addSeries` will create a series with **0 chapters** from a page that isn't a chapter list (a single-chapter link, a site's "browse/all-series" index, an arbitrary page), littering the library with empty junk. Guard: a **PAGE_WATCH** resolution seeding **0 chapters** (plain, and render if a renderer is available) is **rejected** with a helpful message ("this doesn't look like a chapter list — paste the series' contents/TOC page") instead of silently creating an empty series. Must **not** reject the legit FEED empties (valid series-scoped match but empty/not-in-window feed → fills in later, WP-43) | `TODO` | WP-07, WP-46 |
 | WP-45 | **API-first adapter for render sources** — probe a source for a **chapter data API** (JSON/REST or static file) and read it directly instead of render + interaction/scrape. Three shapes seen: a **plain public REST API** (*eliminates render*; returns free+premium + per-chapter access & an unlock-schedule timestamp → native WP-20 + unlock *prediction*), a **CF-gated REST API** (all chapters + per-chapter lock, but still needs render to reach), and a **static JSON file**. Generalizes the old static-SPA-only scope; biggest wins on the JS/paid sources. **Priority raised** — a network probe showed the main render/interaction sources expose such APIs | `TODO` | WP-17b, WP-20 |
 | WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` + schema + cron wiring **done**; **editor UI + push delivery (WP-09) remain** (picking up later) | `TODO` | WP-07, WP-10 |
+| WP-30b | `lib/feeds/title.ts` extraction fixes — **(1) consent/cookie-banner `<h1>` reject-list**: the sole `<h1>` on some sites is a CCPA/cookie banner, so it's grabbed as the title; treat a boilerplate/consent `<h1>` as not-a-title (small known-phrase reject-list and/or skip an `<h1>` inside a consent/cookie container) and fall through to `og:title` → `<title>`. **(2) HTML-entity decode at extraction**: `extractSeriesTitle` stores the page `<h1>`/`og:title`/`<title>` without decoding HTML entities (`&#8217;`/`&#8216;`/`&#8220;`/`&#038;`/`&nbsp;` bake into the DB as raw codes instead of glyphs); decode named + numeric entities at extraction so new adds are clean and WP-30's non-manual backfill self-heals existing rows (display-side decode fallback stays WP-28). Backend/pure `lib/feeds/title.ts` fix; TDD | `TODO` | WP-30 |
 | WP-28 | Frontend styling & theming — ordering, feed-page vs library split, theme system (night default + cultivation ancient-scroll, sci-fi holographic-panel), long-title readability (wrap/clamp vs ellipsis) | `TODO` | WP-10 |
 | WP-18 | Completed shelf + backfill + "Move to Completed?" | `TODO` | WP-10 |
 | WP-19 | Non-destructive re-pointing + "find new source" helper (also: on a duplicate add (WP-39), optionally offer to attach the pasted URL as an **alternate source** on the existing series rather than only rejecting) | `TODO` | WP-16, WP-18 |
@@ -132,7 +131,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 ### ✅ Completed
 
 WP-00, WP-GH, WP-CI, WP-12 (bootstrap / CI / docs) · WP-01, WP-03 (pure diff / health) · WP-04, WP-05, WP-FE (schema, feed parse/discover, fetcher) · WP-06, WP-07, WP-08 (Next shell, services, API) · WP-09, WP-10, WP-AUTH, WP-11 (Web Push, library/detail UI, auth gate, deploy) · WP-17, WP-17b (page-watch + headless renderer) · WP-20 (paid→free "now free") · WP-33 (full-TOC backfill + `accessReconciled`) · WP-35 (TOC-order chapters + display toggle) · WP-36 (`parseToc` content scoping) · WP-38 (contaminated-series recovery script) · WP-42 (poll-once-per-feed + politeness) · WP-41 (poll time-budget guard + rotation) · WP-43 (frequent PLAIN-tier polling) · WP-27a (status-gated + cadence polling) · WP-39 (add-time dedup) · WP-37 (per-series chapter-TOC URL) ·
-WP-39b (deeper add-dedup, re-scoped: tocUrl page-watch keying + create-then-annotate) · WP-48 (Blogger feed-path in `guessFeedUrls`) · WP-46 (add-time render escalation + poll regression guard) · WP-49 (page-watch divert for un-isolable multi-novel advertised feeds) · WP-34 (feed→TOC switch to lock-monitoring).
+WP-39b (deeper add-dedup, re-scoped: tocUrl page-watch keying + create-then-annotate) · WP-48 (Blogger feed-path in `guessFeedUrls`) · WP-46 (add-time render escalation + poll regression guard) · WP-49 (page-watch divert for un-isolable multi-novel advertised feeds) · WP-34 (feed→TOC switch to lock-monitoring) · WP-30 (series title backfill + manual title-edit UI).
 
 ### ⏭ Later tiers (M2–M4)
 
@@ -411,14 +410,15 @@ raw entity `&#8217;` (e.g. *"…I&#8217;ll…"* instead of *"…I'll…"*) — a
 HTML-decoding**, so the entity is baked into the DB row (confirmed on a prod series). Two fixes, ideally both:
 **(a) primary — decode at extraction** (decode named + numeric HTML entities in `extractSeriesTitle`, and audit any
 other page-sourced text that isn't run through rss-parser's decoder); this cleans new adds, and the WP-30 non-manual
-title backfill self-heals existing rows on the next page read. **(b) catch-all — decode at display** in the
+title backfill self-heals existing rows on the next page read. **(Now tracked as WP-30b**, alongside the consent-h1
+fix — same file.**)** **(b) catch-all — decode at display** in the
 library/detail title render, which fixes rows already stored encoded without waiting for a re-extract. Belongs partly
-in the data layer, filed here because the visible symptom + the display-decode safety net are frontend; coordinate the
-extraction half with WP-30.
+in the data layer, filed here because the visible symptom + the display-decode safety net are frontend; stays under
+WP-28.
 
 ### WP-30 — Series title backfill from TOC + manual title edit
 
-**DONE (backend core, 2026-07-31).** Pure `extractSeriesTitle(html, {siteName?})` (`lib/feeds/title.ts`) reads
+**DONE** (backend core 2026-07-31; manual title-edit UI 2026-08-13). Pure `extractSeriesTitle(html, {siteName?})` (`lib/feeds/title.ts`) reads
 `<h1>` → `og:title` → `<title>`, with a conservative **host-matched** suffix strip across pipe and
 hyphen/en-dash/em-dash separators (only strips a trailing `" | <Site>"`/`" – <Site>"` when it matches the source's
 own host) and returns `null` when there's no usable heading; a companion `matchesSiteName` does a loose
@@ -430,11 +430,10 @@ mislabeling the series with its host's name. **At backfill-time** (`backfillFrom
 from the **landing page** (landing-primary, per WP-37's reverse-info finding): the self-heal path (no `tocUrl` yet)
 reuses the already-fetched landing body for the title extraction at **zero extra fetch**; a backfill where `tocUrl`
 was already set does one extra `source.url` fetch just for the title. Silent — no push — and returns
-`titleUpdated?` from the backfill result. **Manual title-edit UI is still deferred as its own follow-up
-sub-project** — the detail-UI input + PATCH `/api/series/[id]` (extending `parseSeriesUpdate` to accept `title` and
-set `titleIsManual = true`) haven't been built yet; the `titleIsManual` flag shipped specifically so that follow-up
-has a clean flag to write to and auto-backfill already respects it (won't clobber a manually-set title once the UI
-exists). Enables a cleaner **WP-39b(a)** (page-watch home-vs-TOC dedup can now lean on a WP-30-clean title match, not
+`titleUpdated?` from the backfill result. **Manual title-edit UI shipped 2026-08-13** — an inline detail-page
+`<h1>` edit (pencil → input, Enter/Esc/Save/Cancel) PATCHes `/api/series/[id]` with `{ title }` (extending
+`parseSeriesUpdate` to accept `title`); the service persists it and sets `titleIsManual = true` so auto-backfill
+won't clobber the hand-fix. Enables a cleaner **WP-39b(a)** (page-watch home-vs-TOC dedup can now lean on a WP-30-clean title match, not
 just canonical URL). Unit tests for `extractSeriesTitle`/`matchesSiteName`; integration tests for the add-time
 preference (incl. the site-name-channel-title guard) and both backfill repair paths (self-heal-free and
 tocUrl-already-set) plus the manual-title-not-clobbered case.
@@ -464,7 +463,7 @@ fallback, which derives the title from the URL slug — see "Add-time isolation 
   the acronym-slug case (that was a *failed* page fetch → `titleFromUrl` slug); here the fetch succeeded and a real
   feed's channel title was the culprit.
 - **Third cause — the page's only `<h1>` is a consent/cookie banner (owner testing, 2026-08-13: a render-cleared
-  WordPress source).** `extractSeriesTitle` reads `<h1>` first, but on some sites the sole `<h1>` is a **CCPA/consent-
+  WordPress source).** **(Now tracked as WP-30b.)** `extractSeriesTitle` reads `<h1>` first, but on some sites the sole `<h1>` is a **CCPA/consent-
   manager banner** ("Opt out of the sale or sharing of personal information", "We value your privacy", cookie strings)
   — the series name is in **no** heading, only `<title>`. So the stored title becomes the consent-banner text.
   **Fix:** treat a boilerplate/consent-banner `<h1>` as *not a title* (small known-phrase reject-list, and/or skip an
@@ -981,6 +980,16 @@ optionally `deactivate-source`) so WP-49-style recoveries are fully tool-support
 
 ## Changelog
 
+- **2026-08-13** — **WP-30 done: manual title-edit UI (inline detail-page `<h1>` edit → PATCH title →
+  `titleIsManual` pinned).** Closes out WP-30 (title-backfill core landed 2026-07-31; this ships the escape-hatch UI):
+  a pencil affordance on the series detail-page `<h1>` swaps to an input (Enter/Esc/Save/Cancel), PATCHes
+  `/api/series/[id]` with `{ title }`, and the service persists it while setting `titleIsManual = true` so
+  auto-backfill won't clobber a hand-fix. Validation (trim/empty/non-string/≤500) + service + component, unit +
+  integration tested (no React harness, so the component is verified by app-driving). WP-30 moves to ✅ Completed;
+  `NEXT` advances to **WP-51**. Its "third cause" (consent/cookie-banner `<h1>` reject-list) is split out as a
+  standalone active-queue row, **WP-30b**, so it isn't orphaned now that WP-30 itself is done — and the WP-28
+  HTML-entity-decode-at-extraction note (same file, `lib/feeds/title.ts`) is folded into WP-30b alongside it, since
+  both are small pure extraction fixes to the same module; the display-side entity-decode fallback stays under WP-28.
 - **2026-08-13** — **API-first probe across render sources → raised WP-45, lowered WP-31.** Checked whether the
   JS/render/interaction sources expose a **chapter data API** to skip render + tab/pagination/load-more. Result varied:
   a JS paid source has a **plain public REST API** (no CF, no auth) returning all free+premium chapters with

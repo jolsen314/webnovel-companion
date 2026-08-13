@@ -50,6 +50,26 @@ describe('parseSeriesUpdate', () => {
   ])('rejects %j (%s)', (input, _why) => {
     expect(parseSeriesUpdate(input).ok).toBe(false);
   });
+
+  test('accepts a title and stores it trimmed', () => {
+    expect(parseSeriesUpdate({ title: '  The Real Name  ' })).toEqual({
+      ok: true,
+      value: { title: 'The Real Name' },
+    });
+  });
+
+  test('rejects an empty or whitespace-only title', () => {
+    expect(parseSeriesUpdate({ title: '' }).ok).toBe(false);
+    expect(parseSeriesUpdate({ title: '   ' }).ok).toBe(false);
+  });
+
+  test('rejects a non-string title', () => {
+    expect(parseSeriesUpdate({ title: 123 }).ok).toBe(false);
+  });
+
+  test('rejects an over-length title', () => {
+    expect(parseSeriesUpdate({ title: 'x'.repeat(501) }).ok).toBe(false);
+  });
 });
 
 describe('parsePushSubscription', () => {

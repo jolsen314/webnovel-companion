@@ -45,6 +45,7 @@ export interface SeriesUpdate {
   status?: SeriesStatus;
   rating?: number;
   notes?: string;
+  title?: string;
   lastReadChapterId?: string | null;
 }
 
@@ -65,6 +66,13 @@ export function parseSeriesUpdate(input: unknown): ParseResult<SeriesUpdate> {
   if (input.notes !== undefined) {
     if (typeof input.notes !== 'string') return err('"notes" must be a string.');
     value.notes = input.notes;
+  }
+  if (input.title !== undefined) {
+    if (typeof input.title !== 'string') return err('"title" must be a string.');
+    const title = input.title.trim();
+    if (title.length === 0) return err('"title" cannot be empty.');
+    if (title.length > 500) return err('"title" is too long.');
+    value.title = title;
   }
   if (input.lastReadChapterId !== undefined) {
     if (input.lastReadChapterId !== null && typeof input.lastReadChapterId !== 'string') {

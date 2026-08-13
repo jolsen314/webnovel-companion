@@ -83,6 +83,10 @@ export async function updateSeries(id: string, patch: SeriesUpdate): Promise<{ i
   }
   if (patch.rating !== undefined) seriesData.rating = patch.rating;
   if (patch.notes !== undefined) seriesData.notes = patch.notes;
+  if (patch.title !== undefined) {
+    seriesData.title = patch.title;
+    seriesData.titleIsManual = true;
+  }
   if (Object.keys(seriesData).length > 0) ops.push(db.series.update({ where: { id }, data: seriesData }));
 
   if (patch.lastReadChapterId !== undefined) {

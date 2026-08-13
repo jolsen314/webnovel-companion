@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getSeries } from '../../../../server/services';
+import { EditableTitle } from './EditableTitle';
 import { SeriesDetail, type ChapterLite } from './SeriesDetail';
 
 export const dynamic = 'force-dynamic';
@@ -28,7 +29,7 @@ export default async function SeriesPage({ params }: { params: Promise<{ id: str
       <Link href="/" className="detail__back">
         ← Shelf
       </Link>
-      <h1 className="detail__title">{series.title}</h1>
+      <EditableTitle id={series.id} initialTitle={series.title} />
       <div className="detail__meta">
         {active && (
           <>
