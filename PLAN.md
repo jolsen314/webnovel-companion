@@ -109,11 +109,13 @@ later-tier tables are reference only. `⭐` = load-bearing.
 | ID | Work package | Status | Depends on |
 |----|--------------|--------|------------|
 | WP-30 | Series title backfill from TOC — **backend core done (2026-07-31)**; **manual title-edit UI remains** (own follow-up; `titleIsManual` flag shipped and ready) | `NEXT` | WP-17, WP-10 |
+| WP-51 | Client-side delete series — per-series **Delete** on the detail page → new `DELETE /api/series/[id]` → the existing `deleteSeries` service (already backs `db:cleanup delete-series`). Confirm-gated (irreversible: series + sources + chapters + progress). Split out of **WP-CLEANUP-UI** for a quick win; **merge** + reset/edit-source stay there | `TODO` | WP-10, WP-AUTH |
+| WP-50 | Reject no-chapter / non-TOC adds — `addSeries` will create a series with **0 chapters** from a page that isn't a chapter list (a single-chapter link, a site's "browse/all-series" index, an arbitrary page), littering the library with empty junk. Guard: a **PAGE_WATCH** resolution seeding **0 chapters** (plain, and render if a renderer is available) is **rejected** with a helpful message ("this doesn't look like a chapter list — paste the series' contents/TOC page") instead of silently creating an empty series. Must **not** reject the legit FEED empties (valid series-scoped match but empty/not-in-window feed → fills in later, WP-43) | `TODO` | WP-07, WP-46 |
 | WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` + schema + cron wiring **done**; **editor UI + push delivery (WP-09) remain** (picking up later) | `TODO` | WP-07, WP-10 |
 | WP-28 | Frontend styling & theming — ordering, feed-page vs library split, theme system (night default + cultivation ancient-scroll, sci-fi holographic-panel), long-title readability (wrap/clamp vs ellipsis) | `TODO` | WP-10 |
 | WP-18 | Completed shelf + backfill + "Move to Completed?" | `TODO` | WP-10 |
 | WP-19 | Non-destructive re-pointing + "find new source" helper (also: on a duplicate add (WP-39), optionally offer to attach the pasted URL as an **alternate source** on the existing series rather than only rejecting) | `TODO` | WP-16, WP-18 |
-| WP-CLEANUP-UI | In-app cleanup surfacing `db:cleanup` (delete/merge series, delete/reset chapters, edit source/TOC URL) — **merge** doubles as the manual same-work/different-translation resolver, the target of the add-page "Merge" affordance from WP-39b's create-then-annotate flow | `TODO` | WP-10 |
+| WP-CLEANUP-UI | In-app cleanup surfacing `db:cleanup` (**merge** series, delete/reset chapters, edit source/TOC URL) — **merge** doubles as the manual same-work/different-translation resolver, the target of the add-page "Merge" affordance from WP-39b's create-then-annotate flow. *(Series-**delete** split out to WP-51.)* | `TODO` | WP-10 |
 | WP-16 | Host-level health aggregation (site-down vs novel-moved) | `TODO` | WP-03, WP-07 |
 | WP-13 | `lib/completion.ts` (pure) — plan-to-read heuristic | `TODO` | WP-00 |
 | WP-21 | Plan-to-read completion watch (wire WP-13 + notify) — compare **max chapter number** vs target, not post count | `TODO` | WP-13, WP-07 |
@@ -937,6 +939,12 @@ optionally `deactivate-source`) so WP-49-style recoveries are fully tool-support
 
 ## Changelog
 
+- **2026-08-13** — **Filed WP-50 + WP-51 (small add-path/cleanup WPs), slotted just below WP-30 (owner).** **WP-50** —
+  reject no-chapter / non-TOC adds: `addSeries` silently creates an empty (0-chapter) series from a chapter link,
+  a "browse all series" index, or an arbitrary page; guard a PAGE_WATCH-0-chapter resolution (plain + render) with a
+  reject/help message, while still allowing the legit FEED not-in-window empty (WP-43). **WP-51** — client-side delete
+  series: a detail-page Delete → `DELETE /api/series/[id]` → the existing `deleteSeries` service; split out of
+  WP-CLEANUP-UI (which keeps merge/reset/edit) for a quick win. `NEXT` unchanged (**WP-30**).
 - **2026-08-12** — **WP-34 done: feed→TOC switch to lock-monitoring (backend + CLI + in-app button).** Add-time
   lock-detect diverts a readable locked-TOC feed to PAGE_WATCH; a `reclassifySource` flip primitive + `switchToPageWatch`
   (flip + silent render-escalating backfill) power a detail-page **"Track unlocks"** button (`POST /api/series/[id]/switch`)
