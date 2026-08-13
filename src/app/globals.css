@@ -313,6 +313,51 @@ body {
   cursor: not-allowed;
   opacity: 0.6;
 }
+.detail__danger {
+  margin: 0.4rem 0 1rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--color-line);
+}
+.detail__danger--open {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+.detail__danger-warning {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.85rem;
+  max-width: 42rem;
+}
+.detail__danger-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+.danger-button {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--color-down);
+  background: transparent;
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+}
+.danger-button:hover:not(:disabled) {
+  border-color: var(--color-down);
+}
+.danger-button--solid {
+  color: var(--color-ink);
+  background: var(--color-down);
+  border-color: var(--color-down);
+}
+.danger-button--solid:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+.danger-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
 .control__hint {
   font-family: var(--font-mono);
   font-size: 0.68rem;
@@ -528,6 +573,63 @@ body {
 .card:hover {
   border-color: color-mix(in oklab, var(--color-glow) 45%, var(--color-line));
   transform: translateY(-1px);
+}
+.card-wrap {
+  position: relative;
+}
+.card__delete {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 1;
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 0.25rem 0.4rem;
+  color: var(--color-muted);
+  background: color-mix(in oklab, var(--color-surface-2) 88%, transparent);
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.card-wrap:hover .card__delete,
+.card__delete:focus-visible {
+  opacity: 1;
+}
+.card__delete:hover {
+  color: var(--color-down);
+  border-color: var(--color-down);
+}
+/* Touch / no-hover devices: always show the trash so it's reachable. */
+@media (hover: none) {
+  .card__delete {
+    opacity: 1;
+  }
+}
+.card__confirm {
+  position: absolute;
+  top: 2.4rem;
+  right: 0.5rem;
+  z-index: 2;
+  width: min(20rem, calc(100% - 1rem));
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.7rem 0.8rem;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+.card__confirm-text {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--color-paper);
+}
+.card__confirm-actions {
+  display: flex;
+  gap: 0.5rem;
 }
 /* the bookmark ribbon — present only on cards with unread chapters */
 .card__ribbon {

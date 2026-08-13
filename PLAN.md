@@ -46,12 +46,14 @@ uncommitted notes." Real names/URLs live only in those local notes and in scratc
 
 ## Current focus
 
-> **NEXT: WP-51 — client-side delete series.** Per-series **Delete** on the detail page → new
-> `DELETE /api/series/[id]` → the existing `deleteSeries` service (already backs `db:cleanup delete-series`);
-> confirm-gated since it's irreversible (series + sources + chapters + progress). Full priority order = the
-> **▶ Active queue** table.
+> **NEXT: WP-PW — Playwright E2E harness + backfill UI coverage.** Stand up the deferred Playwright/E2E harness
+> (config + one auth-aware setup that clears the WP-AUTH gate), then work the seeded **UI-coverage checklist**
+> (WP detail) so the UI-only flows that shipped without automated coverage (WP-10, WP-34, WP-30, WP-51) get it
+> before the backlog grows. Full priority order = the **▶ Active queue** table.
 >
-> **Recently landed (newest first):** WP-30 (series title backfill **complete** — manual title-edit UI: inline
+> **Recently landed (newest first):** WP-51 (client-side delete series — `DELETE` route + confirm-gated detail
+> delete above the chapters + per-card shelf trash that's a Link-sibling; seeded WP-PW) · WP-30 (series title
+> backfill **complete** — manual title-edit UI: inline
 > detail-page h1 edit → PATCH title → `titleIsManual` pinned so auto-backfill won't clobber it) · WP-34 (feed→TOC
 > switch to lock-monitoring — add-time lock detect diverts a
 > readable locked-TOC feed to PAGE_WATCH; a `reclassifySource` flip primitive + `switchToPageWatch` power a detail-page
@@ -107,7 +109,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 
 | ID | Work package | Status | Depends on |
 |----|--------------|--------|------------|
-| WP-51 | Client-side delete series — per-series **Delete** on the detail page → new `DELETE /api/series/[id]` → the existing `deleteSeries` service (already backs `db:cleanup delete-series`). Confirm-gated (irreversible: series + sources + chapters + progress). Split out of **WP-CLEANUP-UI** for a quick win; **merge** + reset/edit-source stay there | `NEXT` | WP-10, WP-AUTH |
+| WP-PW | **Playwright E2E harness + backfill UI coverage** — stand up the deferred Playwright/E2E harness (config, one auth-aware setup), then work the **UI-coverage checklist** (WP detail) of shipped UI-only flows that ship without automated coverage. Standing rule: any UI-only WP appends its flow(s) to that checklist | `NEXT` | WP-10, WP-AUTH |
 | WP-50 | Reject no-chapter / non-TOC adds — `addSeries` will create a series with **0 chapters** from a page that isn't a chapter list (a single-chapter link, a site's "browse/all-series" index, an arbitrary page), littering the library with empty junk. Guard: a **PAGE_WATCH** resolution seeding **0 chapters** (plain, and render if a renderer is available) is **rejected** with a helpful message ("this doesn't look like a chapter list — paste the series' contents/TOC page") instead of silently creating an empty series. Must **not** reject the legit FEED empties (valid series-scoped match but empty/not-in-window feed → fills in later, WP-43) | `TODO` | WP-07, WP-46 |
 | WP-45 | **API-first adapter for render sources** — probe a source for a **chapter data API** (JSON/REST or static file) and read it directly instead of render + interaction/scrape. Three shapes seen: a **plain public REST API** (*eliminates render*; returns free+premium + per-chapter access & an unlock-schedule timestamp → native WP-20 + unlock *prediction*), a **CF-gated REST API** (all chapters + per-chapter lock, but still needs render to reach), and a **static JSON file**. Generalizes the old static-SPA-only scope; biggest wins on the JS/paid sources. **Priority raised** — a network probe showed the main render/interaction sources expose such APIs | `TODO` | WP-17b, WP-20 |
 | WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` + schema + cron wiring **done**; **editor UI + push delivery (WP-09) remain** (picking up later) | `TODO` | WP-07, WP-10 |
@@ -131,7 +133,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 ### ✅ Completed
 
 WP-00, WP-GH, WP-CI, WP-12 (bootstrap / CI / docs) · WP-01, WP-03 (pure diff / health) · WP-04, WP-05, WP-FE (schema, feed parse/discover, fetcher) · WP-06, WP-07, WP-08 (Next shell, services, API) · WP-09, WP-10, WP-AUTH, WP-11 (Web Push, library/detail UI, auth gate, deploy) · WP-17, WP-17b (page-watch + headless renderer) · WP-20 (paid→free "now free") · WP-33 (full-TOC backfill + `accessReconciled`) · WP-35 (TOC-order chapters + display toggle) · WP-36 (`parseToc` content scoping) · WP-38 (contaminated-series recovery script) · WP-42 (poll-once-per-feed + politeness) · WP-41 (poll time-budget guard + rotation) · WP-43 (frequent PLAIN-tier polling) · WP-27a (status-gated + cadence polling) · WP-39 (add-time dedup) · WP-37 (per-series chapter-TOC URL) ·
-WP-39b (deeper add-dedup, re-scoped: tocUrl page-watch keying + create-then-annotate) · WP-48 (Blogger feed-path in `guessFeedUrls`) · WP-46 (add-time render escalation + poll regression guard) · WP-49 (page-watch divert for un-isolable multi-novel advertised feeds) · WP-34 (feed→TOC switch to lock-monitoring) · WP-30 (series title backfill + manual title-edit UI).
+WP-39b (deeper add-dedup, re-scoped: tocUrl page-watch keying + create-then-annotate) · WP-48 (Blogger feed-path in `guessFeedUrls`) · WP-46 (add-time render escalation + poll regression guard) · WP-49 (page-watch divert for un-isolable multi-novel advertised feeds) · WP-34 (feed→TOC switch to lock-monitoring) · WP-30 (series title backfill + manual title-edit UI) · WP-51 (client-side delete series — detail + shelf).
 
 ### ⏭ Later tiers (M2–M4)
 
@@ -155,6 +157,20 @@ WP-39b (deeper add-dedup, re-scoped: tocUrl page-watch keying + create-then-anno
 ---
 
 ## Near-term work packages (detail)
+
+### WP-PW — Playwright E2E harness + backfill UI coverage
+
+Stand up the Playwright E2E harness the README has long deferred (`playwright.config.ts`, an auth-aware
+setup that clears the WP-AUTH gate once), then backfill coverage for UI flows that shipped **without any
+automated test** (no React harness existed when they landed). **Standing close-out rule:** every UI-only WP
+appends its flow(s) here at completion, so deferred coverage is tracked, not lost.
+
+**UI-coverage checklist (cover when the harness lands):**
+- [ ] WP-10 — library grid renders; detail-page Status / Rating / mark-read controls PATCH + reflect.
+- [ ] WP-34 — "Track unlocks (switch to TOC)" button; "Backfill from TOC" button (detail controls).
+- [ ] WP-30 — inline title edit (`EditableTitle`): pencil → edit → save → title updates + persists.
+- [ ] WP-51 — delete: detail inline confirm → redirected to shelf, series gone; shelf trash → confirm →
+      card disappears, and tapping trash does NOT open the card.
 
 ### WP-GH — Git + private GitHub repo, first push
 
@@ -980,6 +996,16 @@ optionally `deactivate-source`) so WP-49-style recoveries are fully tool-support
 
 ## Changelog
 
+- **2026-08-13** — **WP-51 done: client-side delete series.** Added a `DELETE /api/series/[id]` route over the
+  existing `deleteSeries` cascade (already backed `db:cleanup delete-series`). Two confirm-gated entry points:
+  a **detail-page** delete — rendered **above the chapter list** per owner call — that inline two-step-reveals
+  a confirm and, on success, redirects to the shelf; and a **shelf-card** delete — a trash button that's a
+  *sibling* of the card `Link` (so tapping it never opens the series) behind a compact confirm popover, then
+  `router.refresh()` on success. WP-51 moves to ✅ Completed. Since no React test harness existed when this (and
+  the other recent UI-only WPs) landed, coverage was verified by app-driving rather than automated tests — so a
+  new **WP-PW** (Playwright E2E harness + backfill UI coverage) was filed and made `NEXT`: stand up the deferred
+  harness, then work through a seeded **UI-coverage checklist** (WP-10, WP-34, WP-30, WP-51) so that deferred
+  coverage is tracked instead of lost, and lands before the backlog grows further.
 - **2026-08-13** — **WP-30 done: manual title-edit UI (inline detail-page `<h1>` edit → PATCH title →
   `titleIsManual` pinned).** Closes out WP-30 (title-backfill core landed 2026-07-31; this ships the escape-hatch UI):
   a pencil affordance on the series detail-page `<h1>` swaps to an input (Enter/Esc/Save/Cancel), PATCHes

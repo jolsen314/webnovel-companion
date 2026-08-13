@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSeries, updateSeries } from '../../../../server/services';
+import { getSeries, updateSeries, deleteSeries } from '../../../../server/services';
 import { parseSeriesUpdate } from '../../../../server/api/validation';
 
 export const dynamic = 'force-dynamic';
@@ -26,5 +26,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const updated = await updateSeries(id, parsed.value);
   if (!updated) return NextResponse.json({ error: 'Series not found.' }, { status: 404 });
+  return NextResponse.json({ ok: true });
+}
+
+export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const result = await deleteSeries(id);
+  if (!result.deleted) return NextResponse.json({ error: 'Series not found.' }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

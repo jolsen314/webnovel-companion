@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { arrangeChapters, type ChapterDisplayMode } from '../../../../lib/reading';
+import { DeleteSeries } from './DeleteSeries';
 
 const STATUSES = ['READING', 'COMPLETED', 'PAUSED', 'DROPPED', 'PLANNED'] as const;
 type Status = (typeof STATUSES)[number];
@@ -23,6 +24,7 @@ export interface ChapterLite {
 
 export function SeriesDetail(props: {
   id: string;
+  title: string;
   status: Status;
   rating: number | null;
   chapters: ChapterLite[];
@@ -177,6 +179,8 @@ export function SeriesDetail(props: {
           </div>
         </div>
       </div>
+
+      <DeleteSeries id={props.id} title={props.title} chapterCount={props.chapters.length} />
 
       <ol className="chapters">
         {arranged.map((c) => {

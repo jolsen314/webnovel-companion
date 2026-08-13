@@ -45,6 +45,7 @@ export default async function SeriesPage({ params }: { params: Promise<{ id: str
 
       <SeriesDetail
         id={series.id}
+        title={series.title}
         status={status}
         rating={series.rating}
         chapters={chapters}
