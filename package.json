@@ -10,6 +10,7 @@
     "start": "next start",
     "test": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
+    "test:e2e": "playwright test",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "postinstall": "prisma generate",
@@ -20,6 +21,7 @@
     "db:cleanup": "tsx scripts/cleanup-series.ts"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^22.20.1",
     "@types/react": "^19.2.17",

@@ -46,12 +46,15 @@ uncommitted notes." Real names/URLs live only in those local notes and in scratc
 
 ## Current focus
 
-> **NEXT: WP-PW — Playwright E2E harness + backfill UI coverage.** Stand up the deferred Playwright/E2E harness
-> (config + one auth-aware setup that clears the WP-AUTH gate), then work the seeded **UI-coverage checklist**
-> (WP detail) so the UI-only flows that shipped without automated coverage (WP-10, WP-34, WP-30, WP-51) get it
-> before the backlog grows. Full priority order = the **▶ Active queue** table.
+> **NEXT: WP-50 — reject no-chapter / non-TOC adds.** Guard `addSeries` so a PAGE_WATCH resolution seeding
+> **0 chapters** (a single-chapter link, a "browse all series" index, an arbitrary page) is rejected with a
+> helpful message instead of silently creating an empty series — while still allowing the legit FEED
+> not-in-window empty (WP-43). Full priority order = the **▶ Active queue** table.
 >
-> **Recently landed (newest first):** WP-51 (client-side delete series — `DELETE` route + confirm-gated detail
+> **Recently landed (newest first):** WP-PW (Playwright E2E harness — gate-off `next dev` + dedicated
+> `webnovel_e2e` seed/reset; specs for delete, title edit, library/detail controls + chapter links, and the
+> source-action buttons (network-stubbed); a CI `e2e` job; the whole UI-coverage checklist cleared) · WP-51
+> (client-side delete series — `DELETE` route + confirm-gated detail
 > delete above the chapters + per-card shelf trash that's a Link-sibling; seeded WP-PW) · WP-30 (series title
 > backfill **complete** — manual title-edit UI: inline
 > detail-page h1 edit → PATCH title → `titleIsManual` pinned so auto-backfill won't clobber it) · WP-34 (feed→TOC
@@ -109,8 +112,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 
 | ID | Work package | Status | Depends on |
 |----|--------------|--------|------------|
-| WP-PW | **Playwright E2E harness + backfill UI coverage** — stand up the deferred Playwright/E2E harness (config, one auth-aware setup), then work the **UI-coverage checklist** (WP detail) of shipped UI-only flows that ship without automated coverage. Standing rule: any UI-only WP appends its flow(s) to that checklist | `NEXT` | WP-10, WP-AUTH |
-| WP-50 | Reject no-chapter / non-TOC adds — `addSeries` will create a series with **0 chapters** from a page that isn't a chapter list (a single-chapter link, a site's "browse/all-series" index, an arbitrary page), littering the library with empty junk. Guard: a **PAGE_WATCH** resolution seeding **0 chapters** (plain, and render if a renderer is available) is **rejected** with a helpful message ("this doesn't look like a chapter list — paste the series' contents/TOC page") instead of silently creating an empty series. Must **not** reject the legit FEED empties (valid series-scoped match but empty/not-in-window feed → fills in later, WP-43) | `TODO` | WP-07, WP-46 |
+| WP-50 | Reject no-chapter / non-TOC adds — `addSeries` will create a series with **0 chapters** from a page that isn't a chapter list (a single-chapter link, a site's "browse/all-series" index, an arbitrary page), littering the library with empty junk. Guard: a **PAGE_WATCH** resolution seeding **0 chapters** (plain, and render if a renderer is available) is **rejected** with a helpful message ("this doesn't look like a chapter list — paste the series' contents/TOC page") instead of silently creating an empty series. Must **not** reject the legit FEED empties (valid series-scoped match but empty/not-in-window feed → fills in later, WP-43) | `NEXT` | WP-07, WP-46 |
 | WP-45 | **API-first adapter for render sources** — probe a source for a **chapter data API** (JSON/REST or static file) and read it directly instead of render + interaction/scrape. Three shapes seen: a **plain public REST API** (*eliminates render*; returns free+premium + per-chapter access & an unlock-schedule timestamp → native WP-20 + unlock *prediction*), a **CF-gated REST API** (all chapters + per-chapter lock, but still needs render to reach), and a **static JSON file**. Generalizes the old static-SPA-only scope; biggest wins on the JS/paid sources. **Priority raised** — a network probe showed the main render/interaction sources expose such APIs | `TODO` | WP-17b, WP-20 |
 | WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` + schema + cron wiring **done**; **editor UI + push delivery (WP-09) remain** (picking up later) | `TODO` | WP-07, WP-10 |
 | WP-30b | `lib/feeds/title.ts` extraction fixes — **(1) consent/cookie-banner `<h1>` reject-list**: the sole `<h1>` on some sites is a CCPA/cookie banner, so it's grabbed as the title; treat a boilerplate/consent `<h1>` as not-a-title (small known-phrase reject-list and/or skip an `<h1>` inside a consent/cookie container) and fall through to `og:title` → `<title>`. **(2) HTML-entity decode at extraction**: `extractSeriesTitle` stores the page `<h1>`/`og:title`/`<title>` without decoding HTML entities (`&#8217;`/`&#8216;`/`&#8220;`/`&#038;`/`&nbsp;` bake into the DB as raw codes instead of glyphs); decode named + numeric entities at extraction so new adds are clean and WP-30's non-manual backfill self-heals existing rows (display-side decode fallback stays WP-28). Backend/pure `lib/feeds/title.ts` fix; TDD | `TODO` | WP-30 |
@@ -133,7 +135,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 ### ✅ Completed
 
 WP-00, WP-GH, WP-CI, WP-12 (bootstrap / CI / docs) · WP-01, WP-03 (pure diff / health) · WP-04, WP-05, WP-FE (schema, feed parse/discover, fetcher) · WP-06, WP-07, WP-08 (Next shell, services, API) · WP-09, WP-10, WP-AUTH, WP-11 (Web Push, library/detail UI, auth gate, deploy) · WP-17, WP-17b (page-watch + headless renderer) · WP-20 (paid→free "now free") · WP-33 (full-TOC backfill + `accessReconciled`) · WP-35 (TOC-order chapters + display toggle) · WP-36 (`parseToc` content scoping) · WP-38 (contaminated-series recovery script) · WP-42 (poll-once-per-feed + politeness) · WP-41 (poll time-budget guard + rotation) · WP-43 (frequent PLAIN-tier polling) · WP-27a (status-gated + cadence polling) · WP-39 (add-time dedup) · WP-37 (per-series chapter-TOC URL) ·
-WP-39b (deeper add-dedup, re-scoped: tocUrl page-watch keying + create-then-annotate) · WP-48 (Blogger feed-path in `guessFeedUrls`) · WP-46 (add-time render escalation + poll regression guard) · WP-49 (page-watch divert for un-isolable multi-novel advertised feeds) · WP-34 (feed→TOC switch to lock-monitoring) · WP-30 (series title backfill + manual title-edit UI) · WP-51 (client-side delete series — detail + shelf).
+WP-39b (deeper add-dedup, re-scoped: tocUrl page-watch keying + create-then-annotate) · WP-48 (Blogger feed-path in `guessFeedUrls`) · WP-46 (add-time render escalation + poll regression guard) · WP-49 (page-watch divert for un-isolable multi-novel advertised feeds) · WP-34 (feed→TOC switch to lock-monitoring) · WP-30 (series title backfill + manual title-edit UI) · WP-51 (client-side delete series — detail + shelf) · WP-PW (Playwright E2E harness + WP-10/30/34/51 coverage + CI job).
 
 ### ⏭ Later tiers (M2–M4)
 
@@ -160,17 +162,24 @@ WP-39b (deeper add-dedup, re-scoped: tocUrl page-watch keying + create-then-anno
 
 ### WP-PW — Playwright E2E harness + backfill UI coverage
 
-Stand up the Playwright E2E harness the README has long deferred (`playwright.config.ts`, an auth-aware
-setup that clears the WP-AUTH gate once), then backfill coverage for UI flows that shipped **without any
-automated test** (no React harness existed when they landed). **Standing close-out rule:** every UI-only WP
-appends its flow(s) here at completion, so deferred coverage is tracked, not lost.
+**DONE (2026-08-15).** Stood up the Playwright E2E harness the README had long deferred: `playwright.config.ts`
+serves the app via **`next dev` gate-off** (no `AUTH_SECRET` → middleware open in dev; `next start` can't be
+used — it forces production and fail-closes the gate) against a dedicated **`webnovel_e2e`** Postgres DB, with
+`e2e/support/db.ts` (guarded `resetDb` + `seedSeries`) and a per-test reset fixture. All four shipped UI-only
+flow-groups are covered (`e2e/*.spec.ts`), plus a new CI **`e2e` job** (Postgres service + Playwright + migrate
++ run). WP-34's network-triggering buttons are covered with `page.route()` stubs (deterministic + offline; the
+server-side add/reconcile stays owned by the integration tests). The harness is structured so a future
+**auth-aware** switch is config-localized (add `AUTH_SECRET`/`AUTH_PASSWORD_HASH` to `webServer.env` + a
+`globalSetup` login → `storageState`; test bodies unchanged). Also untracked the generated `next-env.d.ts`
+(dev/build flips its route-types path, so running E2E kept dirtying the tree). **Standing close-out rule:**
+every UI-only WP appends its flow(s) to the checklist below at completion, so deferred coverage stays tracked.
 
-**UI-coverage checklist (cover when the harness lands):**
-- [ ] WP-10 — library grid renders; detail-page Status / Rating / mark-read controls PATCH + reflect.
-- [ ] WP-34 — "Track unlocks (switch to TOC)" button; "Backfill from TOC" button (detail controls).
-- [ ] WP-30 — inline title edit (`EditableTitle`): pencil → edit → save → title updates + persists.
-- [ ] WP-51 — delete: detail inline confirm → redirected to shelf, series gone; shelf trash → confirm →
-      card disappears, and tapping trash does NOT open the card.
+**UI-coverage checklist:**
+- [x] WP-10 — library grid renders; chapters render as clickable links; Status / Rating / mark-read persist.
+- [x] WP-34 — "Track unlocks (switch to TOC)" + "Backfill from TOC" buttons fire + surface their result (stubbed).
+- [x] WP-30 — inline title edit (`EditableTitle`): pencil → edit → save → title updates + persists.
+- [x] WP-51 — delete: detail inline confirm → redirected to shelf, series gone; shelf trash → confirm →
+      card disappears, tapping trash does NOT open the card; Cancel guards on both surfaces.
 
 ### WP-GH — Git + private GitHub repo, first push
 
@@ -996,6 +1005,18 @@ optionally `deactivate-source`) so WP-49-style recoveries are fully tool-support
 
 ## Changelog
 
+- **2026-08-15** — **WP-PW done: Playwright E2E harness + UI coverage + CI.** Stood up the deferred E2E harness:
+  `playwright.config.ts` serves the app via **`next dev` gate-off** (no `AUTH_SECRET` → middleware open in dev;
+  `next start` is unusable — it forces production, fail-closing the gate) against a dedicated **`webnovel_e2e`**
+  Postgres DB, with a guarded `resetDb` + `seedSeries` (`e2e/support/db.ts`) and a per-test reset fixture. Nine
+  specs cover all four shipped UI-only flow-groups — WP-51 delete (detail + shelf + Cancel guards + no-navigate),
+  WP-30 title edit, WP-10 library/detail controls + clickable chapter links, WP-34 source-action buttons (Backfill
+  / Track-unlocks **stubbed via `page.route()`** — deterministic + offline; the server-side add/reconcile stays
+  owned by the integration tests). Added a CI **`e2e` job** (Postgres service + `playwright install` + `migrate
+  deploy` + run, report artifact on failure), so the coverage is enforced on every PR — the WP-PW checklist is
+  cleared. Harness is structured for a cheap future **auth-aware** switch (config-localized). Untracked the
+  generated `next-env.d.ts` (its dev/build route-types path flip was dirtying the tree on every E2E run). `NEXT`
+  advances to **WP-50**.
 - **2026-08-13** — **WP-51 done: client-side delete series.** Added a `DELETE /api/series/[id]` route over the
   existing `deleteSeries` cascade (already backed `db:cleanup delete-series`). Two confirm-gated entry points:
   a **detail-page** delete — rendered **above the chapter list** per owner call — that inline two-step-reveals

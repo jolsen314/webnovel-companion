@@ -214,7 +214,7 @@ model VocabCard {
 - **web-push (VAPID)** — server-side push
 - **rss-parser** — feed parsing (with conditional GET)
 - **Vercel + Vercel Cron** — hosting + the periodic poll job
-- **Vitest** (unit + integration) **+ Playwright** (E2E, later)
+- **Vitest** (unit + integration) **+ Playwright** (E2E — gate-off `next dev`, `e2e/`)
 - **Python + FastAPI + kiwipiepy** — Korean NLP sidecar (later)
 
 ---
@@ -237,7 +237,7 @@ Generate VAPID keys once with `npx web-push generate-vapid-keys` and put them in
 
 - **Unit** (`tests/unit`): the pure logic — `sm2` scheduling, feed `diff`, `completion` heuristic, `dedup`, `search`. Test properties, not hard-coded snapshots (e.g. diff detects new items with no duplicates; SM-2 advances due dates and clamps ease).
 - **Integration** (`tests/integration`): API routes against a real test Postgres, run as a serialized Vitest project so DB state doesn't race.
-- **E2E** (later, Playwright): add series → simulate a new feed item → assert a push is sent; mine a word → it appears due for review.
+- **E2E** (`e2e/`, Playwright — `npm run test:e2e`): drives the real UI against a dedicated `webnovel_e2e` DB, with the auth gate off (`next dev`, no `AUTH_SECRET`). Covers delete (detail + shelf), title edit, library/detail controls + chapter links, and the source-action buttons (network stubbed). See [e2e/README.md](e2e/README.md). CI-enforced. *(Future: push/vocab flows.)*
 
 ---
 
