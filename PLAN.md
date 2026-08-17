@@ -46,12 +46,14 @@ uncommitted notes." Real names/URLs live only in those local notes and in scratc
 
 ## Current focus
 
-> **NEXT: WP-50 — reject no-chapter / non-TOC adds.** Guard `addSeries` so a PAGE_WATCH resolution seeding
-> **0 chapters** (a single-chapter link, a "browse all series" index, an arbitrary page) is rejected with a
-> helpful message instead of silently creating an empty series — while still allowing the legit FEED
-> not-in-window empty (WP-43). Full priority order = the **▶ Active queue** table.
+> **NEXT: WP-45 — API-first adapter for render sources.** Probe a source for a **chapter data API** (JSON/REST or
+> a static file) and read it directly instead of render + interaction/scrape — biggest wins on the JS/paid
+> sources, where a network probe found the main render/interaction sources already expose such an API. Full
+> priority order = the **▶ Active queue** table.
 >
-> **Recently landed (newest first):** WP-PW (Playwright E2E harness — gate-off `next dev` + dedicated
+> **Recently landed (newest first):** WP-50 (link-only add — when a site is CF-blocked or a page has no chapter
+> list, a reason-specific confirm offers a link-only shelf entry; `needsConfirm`/`allowLinkOnly`,
+> `Source.linkOnly` excluded from polling, badge on shelf+detail; filed WP-NOTES + WP-RETRY) · WP-PW (Playwright E2E harness — gate-off `next dev` + dedicated
 > `webnovel_e2e` seed/reset; specs for delete, title edit, library/detail controls + chapter links, and the
 > source-action buttons (network-stubbed); a CI `e2e` job; the whole UI-coverage checklist cleared) · WP-51
 > (client-side delete series — `DELETE` route + confirm-gated detail
@@ -112,8 +114,8 @@ later-tier tables are reference only. `⭐` = load-bearing.
 
 | ID | Work package | Status | Depends on |
 |----|--------------|--------|------------|
-| WP-50 | Reject no-chapter / non-TOC adds — `addSeries` will create a series with **0 chapters** from a page that isn't a chapter list (a single-chapter link, a site's "browse/all-series" index, an arbitrary page), littering the library with empty junk. Guard: a **PAGE_WATCH** resolution seeding **0 chapters** (plain, and render if a renderer is available) is **rejected** with a helpful message ("this doesn't look like a chapter list — paste the series' contents/TOC page") instead of silently creating an empty series. Must **not** reject the legit FEED empties (valid series-scoped match but empty/not-in-window feed → fills in later, WP-43) | `NEXT` | WP-07, WP-46 |
-| WP-45 | **API-first adapter for render sources** — probe a source for a **chapter data API** (JSON/REST or static file) and read it directly instead of render + interaction/scrape. Three shapes seen: a **plain public REST API** (*eliminates render*; returns free+premium + per-chapter access & an unlock-schedule timestamp → native WP-20 + unlock *prediction*), a **CF-gated REST API** (all chapters + per-chapter lock, but still needs render to reach), and a **static JSON file**. Generalizes the old static-SPA-only scope; biggest wins on the JS/paid sources. **Priority raised** — a network probe showed the main render/interaction sources expose such APIs | `TODO` | WP-17b, WP-20 |
+| WP-45 | **API-first adapter for render sources** — probe a source for a **chapter data API** (JSON/REST or static file) and read it directly instead of render + interaction/scrape. Three shapes seen: a **plain public REST API** (*eliminates render*; returns free+premium + per-chapter access & an unlock-schedule timestamp → native WP-20 + unlock *prediction*), a **CF-gated REST API** (all chapters + per-chapter lock, but still needs render to reach), and a **static JSON file**. Generalizes the old static-SPA-only scope; biggest wins on the JS/paid sources. **Priority raised** — a network probe showed the main render/interaction sources expose such APIs | `NEXT` | WP-17b, WP-20 |
+| WP-NOTES | Detail-page notes UI — a notes textarea on the series detail page → the existing `PATCH /api/series/[id]` (`notes` is already validated + persisted; only the UI is missing). Pairs with link-only entries (manual tracking) | `TODO` | WP-10 |
 | WP-52 | Poll-time hard-fail render escalation — when a **PLAIN** source's poll fetch fails with a **Cloudflare signature (403 / HTTP_4XX)** and a renderer is available, escalate that poll to **RENDER** and persist `fetchMode = RENDER`. The **poll-time analog of WP-46's add-time hard-fail escalation**, and the current poll escalation's blind spot: it handles *"rendered too few"* (under-fetch / regression) but **not** *"the fetch was blocked."* Affects **every** CF-guarded source that landed as PLAIN — those silently stop getting chapters until a manual backfill — not just the one seen in local testing. Test-first (the escalation decision + an integration test) | `TODO` | WP-46, WP-17b |
 | WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` + schema + cron wiring **done**; **editor UI + push delivery (WP-09) remain** (picking up later) | `TODO` | WP-07, WP-10 |
 | WP-30b | `lib/feeds/title.ts` extraction fixes — **(1) consent/cookie-banner `<h1>` reject-list**: the sole `<h1>` on some sites is a CCPA/cookie banner, so it's grabbed as the title; treat a boilerplate/consent `<h1>` as not-a-title (small known-phrase reject-list and/or skip an `<h1>` inside a consent/cookie container) and fall through to `og:title` → `<title>`. **(2) HTML-entity decode at extraction**: `extractSeriesTitle` stores the page `<h1>`/`og:title`/`<title>` without decoding HTML entities (`&#8217;`/`&#8216;`/`&#8220;`/`&#038;`/`&nbsp;` bake into the DB as raw codes instead of glyphs); decode named + numeric entities at extraction so new adds are clean and WP-30's non-manual backfill self-heals existing rows (display-side decode fallback stays WP-28). Backend/pure `lib/feeds/title.ts` fix; TDD | `TODO` | WP-30 |
@@ -128,6 +130,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 | WP-14 | `lib/dedup.ts` (pure) — "already read this?" | `TODO` | WP-00 |
 | WP-15 | `lib/search.ts` (pure) — filter/query building | `TODO` | WP-00 |
 | WP-EXPORT | One-click data export (`/api/export` → JSON) — own-your-data insurance | `TODO` | WP-AUTH |
+| WP-RETRY | *(low)* Retry / auto-upgrade a link-only source — a manual "retry fetching chapters" that re-runs resolution on a `linkOnly` source and upgrades it to a tracked FEED/PAGE_WATCH source when the site becomes reachable (renderer added, feed appears, URL fixed) | `TODO` | WP-50, WP-17b |
 | WP-32 | *(low)* `parseToc` robustness — follow split/paginated sibling TOCs (bounded "next chapters" hops) + **all non-chapter anchor filtering** (pagination + shortcut/CTA like "Last chapter"/"Read") + **URL-slug number authority** (trust a delimited `/chapter-<N>-` over a concatenated title number) | `TODO` | WP-17, WP-35 |
 | WP-47 | *(low)* Client resubscribe on VAPID key mismatch — `resyncSubscription` re-posts a stale browser sub whose `applicationServerKey` ≠ current key, so a 403-pruned sub churns (prune→re-add) and the client shows "subscribed" while receiving nothing; detect the key mismatch on load and unsubscribe + re-subscribe under the new key. Makes key rotation self-healing on the client | `TODO` | WP-09 |
 | WP-WORKID | *(low, future)* Map a source to a community novel-aggregator's canonical work ID (lists a work's alternative/translated titles) for automatic cross-translation identity — described generically here (no real aggregator name, anonymity rule) | `TODO` | WP-05, WP-17 |
@@ -136,7 +139,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 ### ✅ Completed
 
 WP-00, WP-GH, WP-CI, WP-12 (bootstrap / CI / docs) · WP-01, WP-03 (pure diff / health) · WP-04, WP-05, WP-FE (schema, feed parse/discover, fetcher) · WP-06, WP-07, WP-08 (Next shell, services, API) · WP-09, WP-10, WP-AUTH, WP-11 (Web Push, library/detail UI, auth gate, deploy) · WP-17, WP-17b (page-watch + headless renderer) · WP-20 (paid→free "now free") · WP-33 (full-TOC backfill + `accessReconciled`) · WP-35 (TOC-order chapters + display toggle) · WP-36 (`parseToc` content scoping) · WP-38 (contaminated-series recovery script) · WP-42 (poll-once-per-feed + politeness) · WP-41 (poll time-budget guard + rotation) · WP-43 (frequent PLAIN-tier polling) · WP-27a (status-gated + cadence polling) · WP-39 (add-time dedup) · WP-37 (per-series chapter-TOC URL) ·
-WP-39b (deeper add-dedup, re-scoped: tocUrl page-watch keying + create-then-annotate) · WP-48 (Blogger feed-path in `guessFeedUrls`) · WP-46 (add-time render escalation + poll regression guard) · WP-49 (page-watch divert for un-isolable multi-novel advertised feeds) · WP-34 (feed→TOC switch to lock-monitoring) · WP-30 (series title backfill + manual title-edit UI) · WP-51 (client-side delete series — detail + shelf) · WP-PW (Playwright E2E harness + WP-10/30/34/51 coverage + CI job).
+WP-39b (deeper add-dedup, re-scoped: tocUrl page-watch keying + create-then-annotate) · WP-48 (Blogger feed-path in `guessFeedUrls`) · WP-46 (add-time render escalation + poll regression guard) · WP-49 (page-watch divert for un-isolable multi-novel advertised feeds) · WP-34 (feed→TOC switch to lock-monitoring) · WP-30 (series title backfill + manual title-edit UI) · WP-51 (client-side delete series — detail + shelf) · WP-PW (Playwright E2E harness + WP-10/30/34/51 coverage + CI job) · WP-50 (link-only add when chapters can't be read).
 
 ### ⏭ Later tiers (M2–M4)
 
@@ -181,6 +184,7 @@ every UI-only WP appends its flow(s) to the checklist below at completion, so de
 - [x] WP-30 — inline title edit (`EditableTitle`): pencil → edit → save → title updates + persists.
 - [x] WP-51 — delete: detail inline confirm → redirected to shelf, series gone; shelf trash → confirm →
       card disappears, tapping trash does NOT open the card; Cancel guards on both surfaces.
+- [x] WP-50 — link-only add: no-chapters → confirm panel → Add anyway → link-only series on the shelf (stubbed).
 
 ### WP-GH — Git + private GitHub repo, first push
 
@@ -428,6 +432,12 @@ mounted below it, so a second submit is possible while the notice is up. It's be
 hard-dedup → `alreadyExisting` 200 → redirect, so no duplicate), but it reads awkwardly stacked. Polish in the design
 pass: hide/disable the form (or clear the input) while the notice is shown, or fold the notice into a cleaner
 post-add result state.
+> **Also unify the link-only path (WP-50 parked minor, 2026-08-17).** The normal add surfaces the `similarTo`
+> "looks similar to X" hint, but the **link-only** confirm path (`addLinkOnly` in `add/page.tsx`) redirects to `/`
+> on success **without reading `similarTo`** — the server still computes + returns it for a link-only create, so a
+> link-only entry that fuzzy-title-matches an existing series won't show the nudge. Low-impact (exact dupes are
+> still collapsed by `canonicalSeriesId`; this is only the soft title hint), and fixing it needs the confirm panel
+> to gain a success-with-similar-notice state. Fold into this notice rework so both add paths surface `similarTo`.
 
 **HTML-entity-encoded titles must render as their glyphs (owner, 2026-08-11).** A title whose apostrophe shows as the
 raw entity `&#8217;` (e.g. *"…I&#8217;ll…"* instead of *"…I'll…"*) — also seen with `&#8216;`/`&#8220;`/`&#038;`/`&nbsp;`
@@ -1006,6 +1016,23 @@ optionally `deactivate-source`) so WP-49-style recoveries are fully tool-support
 
 ## Changelog
 
+- **2026-08-17** — **WP-50 done: link-only add (reframed from "reject no-chapter adds").** The original WP-50
+  scope — reject a PAGE_WATCH resolution that seeds 0 chapters — was reframed on the owner's call: now that
+  delete is one click (WP-51), being able to add a blocked/unreadable series as a link-only shelf entry is more
+  valuable than rejecting it outright. When resolution can't read a chapter list, `addSeries` returns
+  `needsConfirm` instead of throwing or silently creating an empty series, with a reason: `blocked` (site
+  unreachable / Cloudflare) or `no-chapters` (the page loaded but has no chapter list **and** no discoverable
+  TOC page). The add page shows a reason-specific confirm with an editable title and Add-anyway/Cancel;
+  confirming re-POSTs `allowLinkOnly: true`, which **short-circuits** resolution (no re-fetch, since the first
+  attempt already established the site can't be read) and creates a `PAGE_WATCH` source flagged
+  `Source.linkOnly`, excluded from polling. A "link-only" badge surfaces on both the shelf and the detail page.
+  **Refinement during build:** a landing page with a discoverable `tocUrl` but 0 landing chapters still creates a
+  normal (non-link-only) `PAGE_WATCH` — it fills in via backfill — so `needsConfirm` fires only when there are
+  **0 chapters and no `tocUrl`**. The legit FEED-empty case (WP-43: a valid feed match with nothing in-window
+  yet) is preserved and still resolves normally. E2E (WP-PW) covers the confirm flow. Filed two follow-ups:
+  **WP-NOTES** (detail-page notes UI over the already-persisted `notes` field — pairs with link-only manual
+  tracking) and **WP-RETRY** (low priority — a manual "retry fetching chapters" to auto-upgrade a `linkOnly`
+  source once its site becomes reachable). WP-50 moves to ✅ Completed; `NEXT` advances to **WP-45**.
 - **2026-08-15** — **Filed WP-52 (poll-time hard-fail render escalation).** WP-46 escalates a PLAIN source to
   RENDER at *add-time* on a hard-fail/under-fetch, and at *poll-time* only on a regression/under-fetch signal
   ("rendered too few"). But a PLAIN source whose poll **fetch is blocked** (Cloudflare 403 / HTTP_4XX) is never

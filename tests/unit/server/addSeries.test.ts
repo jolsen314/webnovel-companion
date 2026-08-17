@@ -61,6 +61,7 @@ describe('addSeries', () => {
     });
 
     const result = await addSeries({ url }, p);
+    if (result.kind !== 'created') throw new Error('expected created');
 
     expect(result.resolved.fetchMode).toBe('PLAIN');
   });
@@ -74,6 +75,7 @@ describe('addSeries', () => {
     });
 
     const result = await addSeries({ url }, p);
+    if (result.kind !== 'created') throw new Error('expected created');
 
     expect(result.seriesId).toBe('new1');
     expect(result.resolved.type).toBe('FEED');
@@ -98,6 +100,7 @@ describe('addSeries', () => {
     });
 
     const result = await addSeries({ url }, p);
+    if (result.kind !== 'created') throw new Error('expected created');
 
     expect(result.resolved.match).toEqual({ type: 'CATEGORY', value: 'Silver Moon Saga' });
     expect(result.resolved.chapters.map((c) => c.guid)).toEqual(['g1']);
@@ -112,20 +115,39 @@ describe('addSeries', () => {
     });
 
     const result = await addSeries({ url }, p);
+    if (result.kind !== 'created') throw new Error('expected created');
 
     expect(result.resolved.type).toBe('FEED');
     expect(result.resolved.feedUrl).toBe('https://translator.example/feed/');
     expect(result.resolved.match).toEqual({ type: 'CATEGORY', value: 'Beta' });
   });
 
-  test('no feed anywhere → PAGE_WATCH source with no chapters yet (WP-17)', async () => {
+  test('no feed anywhere and no chapters → needsConfirm no-chapters (WP-17 superseded by WP-50)', async () => {
     const url = 'https://reader.example/series/gamma/';
     const p = ports({ [url]: ok('<html><head></head><body>Novel</body></html>') }); // all feed guesses 404
 
     const result = await addSeries({ url }, p);
 
+    expect(result.kind).toBe('needsConfirm');
+    if (result.kind !== 'needsConfirm') throw new Error('expected needsConfirm');
+    expect(result.reason).toBe('no-chapters');
+    expect(p.created).toHaveLength(0); // no longer silently created empty (WP-50)
+  });
+
+  test('WP-50: no landing-page chapters but a discoverable TOC link → still creates PAGE_WATCH (not needsConfirm)', async () => {
+    // A landing page that itself lists no chapters but points at a real "Table of Contents" page
+    // is a legit page-watch (WP-37): it creates with 0 chapters now and fills in on the first
+    // backfillFromToc. The no-chapters guard must only fire when there's truly nothing to track.
+    const url = 'https://reader.example/series/gamma/';
+    const p = ports({ [url]: ok('<html><body><a href="/series/gamma/contents/">Table of Contents</a></body></html>') });
+
+    const result = await addSeries({ url }, p);
+
+    expect(result.kind).toBe('created');
+    if (result.kind !== 'created') throw new Error('expected created');
     expect(result.resolved.type).toBe('PAGE_WATCH');
-    expect(result.resolved.feedUrl).toBeNull();
+    expect(result.resolved.linkOnly).toBe(false);
+    expect(result.resolved.tocUrl).toBe('https://reader.example/series/gamma/contents/');
     expect(result.resolved.chapters).toEqual([]);
   });
 
@@ -138,6 +160,7 @@ describe('addSeries', () => {
     const p = ports({ [url]: ok(toc) }); // all feed guesses 404
 
     const result = await addSeries({ url }, p);
+    if (result.kind !== 'created') throw new Error('expected created');
 
     expect(result.resolved.type).toBe('PAGE_WATCH');
     expect(result.resolved.feedUrl).toBeNull();
@@ -156,6 +179,7 @@ describe('addSeries', () => {
     });
 
     const result = await addSeries({ url }, p);
+    if (result.kind !== 'created') throw new Error('expected created');
 
     expect(result.resolved.type).toBe('FEED');
     expect(result.resolved.feedUrl).toBe('https://blocked.example/feed/');
@@ -171,17 +195,35 @@ describe('addSeries', () => {
     });
 
     const result = await addSeries({ url }, p);
+    if (result.kind !== 'created') throw new Error('expected created');
 
     expect(result.resolved.type).toBe('FEED');
     expect(result.resolved.chapters).toHaveLength(0); // nothing to show yet…
     expect(result.resolved.match).toEqual({ type: 'CATEGORY', value: 'not-in-window' }); // …but this fills when it publishes
   });
 
-  test('neither the page nor any feed is reachable → throws', async () => {
+  test('neither the page nor any feed is reachable → needsConfirm blocked (WP-50, no longer throws)', async () => {
     const url = 'https://dead.example/novel/x/';
     const p = ports({ [url]: { outcome: 'DNS' } }); // page dead, all feed guesses 404 by default
 
-    await expect(addSeries({ url }, p)).rejects.toThrow(/reach|feed/i);
+    const result = await addSeries({ url }, p);
+
+    expect(result.kind).toBe('needsConfirm');
+    if (result.kind !== 'needsConfirm') throw new Error('expected needsConfirm');
+    expect(result.reason).toBe('blocked');
+  });
+
+  test('WP-50: allowLinkOnly short-circuits → creates a link-only PAGE_WATCH without fetching or rendering', async () => {
+    const url = 'https://cf.example/series/blocked/';
+    const p = ports({}); // no fetch map, no render port
+    const result = await addSeries({ url, allowLinkOnly: true, title: 'My Blocked Novel' }, p);
+    expect(result.kind).toBe('created');
+    expect(p.fetchCalls).toHaveLength(0); // no re-fetch on the confirmed add
+    expect(p.renderCalls).toHaveLength(0); // and no render
+    expect(p.created).toHaveLength(1);
+    expect(p.created[0]!.linkOnly).toBe(true);
+    expect(p.created[0]!.type).toBe('PAGE_WATCH');
+    expect(p.created[0]!.seriesTitle).toBe('My Blocked Novel');
   });
 
   test('hard-fail: page + feeds blocked, but render recovers the TOC → PAGE_WATCH, fetchMode RENDER', async () => {
@@ -197,6 +239,7 @@ describe('addSeries', () => {
     );
 
     const result = await addSeries({ url }, p);
+    if (result.kind !== 'created') throw new Error('expected created');
 
     expect(result.resolved.type).toBe('PAGE_WATCH');
     expect(result.resolved.fetchMode).toBe('RENDER');
@@ -239,13 +282,14 @@ describe('addSeries', () => {
     );
 
     const result = await addSeries({ url }, p);
+    if (result.kind !== 'created') throw new Error('expected created');
 
     expect(result.resolved.type).toBe('FEED');
     expect(result.resolved.feedUrl).toBe(feedUrl);
     expect(result.resolved.fetchMode).toBe('PLAIN'); // the feed serves plainly
   });
 
-  test('hard-fail: render also fails → throws', async () => {
+  test('hard-fail: render also fails → needsConfirm blocked (WP-50, no longer throws)', async () => {
     const url = 'https://cf.example/novel/void/';
     const p = ports(
       { [url]: { outcome: 'HTTP_4XX', status: 403 } as PoliteResult },
@@ -253,7 +297,11 @@ describe('addSeries', () => {
       { [url]: { outcome: 'HTTP_4XX', status: 403 } as PoliteResult }, // render blocked too
     );
 
-    await expect(addSeries({ url }, p)).rejects.toThrow(/render attempt/i);
+    const result = await addSeries({ url }, p);
+
+    expect(result.kind).toBe('needsConfirm');
+    if (result.kind !== 'needsConfirm') throw new Error('expected needsConfirm');
+    expect(result.reason).toBe('blocked');
   });
 
   test('under-fetch: plain TOC ≤5 and render yields more → adopt rendered chapters, fetchMode RENDER', async () => {
@@ -268,6 +316,7 @@ describe('addSeries', () => {
     const p = ports({ [url]: ok(plainToc) }, () => null, { [url]: ok(renderedToc) });
 
     const result = await addSeries({ url }, p);
+    if (result.kind !== 'created') throw new Error('expected created');
 
     expect(result.resolved.type).toBe('PAGE_WATCH');
     expect(result.resolved.fetchMode).toBe('RENDER');
@@ -287,6 +336,7 @@ describe('addSeries', () => {
     const p = ports({ [url]: ok(plainToc) }, () => null, { [url]: ok(renderedToc) });
 
     const result = await addSeries({ url }, p);
+    if (result.kind !== 'created') throw new Error('expected created');
 
     expect(result.resolved.fetchMode).toBe('PLAIN');
     expect(result.resolved.chapters).toHaveLength(2);
@@ -302,6 +352,7 @@ describe('addSeries', () => {
     const p = ports({ [url]: ok(richToc) }, () => null, { [url]: ok('<ul></ul>') });
 
     const result = await addSeries({ url }, p);
+    if (result.kind !== 'created') throw new Error('expected created');
 
     expect(result.resolved.fetchMode).toBe('PLAIN');
     expect(result.resolved.chapters).toHaveLength(7);
@@ -318,6 +369,7 @@ describe('addSeries', () => {
     );
 
     const result = await addSeries({ url }, p);
+    if (result.kind !== 'created') throw new Error('expected created');
 
     expect(result.resolved.type).toBe('FEED');
     expect(result.resolved.fetchMode).toBe('PLAIN');
@@ -343,6 +395,7 @@ describe('addSeries', () => {
     });
 
     const result = await addSeries({ url }, p);
+    if (result.kind !== 'created') throw new Error('expected created');
 
     expect(result.resolved.type).toBe('PAGE_WATCH');
     expect(result.resolved.feedUrl).toBeNull();
@@ -362,6 +415,7 @@ describe('addSeries', () => {
     });
 
     const result = await addSeries({ url }, p);
+    if (result.kind !== 'created') throw new Error('expected created');
 
     expect(result.resolved.type).toBe('FEED');
     expect(result.resolved.feedUrl).toBe(feedUrl);
@@ -379,6 +433,7 @@ describe('addSeries', () => {
     });
 
     const result = await addSeries({ url }, p);
+    if (result.kind !== 'created') throw new Error('expected created');
 
     expect(result.resolved.type).toBe('FEED');
     expect(result.resolved.match).toEqual({ type: 'CATEGORY', value: 'Beta' });
@@ -400,6 +455,7 @@ describe('addSeries', () => {
     });
 
     const result = await addSeries({ url }, p);
+    if (result.kind !== 'created') throw new Error('expected created');
 
     // usedGuesses is true here, so cantIsolateAdvertised is false regardless of the rich TOC —
     // must stay FEED (with a fallbackSeriesMatch), not divert to PAGE_WATCH.
@@ -420,6 +476,7 @@ describe('addSeries', () => {
     });
 
     const result = await addSeries({ url }, p);
+    if (result.kind !== 'created') throw new Error('expected created');
 
     // The guard is strict `> 5`; exactly 5 chapter links must NOT divert.
     expect(result.resolved.type).toBe('FEED');
@@ -439,6 +496,7 @@ describe('addSeries', () => {
     });
 
     const result = await addSeries({ url }, p);
+    if (result.kind !== 'created') throw new Error('expected created');
 
     expect(result.resolved.type).toBe('PAGE_WATCH');
     expect(result.resolved.feedUrl).toBeNull();
@@ -457,6 +515,7 @@ describe('addSeries', () => {
     });
 
     const result = await addSeries({ url }, p);
+    if (result.kind !== 'created') throw new Error('expected created');
 
     expect(result.resolved.type).toBe('FEED');
   });
@@ -470,6 +529,7 @@ describe('addSeries dedup (WP-39)', () => {
   test('a new series is created with a canonicalId and alreadyExisting=false', async () => {
     const p = ports(map);
     const result = await addSeries({ url }, p);
+    if (result.kind !== 'created') throw new Error('expected created');
     expect(result.alreadyExisting).toBe(false);
     expect(p.created).toHaveLength(1);
     expect(p.created[0]!.canonicalId).toBe('translator.example/feed#WHOLE_FEED');
@@ -479,6 +539,7 @@ describe('addSeries dedup (WP-39)', () => {
   test('a duplicate (canonicalId already present) returns the existing series and does NOT create', async () => {
     const p = ports(map, (id) => (id === 'translator.example/feed#WHOLE_FEED' ? { seriesId: 'existing1' } : null));
     const result = await addSeries({ url }, p);
+    if (result.kind !== 'created') throw new Error('expected created');
     expect(result.alreadyExisting).toBe(true);
     expect(result.seriesId).toBe('existing1');
     expect(p.created).toHaveLength(0); // createSeries never called

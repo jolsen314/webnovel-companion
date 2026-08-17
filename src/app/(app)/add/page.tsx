@@ -12,6 +12,8 @@ export default function AddSeriesPage() {
   const [similar, setSimilar] = useState<{ addedTitle: string; existing: { id: string; title: string } } | null>(
     null,
   );
+  const [confirm, setConfirm] = useState<{ reason: 'blocked' | 'no-chapters'; suggestedTitle: string; url: string } | null>(null);
+  const [confirmTitle, setConfirmTitle] = useState('');
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -29,6 +31,13 @@ export default function AddSeriesPage() {
           title?: string;
           similarTo?: { id: string; title: string };
         };
+        if ((data as { needsConfirm?: boolean }).needsConfirm) {
+          const d = data as { reason: 'blocked' | 'no-chapters'; suggestedTitle: string; url: string };
+          setConfirm({ reason: d.reason, suggestedTitle: d.suggestedTitle, url: d.url });
+          setConfirmTitle(d.suggestedTitle);
+          setBusy(false);
+          return;
+        }
         if (data.similarTo) {
           // Non-blocking: the series WAS added; just flag a possible duplicate.
           setSimilar({ addedTitle: data.title ?? 'the series', existing: data.similarTo });
@@ -45,6 +54,25 @@ export default function AddSeriesPage() {
       setError('Couldn’t reach the server. Try again.');
     }
     setBusy(false);
+  }
+
+  async function addLinkOnly() {
+    if (!confirm) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/series', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ url: confirm.url, allowLinkOnly: true, title: confirmTitle.trim() || confirm.suggestedTitle }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      router.push('/');
+      router.refresh();
+    } catch {
+      setError('Could not add the link-only entry.');
+      setBusy(false);
+    }
   }
 
   return (
@@ -68,27 +96,55 @@ export default function AddSeriesPage() {
           <p className="hero__note">Merging duplicates from the app is coming soon; for now the two are kept separate.</p>
         </div>
       )}
-      <form className="login__form" onSubmit={onSubmit}>
-        <input
-          className="login__input"
-          type="url"
-          inputMode="url"
-          placeholder="https://…/novel/…"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          autoFocus
-          required
-        />
-        <p className="login__error" role="alert">
-          {error}
-        </p>
-        <button className="btn btn--primary" type="submit" disabled={busy || url.trim().length === 0}>
-          {busy ? 'Finding the feed…' : 'Add series'}
-        </button>
-        <Link href="/" className="btn">
-          Cancel
-        </Link>
-      </form>
+      {confirm && (
+        <div className="notice" role="status">
+          <p>
+            {confirm.reason === 'blocked'
+              ? `${new URL(confirm.url).host} appears to be blocking automated requests (often Cloudflare), so we can’t read its chapter list. Add it as a link-only entry — a shelf card and a quick link, but no automatic new-chapter tracking.`
+              : 'We couldn’t find a chapter list on that page — it may not be the series’ contents/TOC page. Add it as a link-only entry anyway, or cancel and paste the table-of-contents page.'}
+          </p>
+          <label className="control">
+            <span className="control__label">Title</span>
+            <input className="login__input" value={confirmTitle} onChange={(e) => setConfirmTitle(e.target.value)} />
+          </label>
+          <div className="notice__actions">
+            <button type="button" className="btn btn--primary" disabled={busy} onClick={() => void addLinkOnly()}>
+              Add anyway
+            </button>
+            <button type="button" className="btn" disabled={busy} onClick={() => setConfirm(null)}>
+              Cancel
+            </button>
+          </div>
+          {error && (
+            <p className="login__error" role="alert">
+              {error}
+            </p>
+          )}
+        </div>
+      )}
+      {!confirm && (
+        <form className="login__form" onSubmit={onSubmit}>
+          <input
+            className="login__input"
+            type="url"
+            inputMode="url"
+            placeholder="https://…/novel/…"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            autoFocus
+            required
+          />
+          <p className="login__error" role="alert">
+            {error}
+          </p>
+          <button className="btn btn--primary" type="submit" disabled={busy || url.trim().length === 0}>
+            {busy ? 'Finding the feed…' : 'Add series'}
+          </button>
+          <Link href="/" className="btn">
+            Cancel
+          </Link>
+        </form>
+      )}
       <p className="hero__note">
         Paste the novel&rsquo;s page on a translator site. I&rsquo;ll find its release feed — or fall back to watching
         the page — and start tracking new chapters.

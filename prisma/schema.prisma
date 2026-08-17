@@ -154,6 +154,7 @@ model Source {
   matchValue String? // CATEGORY → category name; PATH_PREFIX → url-path prefix
 
   isActive Boolean @default(true) // re-pointing = add a source, flip active
+  linkOnly Boolean @default(false) // WP-50: a link-only entry (blocked/non-TOC add) — never polled
 
   // Source-health state machine (lib/health.ts). `failureScore` is the weighted accumulator.
   health              SourceHealth @default(HEALTHY)

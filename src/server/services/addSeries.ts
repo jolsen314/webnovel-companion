@@ -25,6 +25,8 @@ export interface AddSeriesInput {
   url: string;
   /** Optional user-supplied title; otherwise derived from the feed or the URL. */
   title?: string;
+  /** WP-50: user confirmed a link-only add — skip resolution and create directly. */
+  allowLinkOnly?: boolean;
 }
 
 export interface ResolvedSource {
@@ -34,6 +36,7 @@ export interface ResolvedSource {
   feedUrl: string | null;
   tocUrl: string | null; // WP-37: separate chapter-TOC page, when discoverable
   type: 'FEED' | 'PAGE_WATCH';
+  linkOnly: boolean; // WP-50: link-only entry — created via allowLinkOnly, excluded from polling
   fetchMode: 'PLAIN' | 'RENDER'; // WP-46: RENDER when the source needs our headless renderer
   match: SeriesMatch;
   chapters: FeedItem[];
@@ -48,12 +51,24 @@ export interface AddSeriesPorts {
   listExistingSeries: () => Promise<{ id: string; title: string }[]>; // WP-39b: for the similar-title annotate
 }
 
-export interface AddSeriesResult {
+export interface AddSeriesCreated {
+  kind: 'created';
   seriesId: string;
   resolved: ResolvedSource;
   alreadyExisting: boolean; // WP-39
   similarTo?: { id: string; title: string } | null; // WP-39b (create branch only)
 }
+
+/** WP-50: resolution couldn't confidently create a source — surface a reason so the caller can
+ *  offer the user a confirmed link-only add instead of throwing or silently creating a dead entry. */
+export interface AddSeriesNeedsConfirm {
+  kind: 'needsConfirm';
+  reason: 'blocked' | 'no-chapters';
+  suggestedTitle: string;
+  url: string;
+}
+
+export type AddSeriesResult = AddSeriesCreated | AddSeriesNeedsConfirm;
 
 function looksLikeFeed(body: string): boolean {
   return /^\s*(?:<\?xml|<rss\b|<feed\b)/i.test(body.slice(0, 500));
@@ -73,19 +88,30 @@ function titleFromUrl(url: string): string {
 type ResolvedCore = Omit<ResolvedSource, 'canonicalId'>;
 
 /** Compute the dedup id, and create the series only if one with that id doesn't already exist. */
-async function finalize(core: ResolvedCore, ports: AddSeriesPorts): Promise<AddSeriesResult> {
+async function finalize(core: ResolvedCore, ports: AddSeriesPorts): Promise<AddSeriesCreated> {
   const canonicalId = canonicalSeriesId({ feedUrl: core.feedUrl, tocUrl: core.tocUrl, sourceUrl: core.sourceUrl, match: core.match });
   const resolved: ResolvedSource = { ...core, canonicalId };
   const existing = await ports.findSeriesByCanonicalId(canonicalId);
-  if (existing) return { seriesId: existing.seriesId, resolved, alreadyExisting: true };
+  if (existing) return { kind: 'created', seriesId: existing.seriesId, resolved, alreadyExisting: true };
   const similarTo = findSimilarTitle(resolved.seriesTitle, await ports.listExistingSeries());
   const { seriesId } = await ports.createSeries(resolved);
-  return { seriesId, resolved, alreadyExisting: false, similarTo };
+  return { kind: 'created', seriesId, resolved, alreadyExisting: false, similarTo };
 }
 
 export async function addSeries(input: AddSeriesInput, ports: AddSeriesPorts): Promise<AddSeriesResult> {
   const { url } = input;
   const host = new URL(url).host;
+
+  // WP-50: confirmed link-only add — create directly, no re-fetch/re-render.
+  if (input.allowLinkOnly) {
+    const core: ResolvedCore = {
+      seriesTitle: input.title ?? titleFromUrl(url),
+      sourceUrl: url, host, feedUrl: null, tocUrl: null,
+      type: 'PAGE_WATCH', fetchMode: 'PLAIN', match: { type: 'WHOLE_FEED' },
+      chapters: [], linkOnly: true,
+    };
+    return finalize(core, ports);
+  }
 
   /** Resolve a fetched page into a FEED or PAGE_WATCH source, or null when neither a feed nor
    *  the page itself is reachable. `bodyMode` records whether `pageResult` came from a headless
@@ -152,7 +178,7 @@ export async function addSeries(input: AddSeriesInput, ports: AddSeriesPorts): P
               : titleFromUrl(url));
         const tocUrl = pageOk ? findTocUrl(pageBody, url) : null;
         const core: ResolvedCore = {
-          seriesTitle, sourceUrl: url, host, feedUrl, tocUrl, type: 'FEED', fetchMode: 'PLAIN', match, chapters,
+          seriesTitle, sourceUrl: url, host, feedUrl, tocUrl, type: 'FEED', linkOnly: false, fetchMode: 'PLAIN', match, chapters,
         };
         return finalize(core, ports);
       }
@@ -178,6 +204,13 @@ export async function addSeries(input: AddSeriesInput, ports: AddSeriesPorts): P
           }
         }
       }
+      // A landing page with neither its own chapter links NOR a discoverable TOC page has nothing
+      // to track — needsConfirm. A discoverable tocUrl (even with 0 chapters read here) is still a
+      // legit page-watch: it creates with 0 chapters now and fills in on the first backfillFromToc,
+      // exactly as before WP-50 — only genuinely nothing-to-track pages are blocked.
+      if (toc.length === 0 && tocUrl === null) {
+        return { kind: 'needsConfirm', reason: 'no-chapters', suggestedTitle: pageTitle ?? titleFromUrl(url), url };
+      }
       const core: ResolvedCore = {
         seriesTitle: input.title ?? pageTitle ?? titleFromUrl(url),
         sourceUrl: url,
@@ -185,6 +218,7 @@ export async function addSeries(input: AddSeriesInput, ports: AddSeriesPorts): P
         feedUrl: null,
         tocUrl,
         type: 'PAGE_WATCH',
+        linkOnly: false,
         fetchMode,
         match: { type: 'WHOLE_FEED' },
         chapters: withReadingPositions(toc, toc),
@@ -209,10 +243,6 @@ export async function addSeries(input: AddSeriesInput, ports: AddSeriesPorts): P
     }
   }
 
-  // Only claim a render attempt when we actually had a renderer (prod always does; local/tests may not).
-  throw new Error(
-    ports.render
-      ? `Couldn’t reach ${host} or find a feed for it, even after a render attempt — the site may be blocking automated requests (e.g. Cloudflare).`
-      : `Couldn’t reach ${host} or find a feed for it — the site may be blocking automated requests (e.g. Cloudflare).`,
-  );
+  // Hard-fail: neither page nor feed reachable (even via render) → blocked. Let the user confirm a link-only add.
+  return { kind: 'needsConfirm', reason: 'blocked', suggestedTitle: titleFromUrl(url), url };
 }

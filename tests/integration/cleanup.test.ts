@@ -41,8 +41,11 @@ const C2 = 'https://translator.example/a-2/';
 /** Add the "Alpha" series (page → feed with 2 chapters, guids g1/g2) and return its id. */
 async function addAlpha(): Promise<string> {
   const fetch = fetchFrom({ [PAGE_URL]: okRes(PAGE(FEED_URL)), [FEED_URL]: okRes(RSS(ITEM('g1', C1) + ITEM('g2', C2))) });
-  const { seriesId } = await addSeries({ url: PAGE_URL }, fetch);
-  return seriesId;
+  const result = await addSeries({ url: PAGE_URL }, fetch);
+  // WP-50: addSeries now returns a `kind`-discriminated union; this fixture always exercises the
+  // create path (a page + feed that resolve cleanly), so narrow once here.
+  if (result.kind !== 'created') throw new Error('expected created');
+  return result.seriesId;
 }
 
 /** A second "Alpha" series row with identical content — simulates a pre-existing duplicate

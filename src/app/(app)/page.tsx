@@ -30,9 +30,12 @@ function SeriesCard({ series, now }: { series: SeriesRow; now: Date }) {
           </p>
           <div className="card__meta">
             {series.status !== 'READING' && <span className="status-chip">{series.status}</span>}
+            {series.activeSource?.linkOnly && <span className="status-chip">link-only</span>}
             {series.activeSource && (
               <>
-                <span className={`health-dot health-dot--${series.activeSource.health}`} title={series.activeSource.health} />
+                {!series.activeSource.linkOnly && (
+                  <span className={`health-dot health-dot--${series.activeSource.health}`} title={series.activeSource.health} />
+                )}
                 <span>{series.activeSource.host}</span>
               </>
             )}

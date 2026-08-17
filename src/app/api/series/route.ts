@@ -21,7 +21,14 @@ export async function POST(request: Request) {
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
   try {
-    const { seriesId, resolved, alreadyExisting, similarTo } = await addSeries(parsed.value);
+    const result = await addSeries(parsed.value);
+    if (result.kind === 'needsConfirm') {
+      return NextResponse.json(
+        { needsConfirm: true, reason: result.reason, suggestedTitle: result.suggestedTitle, url: result.url },
+        { status: 200 },
+      );
+    }
+    const { seriesId, resolved, alreadyExisting, similarTo } = result;
     if (alreadyExisting) {
       return NextResponse.json(
         { seriesId, title: resolved.seriesTitle, alreadyExisting: true, message: 'You\'re already tracking this series.' },

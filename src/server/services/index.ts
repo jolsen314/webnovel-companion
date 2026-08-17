@@ -131,7 +131,7 @@ function pollPorts(
     loadActiveSources: async () =>
       (
         await db.source.findMany({
-          where: { ...sourceTierWhere(tier), series: { status: { in: POLLABLE_STATUSES } } },
+          where: { ...sourceTierWhere(tier), linkOnly: false, series: { status: { in: POLLABLE_STATUSES } } },
           include: { series: { select: { status: true } } },
         })
       ).map(rowToPollable),
@@ -398,6 +398,7 @@ export function addSeries(
               url: r.sourceUrl,
               host: r.host,
               type: r.type,
+              linkOnly: r.linkOnly,
               fetchMode: r.fetchMode, // WP-46
               feedUrl: r.feedUrl,
               tocUrl: r.tocUrl, // WP-37

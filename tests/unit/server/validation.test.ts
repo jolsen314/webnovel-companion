@@ -30,6 +30,16 @@ describe('parseAddSeriesBody', () => {
   ])('rejects %j (%s)', (input, _why) => {
     expect(parseAddSeriesBody(input).ok).toBe(false);
   });
+
+  test('accepts allowLinkOnly + title', () => {
+    expect(parseAddSeriesBody({ url: 'https://x.example/a', allowLinkOnly: true, title: 'A' })).toEqual({
+      ok: true,
+      value: { url: 'https://x.example/a', allowLinkOnly: true, title: 'A' },
+    });
+  });
+  test('rejects a non-boolean allowLinkOnly', () => {
+    expect(parseAddSeriesBody({ url: 'https://x.example/a', allowLinkOnly: 'yes' }).ok).toBe(false);
+  });
 });
 
 describe('parseSeriesUpdate', () => {

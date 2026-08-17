@@ -43,6 +43,15 @@ const fetchFrom =
   async (url) =>
     map[url] ?? ({ outcome: 'HTTP_4XX', status: 404 } as PoliteResult);
 
+/** WP-50: addSeries now returns a `kind`-discriminated union. Every integration test here exercises
+ *  the create path, so narrow once at the call site instead of guarding at every read of
+ *  `.seriesId`/`.resolved`/`.alreadyExisting`/`.similarTo`. */
+async function created<T extends { kind: string }>(p: Promise<T>): Promise<Extract<T, { kind: 'created' }>> {
+  const result = await p;
+  if (result.kind !== 'created') throw new Error(`expected addSeries to create, got kind=${result.kind}`);
+  return result as Extract<T, { kind: 'created' }>;
+}
+
 const PAGE_URL = 'https://translator.example/novel/alpha/';
 const FEED_URL = 'https://translator.example/feed/';
 const C1 = 'https://translator.example/a-1/';
@@ -52,7 +61,7 @@ const C3 = 'https://translator.example/a-3/';
 /** Add the "Alpha" series (page → feed with 2 chapters) and return its id. */
 async function addAlpha(): Promise<string> {
   const fetch = fetchFrom({ [PAGE_URL]: okRes(PAGE(FEED_URL)), [FEED_URL]: okRes(RSS(ITEM('g1', C1) + ITEM('g2', C2))) });
-  const { seriesId } = await addSeries({ url: PAGE_URL }, fetch);
+  const { seriesId } = await created(addSeries({ url: PAGE_URL }, fetch));
   return seriesId;
 }
 
@@ -84,7 +93,7 @@ describe('addSeries (real DB)', () => {
       [TOC]: okRes(tocBody),
       // feed guesses 404 → page-watch path
     });
-    const { seriesId } = await addSeries({ url: LANDING }, fetch);
+    const { seriesId } = await created(addSeries({ url: LANDING }, fetch));
     const source = await db.source.findFirstOrThrow({ where: { seriesId } });
     expect(source.tocUrl).toBe(TOC);
     expect(source.url).toBe(LANDING); // reading url unchanged
@@ -100,7 +109,7 @@ describe('addSeries (real DB)', () => {
       `<li><a href="${C3}">Chapter 3</a></li>` +
       `</ul></body></html>`;
     const fetch = fetchFrom({ [PAGE_URL]: okRes(PAGE_HTML), [FEED_URL]: okRes(RSS(ITEM('g1', C1) + ITEM('g2', C2))) });
-    const { seriesId } = await addSeries({ url: PAGE_URL }, fetch);
+    const { seriesId } = await created(addSeries({ url: PAGE_URL }, fetch));
 
     const chapters = await db.chapter.findMany({ where: { seriesId }, orderBy: { url: 'asc' } });
     expect(chapters.map((c) => c.url)).toEqual([C1, C2, C3]); // a-3 backfilled from the TOC
@@ -110,8 +119,8 @@ describe('addSeries (real DB)', () => {
 
   test('WP-39: re-adding the same series returns the existing one, no second row', async () => {
     const fetch = fetchFrom({ [PAGE_URL]: okRes(PAGE(FEED_URL)), [FEED_URL]: okRes(RSS(ITEM('g1', C1))) });
-    const first = await addSeries({ url: PAGE_URL }, fetch);
-    const second = await addSeries({ url: PAGE_URL }, fetch);
+    const first = await created(addSeries({ url: PAGE_URL }, fetch));
+    const second = await created(addSeries({ url: PAGE_URL }, fetch));
 
     expect(first.alreadyExisting).toBe(false);
     expect(second.alreadyExisting).toBe(true);
@@ -129,7 +138,7 @@ describe('addSeries (real DB)', () => {
     const feed = `<?xml version="1.0"?><rss version="2.0"><channel><title>TitleSite</title>`
       + `<item><title>The Omega Chronicle Chapter 1</title><link>https://titlesite.example/omega-1/</link><guid>o1</guid></item>`
       + `</channel></rss>`;
-    const { seriesId } = await addSeries({ url: URL }, fetchFrom({ [URL]: okRes(page), [FEED]: okRes(feed) }));
+    const { seriesId } = await created(addSeries({ url: URL }, fetchFrom({ [URL]: okRes(page), [FEED]: okRes(feed) })));
     const series = await db.series.findFirstOrThrow({ where: { id: seriesId } });
     expect(series.title).toBe('The Omega Chronicle'); // not "TitleSite"
     expect(series.titleIsManual).toBe(false);
@@ -139,7 +148,7 @@ describe('addSeries (real DB)', () => {
     const URL = 'https://pw2.example/novels/xyz-acronym/';
     const page = `<html><body><h1>Extremely Yielding Zenith</h1>`
       + `<a href="/novels/xyz-acronym/chapter-1">Chapter 1</a></body></html>`;
-    const { seriesId } = await addSeries({ url: URL }, fetchFrom({ [URL]: okRes(page) }));
+    const { seriesId } = await created(addSeries({ url: URL }, fetchFrom({ [URL]: okRes(page) })));
     const series = await db.series.findFirstOrThrow({ where: { id: seriesId } });
     expect(series.title).toBe('Extremely Yielding Zenith'); // not "Xyz Acronym"
   });
@@ -153,29 +162,29 @@ describe('addSeries (real DB)', () => {
     const feed = `<?xml version="1.0"?><rss version="2.0"><channel><title>Sitename</title>`
       + `<item><title>Chapter 1</title><link>https://sitename.example/the-real-novel/c1/</link><guid>g1</guid></item>`
       + `</channel></rss>`;
-    const { seriesId } = await addSeries({ url: URL }, fetchFrom({ [URL]: okRes(page), [FEED]: okRes(feed) }));
+    const { seriesId } = await created(addSeries({ url: URL }, fetchFrom({ [URL]: okRes(page), [FEED]: okRes(feed) })));
     const series = await db.series.findFirstOrThrow({ where: { id: seriesId } });
     expect(series.title).toBe('The Real Novel'); // titleFromUrl slug, NOT "Sitename"
   });
 
   test('WP-39b: adding a title similar to an existing series returns a similarTo hint (still creates)', async () => {
     // Series 1 — page-watch, title from the <h1>.
-    await addSeries(
+    await created(addSeries(
       { url: 'https://one.example/series/alpha/' },
       fetchFrom({ 'https://one.example/series/alpha/': okRes(`<h1>Alpha Saga</h1><a href="/series/alpha/chapter-1">Chapter 1</a>`) }),
-    );
+    ));
     // Series 2 — DIFFERENT host (different canonicalId → creates), similar title ("The Alpha Saga").
-    const r2 = await addSeries(
+    const r2 = await created(addSeries(
       { url: 'https://two.example/series/alpha/' },
       fetchFrom({ 'https://two.example/series/alpha/': okRes(`<h1>The Alpha Saga</h1><a href="/series/alpha/chapter-1">Chapter 1</a>`) }),
-    );
+    ));
     expect(r2.alreadyExisting).toBe(false); // it WAS created, not blocked
     expect(r2.similarTo?.title).toBe('Alpha Saga');
     // A genuinely different title gets no hint.
-    const r3 = await addSeries(
+    const r3 = await created(addSeries(
       { url: 'https://three.example/series/beta/' },
       fetchFrom({ 'https://three.example/series/beta/': okRes(`<h1>Golden Sun</h1><a href="/series/beta/chapter-1">Chapter 1</a>`) }),
-    );
+    ));
     expect(r3.similarTo == null).toBe(true);
   });
 
@@ -188,11 +197,11 @@ describe('addSeries (real DB)', () => {
       `<li${locked ? ' class="premium"' : ''}><a href="${url}">Chapter</a></li>`;
 
     test('WP-46: an under-reading plain TOC at add adopts render and persists fetchMode RENDER', async () => {
-      const { seriesId } = await addSeries(
+      const { seriesId } = await created(addSeries(
         { url: WATCH_URL },
         fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1))) }), // plain reads 1
         fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1) + ROW(W2))) }), // render reads 2 (more)
-      );
+      ));
       const source = await db.source.findFirstOrThrow({ where: { seriesId } });
       expect(source.fetchMode).toBe('RENDER');
       expect(await db.chapter.count({ where: { seriesId } })).toBe(2);
@@ -200,11 +209,11 @@ describe('addSeries (real DB)', () => {
 
     test('WP-46: a hard-fail add recovered by render persists a PAGE_WATCH RENDER source', async () => {
       const url = 'https://cf.example/series/omega/';
-      const { seriesId } = await addSeries(
+      const { seriesId } = await created(addSeries(
         { url },
         fetchFrom({ [url]: { outcome: 'HTTP_4XX', status: 403 } as PoliteResult }), // page + feeds blocked
         fetchFrom({ [url]: okRes(TOC(ROW('https://cf.example/series/omega/chapter-1/'))) }),
-      );
+      ));
       const source = await db.source.findFirstOrThrow({ where: { seriesId } });
       expect(source.type).toBe('PAGE_WATCH');
       expect(source.fetchMode).toBe('RENDER');
@@ -220,7 +229,7 @@ describe('addSeries (real DB)', () => {
       .join('')}</ul></body></html>`;
     const feed = RSS(ITEM('o1', 'https://wp.example/2026/08/11/other-ch-1/') + ITEM('o2', 'https://wp.example/2026/08/11/misc-ch-9/'));
 
-    const { seriesId } = await addSeries({ url }, fetchFrom({ [url]: okRes(page), [feedUrl]: okRes(feed) }));
+    const { seriesId } = await created(addSeries({ url }, fetchFrom({ [url]: okRes(page), [feedUrl]: okRes(feed) })));
 
     const source = await db.source.findFirstOrThrow({ where: { seriesId } });
     expect(source.type).toBe('PAGE_WATCH');
@@ -283,6 +292,33 @@ describe('pollAllSources (real DB)', () => {
     expect(source.health).toBe('DEGRADED');
     expect(source.failureScore).toBeGreaterThan(0);
     expect(source.lastFailureType).toBe('DNS');
+  });
+
+  test('WP-50: a linkOnly source persists and is selectively excluded from polling', async () => {
+    // A normal, genuinely pollable FEED source (isActive, READING, linkOnly false via addAlpha) —
+    // proves polling actually ran and reached a normal source, not just that nothing was fetched.
+    await addAlpha();
+
+    const series = await db.series.create({
+      data: {
+        userId: getCurrentUserId(),
+        title: 'Blocked Series',
+        sources: { create: { url: 'https://cf.example/series/x/', host: 'cf.example', type: 'PAGE_WATCH', linkOnly: true } },
+      },
+      include: { sources: true },
+    });
+    expect(series.sources[0]!.linkOnly).toBe(true);
+
+    const fetched: string[] = [];
+    const fetch: FetchImpl = async (url) => {
+      fetched.push(url);
+      return fetchFrom({ [FEED_URL]: okRes(RSS(ITEM('g1', C1) + ITEM('g2', C2))) })(url);
+    };
+    await pollAllSources(fetch);
+
+    // Normal source was reached (polling ran); link-only source was selectively skipped.
+    expect(fetched).toContain(FEED_URL);
+    expect(fetched).not.toContain('https://cf.example/series/x/');
   });
 });
 
@@ -383,7 +419,7 @@ describe('page-watch source (real DB)', () => {
   test('adds a PAGE_WATCH source seeded from the TOC, with FREE/LOCKED access', async () => {
     // No feed anywhere (all guesses 404) → page-watch; the page IS the TOC.
     const fetch = fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1) + ROW(W2, true))) });
-    const { seriesId } = await addSeries({ url: WATCH_URL }, fetch);
+    const { seriesId } = await created(addSeries({ url: WATCH_URL }, fetch));
 
     const series = await db.series.findUniqueOrThrow({
       where: { id: seriesId },
@@ -397,7 +433,7 @@ describe('page-watch source (real DB)', () => {
 
   test('poll parses the TOC, persists only the new chapter with its access, no storm on re-poll', async () => {
     const fetch = fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1) + ROW(W2, true))) });
-    const { seriesId } = await addSeries({ url: WATCH_URL }, fetch);
+    const { seriesId } = await created(addSeries({ url: WATCH_URL }, fetch));
 
     // A third (locked) chapter appears; the first two are unchanged.
     const effects = await pollAllSources(
@@ -414,10 +450,10 @@ describe('page-watch source (real DB)', () => {
 
   test('a plain page-watch that regresses below stored escalates the source to RENDER (renderer available)', async () => {
     // Seed 3 chapters plainly (no render port at add → stays PLAIN, stored = 3).
-    const { seriesId } = await addSeries(
+    const { seriesId } = await created(addSeries(
       { url: WATCH_URL },
       fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1) + ROW(W2) + ROW(W3))) }),
-    );
+    ));
     // Next poll's plain read returns only 1 chapter (the TOC failed to render) → 1 < 3 → escalate.
     await pollAllSources(fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1))) }), async () => okRes(TOC(ROW(W1))));
 
@@ -425,7 +461,7 @@ describe('page-watch source (real DB)', () => {
   });
 
   test('the same under-read does not escalate when no renderer is configured', async () => {
-    const { seriesId } = await addSeries({ url: WATCH_URL }, fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1))) }));
+    const { seriesId } = await created(addSeries({ url: WATCH_URL }, fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1))) })));
     await pollAllSources(fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1))) })); // no render impl
 
     expect((await db.source.findFirstOrThrow({ where: { seriesId } })).fetchMode).toBe('PLAIN');
@@ -433,7 +469,7 @@ describe('page-watch source (real DB)', () => {
 
   test('WP-20: a stored LOCKED chapter turning FREE stamps becameFreeAt and does not re-fire', async () => {
     // Add with W1 free, W2 locked.
-    const { seriesId } = await addSeries({ url: WATCH_URL }, fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1) + ROW(W2, true))) }));
+    const { seriesId } = await created(addSeries({ url: WATCH_URL }, fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1) + ROW(W2, true))) })));
 
     // Next poll: W2 is now free. Pass an explicit `now` since the host min-interval gate (WP-42)
     // compares against the previous poll's persisted `lastCheckedAt` — the second call below needs
@@ -455,7 +491,7 @@ describe('page-watch source (real DB)', () => {
   });
 
   test('WP-33: a page-watch poll reconciles a stored UNKNOWN chapter to LOCKED, silently', async () => {
-    const { seriesId } = await addSeries({ url: WATCH_URL }, fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1))) }));
+    const { seriesId } = await created(addSeries({ url: WATCH_URL }, fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1))) })));
     // Force the seeded chapter to UNKNOWN (simulate a feed-originated row).
     await db.chapter.updateMany({ where: { seriesId }, data: { access: 'UNKNOWN' } });
 
@@ -472,10 +508,10 @@ describe('page-watch source (real DB)', () => {
     const landingBody = `<html><body><a href="/series/gamma/contents/">Table of Contents</a></body></html>`;
     const seedTocBody = `<html><body><a href="/series/gamma/chapter-1">Chapter 1</a></body></html>`;
     // Add via page-watch; tocUrl is resolved at add (Task 3).
-    const { seriesId } = await addSeries(
+    const { seriesId } = await created(addSeries(
       { url: LANDING },
       fetchFrom({ [LANDING]: okRes(landingBody), [TOC]: okRes(seedTocBody) }),
-    );
+    ));
     await db.source.updateMany({ where: { seriesId }, data: { lastCheckedAt: null } });
 
     // On poll, only the TOC URL serves a new chapter; the landing url serves nothing new.
@@ -517,10 +553,10 @@ describe('updateSeries (real DB)', () => {
 
   test('WP-30: setting title pins titleIsManual, and backfill then leaves it alone', async () => {
     const LANDING = 'https://ut.example/series/omega/';
-    const { seriesId } = await addSeries(
+    const { seriesId } = await created(addSeries(
       { url: LANDING },
       fetchFrom({ [LANDING]: okRes(`<h1>Auto Name</h1><a href="/series/omega/chapter-1">Chapter 1</a>`) }),
-    );
+    ));
 
     const result = await updateSeries(seriesId, { title: 'My Hand-Fixed Name' });
     expect(result).not.toBeNull();
@@ -773,13 +809,13 @@ describe('backfillFromToc (real DB)', () => {
   test('WP-37: backfill fetches a stored tocUrl, not the landing url', async () => {
     const LANDING = 'https://bf.example/series/delta/';
     const TOC = 'https://bf.example/series/delta/contents/';
-    const { seriesId } = await addSeries(
+    const { seriesId } = await created(addSeries(
       { url: LANDING },
       fetchFrom({
         [LANDING]: okRes(`<a href="/series/delta/contents/">Table of Contents</a>`),
         [TOC]: okRes(`<a href="/series/delta/chapter-1">Chapter 1</a>`),
       }),
-    );
+    ));
     // Backfill sees a fuller TOC at the TOC url; the landing url would 0-out.
     const added = await backfillFromToc(
       seriesId,
@@ -799,13 +835,13 @@ describe('backfillFromToc (real DB)', () => {
     // Simulate a pre-WP-37 series: create it, then blank its tocUrl.
     const LANDING = 'https://heal.example/series/epsilon/';
     const TOC = 'https://heal.example/series/epsilon/contents/';
-    const { seriesId } = await addSeries(
+    const { seriesId } = await created(addSeries(
       { url: LANDING },
       fetchFrom({
         [LANDING]: okRes(`<a href="/series/epsilon/contents/">Table of Contents</a>`),
         [TOC]: okRes(`<a href="/series/epsilon/chapter-1">Chapter 1</a>`),
       }),
-    );
+    ));
     await db.source.updateMany({ where: { seriesId }, data: { tocUrl: null } });
 
     const added = await backfillFromToc(
@@ -825,7 +861,7 @@ describe('backfillFromToc (real DB)', () => {
   test('WP-37: backfill via tocUrl diffs against stored chapters (skips an already-seen one)', async () => {
     const LANDING = 'https://skip.example/series/theta/';
     const TOC = 'https://skip.example/series/theta/contents/';
-    const { seriesId } = await addSeries(
+    const { seriesId } = await created(addSeries(
       { url: LANDING },
       fetchFrom({
         // Landing carries chapter-1 (seeded at add) AND the TOC link.
@@ -834,7 +870,7 @@ describe('backfillFromToc (real DB)', () => {
         ),
         [TOC]: okRes(`<a href="/series/theta/chapter-1">Chapter 1</a>`),
       }),
-    );
+    ));
     // Confirm add-time actually seeded chapter-1 (parseToc picks up the "Chapter 1" anchor
     // on the landing page itself, unlike the other two WP-37 tests above, whose landing
     // fixtures carry only the TOC link and so seed zero chapters).
@@ -861,10 +897,10 @@ describe('backfillFromToc (real DB)', () => {
     const LANDING = 'https://bft.example/series/rho/';
     const TOC = 'https://bft.example/series/rho/contents/';
     // Add page-watch with a bad slug title (no <h1> at add) so the stored title is the slug.
-    const { seriesId } = await addSeries(
+    const { seriesId } = await created(addSeries(
       { url: LANDING },
       fetchFrom({ [LANDING]: okRes(`<a href="/series/rho/contents/">Table of Contents</a>`) }),
-    );
+    ));
     await db.source.updateMany({ where: { seriesId }, data: { tocUrl: null } }); // force self-heal
     // Count fetches; landing now HAS an <h1>; self-heal fetches landing (for the TOC link) → title is free.
     const seen: string[] = [];
@@ -883,10 +919,10 @@ describe('backfillFromToc (real DB)', () => {
 
   test('WP-30: backfill does NOT overwrite a manual title', async () => {
     const LANDING = 'https://bft2.example/series/sigma/';
-    const { seriesId } = await addSeries(
+    const { seriesId } = await created(addSeries(
       { url: LANDING },
       fetchFrom({ [LANDING]: okRes(`<h1>Auto Name</h1><a href="/series/sigma/chapter-1">Chapter 1</a>`) }),
-    );
+    ));
     await db.series.updateMany({ where: { id: seriesId }, data: { title: 'My Hand-Fixed Name', titleIsManual: true } });
     const result = await backfillFromToc(
       seriesId,
@@ -901,10 +937,10 @@ describe('backfillFromToc (real DB)', () => {
     const LANDING = 'https://xf.example/series/tau/';
     const TOC = 'https://xf.example/series/tau/contents/';
     // Page-watch add with NO <h1> → stored title is the slug ("Tau").
-    const { seriesId } = await addSeries(
+    const { seriesId } = await created(addSeries(
       { url: LANDING },
       fetchFrom({ [LANDING]: okRes(`<a href="/series/tau/chapter-1">Chapter 1</a>`) }),
-    );
+    ));
     const seeded = await db.series.findFirstOrThrow({ where: { id: seriesId } });
     expect(seeded.title).toBe('Tau'); // confirm the slug fallback landed at add-time
     await db.source.updateMany({ where: { seriesId }, data: { tocUrl: TOC } }); // force tocUrl-set path
@@ -926,10 +962,10 @@ describe('backfillFromToc (real DB)', () => {
   test('WP-30: backfill leaves the title unchanged when the extra landing fetch fails', async () => {
     const LANDING = 'https://xf2.example/series/upsilon/';
     const TOC = 'https://xf2.example/series/upsilon/contents/';
-    const { seriesId } = await addSeries(
+    const { seriesId } = await created(addSeries(
       { url: LANDING },
       fetchFrom({ [LANDING]: okRes(`<a href="/series/upsilon/chapter-1">Chapter 1</a>`) }),
-    );
+    ));
     await db.source.updateMany({ where: { seriesId }, data: { tocUrl: TOC } });
     const before = (await db.series.findFirstOrThrow({ where: { id: seriesId } })).title;
     const fetch = ((u: string) => {
@@ -951,10 +987,10 @@ describe('WP-35: chapter positions (real DB)', () => {
     .join('');
 
   test('add seeds chapter positions from the TOC order', async () => {
-    const { seriesId } = await addSeries(
+    const { seriesId } = await created(addSeries(
       { url: WATCH },
       fetchFrom({ [WATCH]: okRes(`<html><body><ul>${rows}</ul></body></html>`) }),
-    );
+    ));
     const chapters = await db.chapter.findMany({ where: { seriesId }, orderBy: { url: 'asc' } });
     expect(chapters.find((c) => c.url.endsWith('chapter-1/'))!.position).toBe(0);
     expect(chapters.find((c) => c.url.endsWith('chapter-2/'))!.position).toBe(1);
@@ -965,7 +1001,10 @@ describe('WP-35: chapter positions (real DB)', () => {
   // Build the series with a position order that DIFFERS from number/discovery order to prove position wins:
   // direct db inserts, chapter "1" at position 2 (last) and chapter "3" at position 0 (first).
   test('getSeries and listSeries order by position', async () => {
-    const { seriesId } = await addSeries({ url: WATCH }, fetchFrom({ [WATCH]: okRes('<html><body></body></html>') }));
+    // This test only needs a Series + Source row to attach hand-inserted chapters to — it doesn't
+    // exercise add-time resolution. A page with neither chapters nor a discoverable TOC would now
+    // (WP-50) need user confirmation, so seed directly via allowLinkOnly instead of a fetch fixture.
+    const { seriesId } = await created(addSeries({ url: WATCH, allowLinkOnly: true }, fetchFrom({})));
     const source = await db.source.findFirstOrThrow({ where: { seriesId } });
     await db.chapter.createMany({
       data: [
@@ -1218,10 +1257,10 @@ describe('reclassifySource (real DB, WP-34)', () => {
   test('WP-34: reclassifySource flips a FEED source to PAGE_WATCH (render → fetchMode RENDER)', async () => {
     const url = 'https://paid.example/novel/z/';
     const feedUrl = 'https://paid.example/feed/';
-    const { seriesId } = await addSeries(
+    const { seriesId } = await created(addSeries(
       { url },
       fetchFrom({ [url]: okRes(PAGE(feedUrl)), [feedUrl]: okRes(RSS(ITEM('g1', 'https://paid.example/z-1/'))) }),
-    );
+    ));
     const before = await db.source.findFirstOrThrow({ where: { seriesId } });
     expect(before.type).toBe('FEED');
 
@@ -1239,10 +1278,10 @@ describe('reclassifySource (real DB, WP-34)', () => {
   test('WP-34: reclassifySource without render keeps fetchMode PLAIN', async () => {
     const url = 'https://free.example/novel/w/';
     const feedUrl = 'https://free.example/feed/';
-    const { seriesId } = await addSeries(
+    const { seriesId } = await created(addSeries(
       { url },
       fetchFrom({ [url]: okRes(PAGE(feedUrl)), [feedUrl]: okRes(RSS(ITEM('g1', 'https://free.example/w-1/'))) }),
-    );
+    ));
     const src = await db.source.findFirstOrThrow({ where: { seriesId } });
 
     await reclassifySource(src.id);
@@ -1255,10 +1294,10 @@ describe('reclassifySource (real DB, WP-34)', () => {
   test('WP-34: reclassifySource without render does not reset an already-RENDER source to PLAIN (one-way ratchet)', async () => {
     const url = 'https://ratchet.example/novel/q/';
     const feedUrl = 'https://ratchet.example/feed/';
-    const { seriesId } = await addSeries(
+    const { seriesId } = await created(addSeries(
       { url },
       fetchFrom({ [url]: okRes(PAGE(feedUrl)), [feedUrl]: okRes(RSS(ITEM('g1', 'https://ratchet.example/q-1/'))) }),
-    );
+    ));
     const src = await db.source.findFirstOrThrow({ where: { seriesId } });
     await db.source.update({ where: { id: src.id }, data: { fetchMode: 'RENDER' } });
 
@@ -1273,10 +1312,10 @@ describe('reclassifySource (real DB, WP-34)', () => {
     const url = 'https://paid.example/novel/q/';
     const feedUrl = 'https://paid.example/feed/';
     // Add as FEED with an EMPTY feed window → 0 chapters seeded (clean baseline for the switch).
-    const { seriesId } = await addSeries(
+    const { seriesId } = await created(addSeries(
       { url },
       fetchFrom({ [url]: okRes(PAGE(feedUrl)), [feedUrl]: okRes(RSS('')) }),
-    );
+    ));
 
     // Plain fetch of the TOC fails (CF-blocked); render returns the real TOC.
     const plain = fetchFrom({}); // everything 404 → backfill reads nothing
@@ -1306,10 +1345,10 @@ describe('reclassifySource (real DB, WP-34)', () => {
   test('WP-34: switchToPageWatch with a plain-readable TOC stays PLAIN (no render)', async () => {
     const url = 'https://free.example/novel/r/';
     const feedUrl = 'https://free.example/feed/';
-    const { seriesId } = await addSeries(
+    const { seriesId } = await created(addSeries(
       { url },
       fetchFrom({ [url]: okRes(PAGE(feedUrl)), [feedUrl]: okRes(RSS('')) }),
-    );
+    ));
     const plain = fetchFrom({
       [url]: okRes(`<html><body><ul><li><a href="https://free.example/novel/r/ch-1/">Chapter 1</a></li></ul></body></html>`),
     });
@@ -1324,7 +1363,7 @@ describe('reclassifySource (real DB, WP-34)', () => {
   test('WP-34: switchToPageWatch reports the source actual fetchMode (a pre-RENDER source stays/reports RENDER)', async () => {
     const url = 'https://free.example/novel/s/';
     const feedUrl = 'https://free.example/feed/';
-    const { seriesId } = await addSeries({ url }, fetchFrom({ [url]: okRes(PAGE(feedUrl)), [feedUrl]: okRes(RSS('')) }));
+    const { seriesId } = await created(addSeries({ url }, fetchFrom({ [url]: okRes(PAGE(feedUrl)), [feedUrl]: okRes(RSS('')) })));
     await db.source.updateMany({ where: { seriesId }, data: { fetchMode: 'RENDER' } }); // simulate a prior escalation
     const plain = fetchFrom({ [url]: okRes(`<html><body><ul><li><a href="https://free.example/novel/s/ch-1/">Chapter 1</a></li></ul></body></html>`) });
 
@@ -1343,8 +1382,11 @@ describe('backfillWithEscalation (real DB, WP-34)', () => {
 
   test('PAGE_WATCH CF series: plain reads nothing, render seeds the TOC → rendered:true, fetchMode RENDER', async () => {
     const url = 'https://cfsite.example/novel/omega/';
-    // No feed, no readable chapter list → resolves PAGE_WATCH with 0 chapters (clean baseline).
-    const { seriesId } = await addSeries({ url }, fetchFrom({ [url]: okRes('<html><body>Coming soon</body></html>') }));
+    // No feed, no readable chapter list, no discoverable TOC link → under WP-50 this page has
+    // nothing to resolve at add-time and would need user confirmation. This test isn't about
+    // add-time resolution, just a clean 0-chapter PLAIN PAGE_WATCH baseline for backfillWithEscalation
+    // to render-recover from — seed it directly via allowLinkOnly instead of a fetch fixture.
+    const { seriesId } = await created(addSeries({ url, allowLinkOnly: true }, fetchFrom({})));
     const before = await db.source.findFirstOrThrow({ where: { seriesId } });
     expect(before.type).toBe('PAGE_WATCH');
     expect(before.fetchMode).toBe('PLAIN');
@@ -1369,7 +1411,7 @@ describe('backfillWithEscalation (real DB, WP-34)', () => {
   test('FEED series: plain fails, render seeds → rendered:true, chapters seeded, fetchMode stays PLAIN (not flipped)', async () => {
     const url = 'https://feedsite.example/novel/beta/';
     const feedUrl = 'https://feedsite.example/feed/';
-    const { seriesId } = await addSeries({ url }, fetchFrom({ [url]: okRes(PAGE(feedUrl)), [feedUrl]: okRes(RSS('')) }));
+    const { seriesId } = await created(addSeries({ url }, fetchFrom({ [url]: okRes(PAGE(feedUrl)), [feedUrl]: okRes(RSS('')) })));
     const before = await db.source.findFirstOrThrow({ where: { seriesId } });
     expect(before.type).toBe('FEED');
     expect(before.fetchMode).toBe('PLAIN');
@@ -1392,7 +1434,8 @@ describe('backfillWithEscalation (real DB, WP-34)', () => {
 
   test('plain-readable series: plain reads the TOC → rendered:false, no fetchMode change', async () => {
     const url = 'https://plainsite.example/novel/gamma/';
-    const { seriesId } = await addSeries({ url }, fetchFrom({ [url]: okRes('<html><body>Coming soon</body></html>') }));
+    // Same reasoning as above: a clean 0-chapter PLAIN PAGE_WATCH baseline, seeded directly.
+    const { seriesId } = await created(addSeries({ url, allowLinkOnly: true }, fetchFrom({})));
     const before = await db.source.findFirstOrThrow({ where: { seriesId } });
     expect(before.type).toBe('PAGE_WATCH');
 

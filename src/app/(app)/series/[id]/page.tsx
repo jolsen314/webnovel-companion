@@ -33,13 +33,16 @@ export default async function SeriesPage({ params }: { params: Promise<{ id: str
       <div className="detail__meta">
         {active && (
           <>
-            <span className={`health-dot health-dot--${active.health}`} title={active.health} />
+            {!active.linkOnly && (
+              <span className={`health-dot health-dot--${active.health}`} title={active.health} />
+            )}
             <a href={active.url} target="_blank" rel="noreferrer">
               {active.host}
             </a>
             <span>·</span>
           </>
         )}
+        {active?.linkOnly && <span className="status-chip">link-only</span>}
         <span>{series.chapters.length} chapters</span>
       </div>
 

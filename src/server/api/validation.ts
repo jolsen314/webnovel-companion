@@ -18,6 +18,7 @@ function isObject(v: unknown): v is Record<string, unknown> {
 export interface AddSeriesBody {
   url: string;
   title?: string;
+  allowLinkOnly?: boolean;
 }
 
 export function parseAddSeriesBody(input: unknown): ParseResult<AddSeriesBody> {
@@ -35,6 +36,10 @@ export function parseAddSeriesBody(input: unknown): ParseResult<AddSeriesBody> {
   if (input.title !== undefined && typeof input.title !== 'string') return err('"title" must be a string.');
   const value: AddSeriesBody = { url: input.url };
   if (typeof input.title === 'string') value.title = input.title;
+  if (input.allowLinkOnly !== undefined) {
+    if (typeof input.allowLinkOnly !== 'boolean') return err('"allowLinkOnly" must be a boolean.');
+    value.allowLinkOnly = input.allowLinkOnly;
+  }
   return ok(value);
 }
 
