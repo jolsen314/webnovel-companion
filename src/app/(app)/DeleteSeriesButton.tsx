@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Trash2 } from 'lucide-react';
 import { requestDeleteSeries } from './requestDeleteSeries';
 
 export function DeleteSeriesButton(props: { id: string; title: string; chapterCount: number }) {
@@ -45,7 +46,7 @@ export function DeleteSeriesButton(props: { id: string; title: string; chapterCo
         aria-label={`Delete ${props.title}`}
         onClick={() => setOpen(true)}
       >
-        🗑
+        <Trash2 size={16} aria-hidden="true" />
       </button>
       {open && (
         <div className="card__confirm" role="dialog" aria-label={`Delete ${props.title}`}>

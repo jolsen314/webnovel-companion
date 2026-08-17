@@ -579,13 +579,15 @@ body {
 }
 .card__delete {
   position: absolute;
-  top: 0.5rem;
+  bottom: 0.5rem;
   right: 0.5rem;
   z-index: 1;
-  font-size: 0.85rem;
-  line-height: 1;
-  padding: 0.25rem 0.4rem;
-  color: var(--color-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  padding: 0.3rem;
+  color: var(--color-down);
   background: color-mix(in oklab, var(--color-surface-2) 88%, transparent);
   border: 1px solid var(--color-line);
   border-radius: 8px;
@@ -598,8 +600,8 @@ body {
   opacity: 1;
 }
 .card__delete:hover {
-  color: var(--color-down);
   border-color: var(--color-down);
+  background: color-mix(in oklab, var(--color-down) 16%, var(--color-surface-2));
 }
 /* Touch / no-hover devices: always show the trash so it's reachable. */
 @media (hover: none) {
@@ -609,7 +611,7 @@ body {
 }
 .card__confirm {
   position: absolute;
-  top: 2.4rem;
+  bottom: 2.6rem;
   right: 0.5rem;
   z-index: 2;
   width: min(20rem, calc(100% - 1rem));
