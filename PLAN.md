@@ -540,7 +540,7 @@ production renderer both **under-captures** and **mis-classifies**, so WP-20's "
    endpoint (`/wp-json/<ns>/v1/chapters?category=<termId>&per_page=100&page=N`) returning **`{title, permalink,
    locked, price}` per chapter** — all N chapters in ⌈total/100⌉ calls from the CF-cleared browser context, **and the
    per-chapter `locked` field feeds WP-20 directly** (no DOM lock-marker scraping — strictly better than the generic
-   `parseToc` lock heuristics for this site). An static-json adapter beats click-through here; keep click-"Next"-and-union
+   `parseToc` lock heuristics for this site). A static-JSON adapter beats click-through here; keep click-"Next"-and-union
    as the fallback for sites with no such API. (Distinct from WP-32's *server-side* sibling-page "next chapters"
    following, which needs no renderer.)
 
