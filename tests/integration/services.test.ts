@@ -1092,7 +1092,7 @@ describe('WP-35: chapter positions (real DB)', () => {
   // A feed-ahead chapter (newest, published to the feed but not yet on the hand-maintained TOC
   // page) is stored with position: null. Unlike the windowed case above, it must NOT block the
   // re-index: it's unpositioned, so leaving it null (sorts last = newest) collides with nothing.
-  // The TOC-covered chapters still get their positions. This is the dense-feed-source TCF case — Part 2's
+  // The TOC-covered chapters still get their positions. This is the split-title feed-ahead case — Part 2's
   // newest chapter arrives via feed before the TOC index page lists it, leaving the whole series
   // unpositioned and falling back to the (two-part-colliding) number order.
   test('backfill re-indexes when the only absent-from-TOC chapter is unpositioned (feed-ahead)', async () => {
