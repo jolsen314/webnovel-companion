@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import { db } from '../db';
 import { getCurrentUserId } from '../user';
 import { politeFetch, type PoliteResult } from '../../lib/feeds/fetch';
@@ -405,6 +406,8 @@ export function addSeries(
               fetchMode: r.fetchMode, // WP-46
               feedUrl: r.feedUrl,
               tocUrl: r.tocUrl, // WP-37
+              apiUrl: r.apiUrl, // WP-45
+              ...(r.apiMap ? { apiMap: r.apiMap as unknown as Prisma.InputJsonValue } : {}), // WP-45: Prisma Json — omit when null
               matchType: r.match.type,
               matchValue: 'value' in r.match ? r.match.value : null,
             },
