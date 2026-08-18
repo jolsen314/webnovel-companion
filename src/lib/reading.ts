@@ -54,29 +54,32 @@ function compareStrings(a: string, b: string): number {
   return 0;
 }
 
+/** Ascending compare where null sorts last; 0 when equal or both null (→ caller falls through). */
+function nullsLastAsc(a: number | null, b: number | null): number {
+  if (a != null && b != null) return a - b;
+  if (a == null && b != null) return 1;
+  if (a != null && b == null) return -1;
+  return 0;
+}
+
 /** Order chapters for reading: un-numbered prologues first, then the numbered main sequence,
  *  then Extra/Side content — per the owner's rule. Pure; returns a new array. */
 export function orderChaptersForReading<T extends OrderableChapter>(chapters: readonly T[]): T[] {
   return [...chapters].sort((a, b) => {
     // Position (the site's own TOC order) wins when known; nulls sort last and fall to the comparator.
-    if (a.position != null && b.position != null && a.position !== b.position) return a.position - b.position;
-    if (a.position == null && b.position != null) return 1;
-    if (a.position != null && b.position == null) return -1;
+    const posCmp = nullsLastAsc(a.position ?? null, b.position ?? null);
+    if (posCmp !== 0) return posCmp;
     const ba = readingBucket(a);
     const bb = readingBucket(b);
     if (ba !== bb) return ba - bb;
     // Within the main and end buckets, order by number ascending (nulls last).
     if (ba !== 0) {
-      if (a.number != null && b.number != null && a.number !== b.number) return a.number - b.number;
-      if (a.number == null && b.number != null) return 1;
-      if (a.number != null && b.number == null) return -1;
+      const numCmp = nullsLastAsc(a.number, b.number);
+      if (numCmp !== 0) return numCmp;
     }
     // Front bucket, or equal/absent numbers: publishedAt asc (nulls last), then discoveredAt, then id.
-    const pa = a.publishedAt?.getTime() ?? null;
-    const pb = b.publishedAt?.getTime() ?? null;
-    if (pa != null && pb != null && pa !== pb) return pa - pb;
-    if (pa == null && pb != null) return 1;
-    if (pa != null && pb == null) return -1;
+    const pubCmp = nullsLastAsc(a.publishedAt?.getTime() ?? null, b.publishedAt?.getTime() ?? null);
+    if (pubCmp !== 0) return pubCmp;
     const da = a.discoveredAt.getTime();
     const dbb = b.discoveredAt.getTime();
     if (da !== dbb) return da - dbb;

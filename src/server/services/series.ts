@@ -3,6 +3,7 @@ import { db } from '../db';
 import { getCurrentUserId } from '../user';
 import { unreadCount, orderChaptersForReading } from '../../lib/reading';
 import type { SeriesUpdate } from '../api/validation';
+import { ownsSeries } from './ownership';
 
 /**
  * Series read/write services (Prisma-backed, scoped to the current user). Thin glue;
@@ -70,9 +71,8 @@ export async function getSeries(id: string) {
 
 /** Update shelf fields and/or reading progress. Returns null if the series isn't the user's. */
 export async function updateSeries(id: string, patch: SeriesUpdate): Promise<{ id: string } | null> {
+  if (!(await ownsSeries(id))) return null;
   const userId = getCurrentUserId();
-  const owned = await db.series.findFirst({ where: { id, userId }, select: { id: true } });
-  if (!owned) return null;
 
   const ops: Prisma.PrismaPromise<unknown>[] = [];
 

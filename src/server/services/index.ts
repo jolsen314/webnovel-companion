@@ -4,7 +4,7 @@ import { politeFetch, type PoliteResult } from '../../lib/feeds/fetch';
 import { makeRenderFetch } from '../../lib/feeds/renderFetch';
 import type { SeriesMatch } from '../../lib/feeds/discover';
 import type { FailureType } from '../../lib/health';
-import { diffChapters, canonicalUrl } from '../../lib/feeds/diff';
+import { diffChapters, canonicalUrl, type KnownChapter } from '../../lib/feeds/diff';
 import { parseToc, tocReadingOrder } from '../../lib/feeds/pageWatch';
 import { findTocUrl } from '../../lib/feeds/discover';
 import { extractSeriesTitle } from '../../lib/feeds/title';
@@ -119,6 +119,29 @@ function rowToPollable(row: {
   };
 }
 
+/** Project a stored chapter row onto the pure `KnownChapter` the diff engine consumes
+ *  (UNKNOWN access → undefined). Shared by the poll and backfill loaders. */
+function toKnownChapter(c: { id: string; guid: string | null; url: string; access: 'FREE' | 'LOCKED' | 'UNKNOWN' }): KnownChapter {
+  return { id: c.id, guid: c.guid ?? undefined, url: c.url, access: c.access === 'UNKNOWN' ? undefined : c.access };
+}
+
+/** `$transaction` ops flipping each unlocked chapter to FREE (once — guarded on `becameFreeAt: null`).
+ *  Shared by `applyPollEffects` and `backfillFromToc`, which must stay in lockstep. */
+function becameFreeOps(chapters: KnownChapter[], now: Date) {
+  return chapters.flatMap((c) =>
+    c.id
+      ? [db.chapter.updateMany({ where: { id: c.id, becameFreeAt: null }, data: { access: 'FREE' as const, becameFreeAt: now } })]
+      : [],
+  );
+}
+
+/** `$transaction` ops writing each chapter's reconciled access (UNKNOWN → learned FREE/LOCKED). Shared. */
+function accessReconciledOps(chapters: KnownChapter[]) {
+  return chapters.flatMap((c) =>
+    c.id ? [db.chapter.updateMany({ where: { id: c.id }, data: { access: c.access ?? 'UNKNOWN' } })] : [],
+  );
+}
+
 function pollPorts(
   fetchImpl: FetchImpl,
   renderImpl?: FetchImpl,
@@ -136,12 +159,7 @@ function pollPorts(
         })
       ).map(rowToPollable),
     loadStoredChapters: async (seriesId) =>
-      (await db.chapter.findMany({ where: { seriesId }, select: { id: true, guid: true, url: true, access: true } })).map((c) => ({
-        id: c.id,
-        guid: c.guid ?? undefined,
-        url: c.url,
-        access: c.access === 'UNKNOWN' ? undefined : c.access,
-      })),
+      (await db.chapter.findMany({ where: { seriesId }, select: { id: true, guid: true, url: true, access: true } })).map(toKnownChapter),
     applyPollEffects: async (e: PollEffects) => {
       await db.$transaction([
         db.source.update({
@@ -176,21 +194,8 @@ function pollPorts(
               }),
             ]
           : []),
-        ...e.becameFree.flatMap((c) =>
-          c.id
-            ? [
-                db.chapter.updateMany({
-                  where: { id: c.id, becameFreeAt: null },
-                  data: { access: 'FREE' as const, becameFreeAt: now },
-                }),
-              ]
-            : [],
-        ),
-        ...e.accessReconciled.flatMap((c) =>
-          c.id
-            ? [db.chapter.updateMany({ where: { id: c.id }, data: { access: c.access ?? 'UNKNOWN' } })]
-            : [],
-        ),
+        ...becameFreeOps(e.becameFree, now),
+        ...accessReconciledOps(e.accessReconciled),
       ]);
     },
   };
@@ -483,12 +488,7 @@ export async function backfillFromToc(
     where: { seriesId },
     select: { id: true, guid: true, url: true, access: true, position: true },
   });
-  const stored = storedRows.map((c) => ({
-    id: c.id,
-    guid: c.guid ?? undefined,
-    url: c.url,
-    access: c.access === 'UNKNOWN' ? undefined : c.access,
-  }));
+  const stored = storedRows.map(toKnownChapter);
   const diff = diffChapters(stored, toc);
   // Re-index positions only when this TOC read is authoritative for the whole reading order.
   // Safe when every already-stored chapter is either listed in the TOC OR still unpositioned:
@@ -520,12 +520,8 @@ export async function backfillFromToc(
           }),
         ]
       : []),
-    ...diff.becameFree.flatMap((c) =>
-      c.id ? [db.chapter.updateMany({ where: { id: c.id, becameFreeAt: null }, data: { access: 'FREE' as const, becameFreeAt: now } })] : [],
-    ),
-    ...diff.accessReconciled.flatMap((c) =>
-      c.id ? [db.chapter.updateMany({ where: { id: c.id }, data: { access: c.access ?? 'UNKNOWN' } })] : [],
-    ),
+    ...becameFreeOps(diff.becameFree, now),
+    ...accessReconciledOps(diff.accessReconciled),
     ...(tocReindexable
       ? stored.flatMap((s) => {
           const pos = order!.get(canonicalUrl(s.url));

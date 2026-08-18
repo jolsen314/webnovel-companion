@@ -7,7 +7,7 @@
  * pages are Cloudflare-blocked (so `guessFeedUrls` provides fallbacks to try directly).
  */
 
-import type { FeedItem } from './diff';
+import { pathnameOf, type FeedItem } from './diff';
 
 export interface DiscoveredFeed {
   url: string;
@@ -70,14 +70,19 @@ export function slugify(s: string): string {
  * the series slug if one exists, else fall back to the series URL PATH_PREFIX (the
  * series may just be absent from the current capped feed window).
  */
-export function chooseSeriesMatch(items: FeedItem[], seriesUrl: string): SeriesMatch | null {
-  let seriesPath: string;
-  try {
-    seriesPath = new URL(seriesUrl).pathname.replace(/\/?$/, '/'); // ensure trailing slash
-  } catch {
-    return null;
-  }
+/** A series URL's trailing-slash path + its last-segment slug, or null if the URL won't parse. */
+function seriesPathAndSlug(seriesUrl: string): { seriesPath: string; slug: string } | null {
+  const raw = pathnameOf(seriesUrl);
+  if (raw == null) return null;
+  const seriesPath = raw.replace(/\/?$/, '/'); // ensure trailing slash
   const slug = seriesPath.split('/').filter(Boolean).pop() ?? '';
+  return { seriesPath, slug };
+}
+
+export function chooseSeriesMatch(items: FeedItem[], seriesUrl: string): SeriesMatch | null {
+  const parsed = seriesPathAndSlug(seriesUrl);
+  if (!parsed) return null;
+  const { seriesPath, slug } = parsed;
 
   // 1. Positive category tie: a per-novel category whose slug matches the series slug.
   const novelCategories = new Set<string>();
@@ -91,11 +96,8 @@ export function chooseSeriesMatch(items: FeedItem[], seriesUrl: string): SeriesM
 
   // 2. Path ties: every item under the series path ⇒ this feed IS the series'; some ⇒ isolate by path.
   const underSeriesPath = (url: string): boolean => {
-    try {
-      return new URL(url).pathname.startsWith(seriesPath);
-    } catch {
-      return false;
-    }
+    const path = pathnameOf(url);
+    return path != null && path.startsWith(seriesPath);
   };
   const pathItems = items.filter((it) => underSeriesPath(it.url));
   if (items.length > 0 && pathItems.length === items.length) return { type: 'WHOLE_FEED' };
@@ -112,17 +114,13 @@ export function chooseSeriesMatch(items: FeedItem[], seriesUrl: string): SeriesM
   let otherWorkPaths = false;
   if (parentPrefix) {
     for (const it of items) {
-      try {
-        const path = new URL(it.url).pathname;
-        if (path.startsWith(parentPrefix)) {
-          const work = path.slice(parentPrefix.length).split('/').filter(Boolean)[0];
-          if (work && work !== slug) {
-            otherWorkPaths = true;
-            break;
-          }
+      const path = pathnameOf(it.url); // unparseable urls → null, skipped
+      if (path != null && path.startsWith(parentPrefix)) {
+        const work = path.slice(parentPrefix.length).split('/').filter(Boolean)[0];
+        if (work && work !== slug) {
+          otherWorkPaths = true;
+          break;
         }
-      } catch {
-        // ignore unparseable urls
       }
     }
   }
@@ -138,13 +136,9 @@ export function chooseSeriesMatch(items: FeedItem[], seriesUrl: string): SeriesM
  * never does, WP-RC escalates the source to page-watch.
  */
 export function fallbackSeriesMatch(items: FeedItem[], seriesUrl: string): SeriesMatch {
-  let seriesPath: string;
-  try {
-    seriesPath = new URL(seriesUrl).pathname.replace(/\/?$/, '/');
-  } catch {
-    return { type: 'WHOLE_FEED' };
-  }
-  const slug = seriesPath.split('/').filter(Boolean).pop() ?? '';
+  const parsed = seriesPathAndSlug(seriesUrl);
+  if (!parsed) return { type: 'WHOLE_FEED' };
+  const { seriesPath, slug } = parsed;
   const categorized = items.some((it) => (it.categories ?? []).length > 0);
   return categorized ? { type: 'CATEGORY', value: slug } : { type: 'PATH_PREFIX', value: seriesPath };
 }
@@ -163,11 +157,8 @@ export function filterBySeriesMatch(items: FeedItem[], match: SeriesMatch): Feed
       return items.filter((it) => (it.categories ?? []).some((c) => c === match.value || slugify(c) === match.value));
     case 'PATH_PREFIX':
       return items.filter((it) => {
-        try {
-          return new URL(it.url).pathname.startsWith(match.value);
-        } catch {
-          return false;
-        }
+        const path = pathnameOf(it.url);
+        return path != null && path.startsWith(match.value);
       });
   }
 }

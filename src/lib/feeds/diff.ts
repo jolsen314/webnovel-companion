@@ -79,6 +79,15 @@ export function canonicalUrl(raw: string): string {
   }
 }
 
+/** The pathname of a URL, or null if it won't parse. Callers decide the fallback. */
+export function pathnameOf(url: string): string | null {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return null;
+  }
+}
+
 export function diffChapters(stored: KnownChapter[], fetched: FeedItem[]): DiffResult {
   // Track guids and canonical URLs separately, and treat a chapter as seen if
   // EITHER matches. This keeps identity stable when a feed starts/stops emitting

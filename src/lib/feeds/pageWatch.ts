@@ -1,6 +1,6 @@
 import * as cheerio from 'cheerio';
 import { parseChapterNumber } from './parse';
-import { canonicalUrl, type FeedItem } from './diff';
+import { canonicalUrl, pathnameOf, type FeedItem } from './diff';
 
 /**
  * Page-watch: parse a series' TOC page into chapters, for feedless / dense / paid
@@ -100,12 +100,7 @@ export function parseToc(html: string, baseUrl: string, config?: SiteTocConfig):
   if (config?.slugFamilies && config.slugFamilies.length > 0) {
     const families = config.slugFamilies;
     return chapters.filter((c) => {
-      let path: string;
-      try {
-        path = new URL(c.url).pathname;
-      } catch {
-        path = c.url;
-      }
+      const path = pathnameOf(c.url) ?? c.url;
       return families.some((f) => path.includes(f));
     });
   }

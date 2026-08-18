@@ -1,6 +1,7 @@
 import { db } from '../db';
 import { getCurrentUserId } from '../user';
 import { chaptersToMove } from '../../lib/chapters/merge';
+import { ownsSeries, ownsSource } from './ownership';
 
 /**
  * User-scoped recovery services for a contaminated series (WP-38): a mis-matched feed
@@ -21,9 +22,7 @@ export async function pruneChapters(chapterIds: string[]): Promise<{ deleted: nu
 
 /** Delete an entire series (cascades its chapters, sources, and reading progress). */
 export async function deleteSeries(seriesId: string): Promise<{ deleted: boolean }> {
-  const userId = getCurrentUserId();
-  const owned = await db.series.findFirst({ where: { id: seriesId, userId }, select: { id: true } });
-  if (!owned) return { deleted: false };
+  if (!(await ownsSeries(seriesId))) return { deleted: false };
   await db.series.delete({ where: { id: seriesId } });
   return { deleted: true };
 }
@@ -42,9 +41,7 @@ export async function resetChapters(seriesId: string): Promise<{ deleted: number
  * `host` untouched.
  */
 export async function setSourceUrl(sourceId: string, url: string): Promise<{ updated: boolean }> {
-  const userId = getCurrentUserId();
-  const owned = await db.source.findFirst({ where: { id: sourceId, series: { userId } }, select: { id: true } });
-  if (!owned) return { updated: false };
+  if (!(await ownsSource(sourceId))) return { updated: false };
   let host: string | undefined;
   try {
     host = new URL(url).host;
@@ -61,9 +58,7 @@ export async function reclassifySource(
   sourceId: string,
   opts: { render?: boolean } = {},
 ): Promise<{ updated: boolean }> {
-  const userId = getCurrentUserId();
-  const owned = await db.source.findFirst({ where: { id: sourceId, series: { userId } }, select: { id: true } });
-  if (!owned) return { updated: false };
+  if (!(await ownsSource(sourceId))) return { updated: false };
   await db.source.update({
     where: { id: sourceId },
     data: {
