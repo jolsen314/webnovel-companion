@@ -4,6 +4,31 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
+/** The three shapes `POST /api/series` returns on success — needs-confirm (unreadable page),
+ *  added-but-similar (possible duplicate), or a plain add. Replaces three progressive `as` casts. */
+type AddSeriesResponse =
+  | { needsConfirm: true; reason: 'blocked' | 'no-chapters'; suggestedTitle: string; url: string }
+  | { needsConfirm?: false; title?: string; similarTo?: { id: string; title: string } };
+
+/** POST a body to `/api/series`. `ok` carries the typed success union; a failure distinguishes a
+ *  server response (`reached: true`, with any `error` string) from an unreachable server. */
+async function postSeries(
+  body: Record<string, unknown>,
+): Promise<{ ok: true; data: AddSeriesResponse } | { ok: false; reached: boolean; error?: string }> {
+  try {
+    const res = await fetch('/api/series', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (res.ok) return { ok: true, data: (await res.json().catch(() => ({}))) as AddSeriesResponse };
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    return { ok: false, reached: true, error: data.error };
+  } catch {
+    return { ok: false, reached: false };
+  }
+}
+
 export default function AddSeriesPage() {
   const router = useRouter();
   const [url, setUrl] = useState('');
@@ -20,59 +45,45 @@ export default function AddSeriesPage() {
     setBusy(true);
     setError(null);
     setSimilar(null);
-    try {
-      const res = await fetch('/api/series', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ url: url.trim() }),
-      });
-      if (res.ok) {
-        const data = (await res.json().catch(() => ({}))) as {
-          title?: string;
-          similarTo?: { id: string; title: string };
-        };
-        if ((data as { needsConfirm?: boolean }).needsConfirm) {
-          const d = data as { reason: 'blocked' | 'no-chapters'; suggestedTitle: string; url: string };
-          setConfirm({ reason: d.reason, suggestedTitle: d.suggestedTitle, url: d.url });
-          setConfirmTitle(d.suggestedTitle);
-          setBusy(false);
-          return;
-        }
-        if (data.similarTo) {
-          // Non-blocking: the series WAS added; just flag a possible duplicate.
-          setSimilar({ addedTitle: data.title ?? 'the series', existing: data.similarTo });
-          setBusy(false);
-          return;
-        }
-        router.push('/');
-        router.refresh();
-        return;
-      }
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
-      setError(data.error ?? 'Could not add that series.');
-    } catch {
-      setError('Couldn’t reach the server. Try again.');
+    const result = await postSeries({ url: url.trim() });
+    if (!result.ok) {
+      setError(result.reached ? (result.error ?? 'Could not add that series.') : 'Couldn’t reach the server. Try again.');
+      setBusy(false);
+      return;
     }
-    setBusy(false);
+    const data = result.data;
+    if (data.needsConfirm) {
+      setConfirm({ reason: data.reason, suggestedTitle: data.suggestedTitle, url: data.url });
+      setConfirmTitle(data.suggestedTitle);
+      setBusy(false);
+      return;
+    }
+    if (data.similarTo) {
+      // Non-blocking: the series WAS added; just flag a possible duplicate.
+      setSimilar({ addedTitle: data.title ?? 'the series', existing: data.similarTo });
+      setBusy(false);
+      return;
+    }
+    router.push('/');
+    router.refresh();
   }
 
   async function addLinkOnly() {
     if (!confirm) return;
     setBusy(true);
     setError(null);
-    try {
-      const res = await fetch('/api/series', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ url: confirm.url, allowLinkOnly: true, title: confirmTitle.trim() || confirm.suggestedTitle }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const result = await postSeries({
+      url: confirm.url,
+      allowLinkOnly: true,
+      title: confirmTitle.trim() || confirm.suggestedTitle,
+    });
+    if (result.ok) {
       router.push('/');
       router.refresh();
-    } catch {
-      setError('Could not add the link-only entry.');
-      setBusy(false);
+      return;
     }
+    setError('Could not add the link-only entry.');
+    setBusy(false);
   }
 
   return (

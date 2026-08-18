@@ -61,37 +61,44 @@ export function SeriesDetail(props: {
     router.refresh();
   }
 
-  async function backfill() {
+  /** POST a source action, format its JSON into that action's hint, and refresh — or show
+   *  `failMsg` on any non-2xx/parse/network failure. Shared by backfill + track-unlocks, which
+   *  differ only in URL, result shape, hint copy, and which hint state they write. */
+  async function postAction<T>(
+    url: string,
+    setMessage: (m: string | null) => void,
+    format: (result: T) => string,
+    failMsg: string,
+  ) {
     setBusy(true);
-    setBackfillMessage(null);
+    setMessage(null);
     try {
-      const res = await fetch(`/api/series/${props.id}/backfill`, { method: 'POST' });
+      const res = await fetch(url, { method: 'POST' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const result = (await res.json()) as { added: number; reconciled: number; rendered?: boolean };
-      setBackfillMessage(`Added ${result.added} · updated ${result.reconciled}${result.rendered ? ' · rendered' : ''}`);
+      setMessage(format((await res.json()) as T));
       router.refresh();
     } catch {
-      setBackfillMessage('Backfill failed');
+      setMessage(failMsg);
     } finally {
       setBusy(false);
     }
   }
 
-  async function trackUnlocks() {
-    setBusy(true);
-    setSwitchMessage(null);
-    try {
-      const res = await fetch(`/api/series/${props.id}/switch`, { method: 'POST' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const r = (await res.json()) as { added: number; fetchMode: string; rendered: boolean };
-      setSwitchMessage(`Switched · ${r.added} chapters${r.rendered ? ' · rendered' : ''}`);
-      router.refresh();
-    } catch {
-      setSwitchMessage('Switch failed');
-    } finally {
-      setBusy(false);
-    }
-  }
+  const backfill = () =>
+    postAction<{ added: number; reconciled: number; rendered?: boolean }>(
+      `/api/series/${props.id}/backfill`,
+      setBackfillMessage,
+      (r) => `Added ${r.added} · updated ${r.reconciled}${r.rendered ? ' · rendered' : ''}`,
+      'Backfill failed',
+    );
+
+  const trackUnlocks = () =>
+    postAction<{ added: number; fetchMode: string; rendered: boolean }>(
+      `/api/series/${props.id}/switch`,
+      setSwitchMessage,
+      (r) => `Switched · ${r.added} chapters${r.rendered ? ' · rendered' : ''}`,
+      'Switch failed',
+    );
 
   const arranged = arrangeChapters(props.chapters, lastRead, mode);
 

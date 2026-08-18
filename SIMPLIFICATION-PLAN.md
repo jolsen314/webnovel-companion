@@ -6,10 +6,11 @@
 
 ## Status (2026-08-18)
 
-**Done** (all gates green — unit / typecheck / integration):
-A3, A4, Tier C (C1–C6), Tier B (B1–B6), A2, **A1**.
+**Done** (all gates green — unit / typecheck / integration; Tier D verified via Playwright E2E):
+A3, A4, Tier C (C1–C6), Tier B (B1–B6), A2, **A1**, **Tier D (D1–D3)**.
 
-**Remaining:** only the optional **Tier D** (client-component hooks). Full detail below.
+**Remaining:** nothing from this pass — the whole backlog is worked through. (Re-run the
+`code-simplifier` when there's fresh drift and record the next round here.)
 
 ## Overall health
 
@@ -55,29 +56,16 @@ binding check. Two proposal corrections made against the code: `computeBackfillP
 
 ---
 
-## ⏳ Tier D — client-component duplication (medium effort, optional)
+## ✅ Tier D — client-component duplication — **DONE 2026-08-18** (verified via Playwright E2E)
 
-### D1. Extract `useDeleteSeries({ onDeleted })` hook
-- **Where:** `(app)/DeleteSeriesButton.tsx` (shelf) and `(app)/series/[id]/DeleteSeries.tsx` (detail)
-  hold the same `confirming/busy/error` state machine, both call `requestDeleteSeries(id)`, both
-  support Escape-to-cancel. Only markup + post-success action differ (`router.refresh()` vs `router.push('/')`).
-- **Proposal:** Extract the logic into a hook returning `{ confirming, busy, error, open, cancel, confirm }`;
-  each component keeps its own JSX (markup differs enough that merging components isn't worth it).
-  Also standardizes the Escape handling (shelf uses `useEffect`+`window`; detail uses `onKeyDown`).
-- **Risk/effort:** MED / MED.
-
-### D2. `add/page.tsx` — one typed `AddSeriesResponse` union + `postSeries(body)` helper
-- **Where:** `add/page.tsx:24-52` and `59-75` — `onSubmit` and `addLinkOnly` build the same
-  `fetch('/api/series', POST)`; the response is progressively `as`-cast three ways.
-- **Proposal:** One typed response union + small `postSeries` helper; the three outcomes
-  (needsConfirm / similarTo / success) read as a clean branch. Client-only — verify each branch routes the same.
-- **Risk/effort:** MED / MED.
-
-### D3. `SeriesDetail.tsx` — shared `runAction(url, onResult, failMsg)`
-- **Where:** `SeriesDetail.tsx` — `backfill` and `trackUnlocks` share the exact
-  `setBusy/try-POST-parse-setMsg-refresh/catch/finally` structure.
-- **Proposal:** A small `postAction` helper; keep distinct message formatting via callback.
-- **Risk/effort:** LOW / MED.
+- **D1** — `useDeleteSeries({ id, onDeleted, failMessage })` hook (`(app)/useDeleteSeries.ts`) single-sources
+  the confirm/busy/error machine + `requestDeleteSeries` + Escape-to-cancel behind the shelf
+  (`DeleteSeriesButton`) and detail (`DeleteSeries`) components; each keeps its own JSX. Escape standardized to
+  the hook's window listener (detail dropped its `onKeyDown`).
+- **D2** — `add/page.tsx`: one typed `AddSeriesResponse` union + a module-level `postSeries(body)` helper;
+  `onSubmit`/`addLinkOnly` now branch the three outcomes (needsConfirm / similarTo / success) with no `as` casts.
+- **D3** — `SeriesDetail.tsx`: a shared `postAction(url, setMessage, format, failMsg)` folds `backfill` +
+  `trackUnlocks` (identical POST/parse/hint/refresh/catch structure); distinct copy stays in the `format` callback.
 
 ---
 
