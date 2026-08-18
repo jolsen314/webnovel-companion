@@ -6,18 +6,18 @@
 
 ## Status (2026-08-18)
 
-**Done** (each committed to `main`, all gates green — unit / typecheck / integration):
-A3, A4, Tier C (C1–C6), Tier B (B1–B6), A2.
+**Done** (all gates green — unit / typecheck / integration):
+A3, A4, Tier C (C1–C6), Tier B (B1–B6), A2, **A1**.
 
-**Remaining:** **A1** (the strategic `backfill` core extraction — its own TDD work package) and
-the optional **Tier D** (client-component hooks). Full detail for both below.
+**Remaining:** only the optional **Tier D** (client-component hooks). Full detail below.
 
 ## Overall health
 
 The codebase is in **good shape** and follows a deliberate ports-and-adapters discipline:
 pure, fake-tested cores behind ports, with Prisma/HTTP/Puppeteer bound only at the edges.
-After the work above, the remaining concentrated debt is `services/index.ts`'s `backfillFromToc`
-(genuine, untested decision logic in the edge layer) — that's A1.
+The last concentrated debt — `services/index.ts`'s `backfillFromToc` decision logic — was
+resolved by **A1** (done 2026-08-18): extracted to a pure, fake-tested `services/backfill.ts`
+(`computeBackfillPlan` + `chooseTitleUpdate` + a `runBackfill` orchestrator behind `BackfillPorts`).
 
 ---
 
@@ -40,19 +40,18 @@ After the work above, the remaining concentrated debt is `services/index.ts`'s `
 
 ---
 
-## ⏳ A1 — Extract a `backfill` core out of `services/index.ts` (own WP, test-first)
+## ✅ A1 — Extract a `backfill` core out of `services/index.ts` — **DONE 2026-08-18**
 
-- **Where:** `src/server/services/index.ts` (`backfillFromToc`, `backfillWithEscalation`, `switchToPageWatch`)
-- **Problem:** The file header declares itself "the thin edge… logic lives in ./poll and ./addSeries
-  (unit-tested with fakes)." But `backfillFromToc` (~110 lines) holds real, un-unit-tested decision
-  logic: the self-heal TOC-discovery hop, the three-way title-source selection, and the
-  `tocReindexable` collision reasoning — the subtlest branches in the file. (The Tier B extractions
-  already removed the mechanical duplication here; the decision logic is what's left.)
-- **Proposal:** New `services/backfill.ts` with a pure `computeBackfill(stored, toc, opts)` core +
-  `BackfillPorts` (mirroring `SchedulePorts`/`PollPorts`), unit-tested with fakes. `index.ts` shrinks
-  toward its intended edge-binding role.
-- **Risk/effort:** MED risk / HIGH effort. The strategic item — **its own work package, TDD**,
-  stop-at-WP-boundary per CLAUDE.md. Best given its own focused session, not tacked onto a sweep.
+`backfillFromToc`'s un-unit-tested decision logic (the `tocReindexable` collision predicate, the
+three-way title-source choice, the self-heal TOC-discovery hop) moved into a pure, fake-tested
+`services/backfill.ts`: `computeBackfillPlan(stored, toc, opts)` + `chooseTitleUpdate(meta, titleBody,
+tocBody)` + a thin async `runBackfill` orchestrator driving injected `BackfillPorts` (mirrors
+`pollPorts`/`schedulePorts`). `index.ts` keeps only the Prisma port binding; `loadSeriesMeta` folds the
+ownership + active-source loads into one. 23 unit tests in `tests/unit/server/backfill.test.ts` (self-heal
+accept/reject, title-source branches, the three reindex cases); the integration suite stays green as the
+binding check. Two proposal corrections made against the code: `computeBackfillPlan`'s `stored` is
+`StoredChapter` (`KnownChapter` + `position`, which the reindex predicate needs) and takes no `meta`;
+`applyBackfillPlan(sourceId, plan)` threads the runtime `sourceId`.
 
 ---
 
