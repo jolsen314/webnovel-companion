@@ -1,42 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Trash2 } from 'lucide-react';
-import { requestDeleteSeries } from './requestDeleteSeries';
+import { useDeleteSeries } from './useDeleteSeries';
 
 export function DeleteSeriesButton(props: { id: string; title: string; chapterCount: number }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  function close() {
-    setOpen(false);
-    setError(null);
-  }
-
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape' && !busy) close();
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, busy]);
-
-  async function doDelete() {
-    setBusy(true);
-    setError(null);
-    const ok = await requestDeleteSeries(props.id);
-    if (ok) {
-      setOpen(false);
-      router.refresh(); // card drops out of the re-fetched list
-      return;
-    }
-    setError('Delete failed.');
-    setBusy(false);
-  }
+  const { confirming, busy, error, open, cancel, confirm } = useDeleteSeries({
+    id: props.id,
+    onDeleted: () => router.refresh(), // card drops out of the re-fetched list
+    failMessage: 'Delete failed.',
+  });
 
   return (
     <>
@@ -44,11 +18,11 @@ export function DeleteSeriesButton(props: { id: string; title: string; chapterCo
         type="button"
         className="card__delete"
         aria-label={`Delete ${props.title}`}
-        onClick={() => setOpen(true)}
+        onClick={open}
       >
         <Trash2 size={16} aria-hidden="true" />
       </button>
-      {open && (
+      {confirming && (
         <div className="card__confirm" role="dialog" aria-label={`Delete ${props.title}`}>
           <p className="card__confirm-text">
             Delete “{props.title}”? {props.chapterCount} chapters + progress. Can’t be undone.
@@ -58,7 +32,7 @@ export function DeleteSeriesButton(props: { id: string; title: string; chapterCo
               type="button"
               className="danger-button danger-button--solid"
               disabled={busy}
-              onClick={() => void doDelete()}
+              onClick={() => void confirm()}
             >
               {busy ? 'Deleting…' : 'Delete'}
             </button>
@@ -67,7 +41,7 @@ export function DeleteSeriesButton(props: { id: string; title: string; chapterCo
               className="control__action"
               disabled={busy}
               autoFocus
-              onClick={close}
+              onClick={cancel}
             >
               Cancel
             </button>

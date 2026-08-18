@@ -135,7 +135,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 | WP-47 | *(low)* Client resubscribe on VAPID key mismatch — `resyncSubscription` re-posts a stale browser sub whose `applicationServerKey` ≠ current key, so a 403-pruned sub churns (prune→re-add) and the client shows "subscribed" while receiving nothing; detect the key mismatch on load and unsubscribe + re-subscribe under the new key. Makes key rotation self-healing on the client | `TODO` | WP-09 |
 | WP-WORKID | *(low, future)* Map a source to a community novel-aggregator's canonical work ID (lists a work's alternative/translated titles) for automatic cross-translation identity — described generically here (no real aggregator name, anonymity rule) | `TODO` | WP-05, WP-17 |
 | WP-31 | *(low — see WP-45)* Renderer per-host interaction descriptor — clicks Free/Premium **tabs** (+ tab-membership access) **and client-side numbered pagination** ("Prev/Next" TOCs that replace ~50/page → click Next & union pages). **Only for interaction sites with NO data API** — where a source exposes a chapter API, **WP-45 supersedes this** (a probe found the main tab/pagination sources *do* have APIs → dropped in priority). | `TODO` | WP-17b, WP-20 |
-| WP-SIMPLIFY | *(low, ongoing — pick up opportunistically)* Behavior-preserving code simplification — the backlog of DRY/clarity/consistency refinements found by a read-only `code-simplifier` pass. **Details, ranked tiers, and the explicit "don't touch" list live in [SIMPLIFICATION-PLAN.md](SIMPLIFICATION-PLAN.md)** — not enumerated as WPs here. Both structural items have now graduated + landed (**A1** `backfill` pure-core extraction out of `services/index.ts`, done 2026-08-18; **A2** Puppeteer out of `api/render/route.ts`); remaining backlog is the optional Tier D client-component hooks + safe mechanical/style sweeps. Follow project rituals (TDD for `lib/`, `npm test` + `typecheck` before "done"). | `TODO` | — |
+| WP-SIMPLIFY | *(low, ongoing — pick up opportunistically)* Behavior-preserving code simplification — the backlog of DRY/clarity/consistency refinements found by a read-only `code-simplifier` pass. **Details, ranked tiers, and the explicit "don't touch" list live in [SIMPLIFICATION-PLAN.md](SIMPLIFICATION-PLAN.md)** — not enumerated as WPs here. Both structural items landed (**A1** `backfill` pure-core extraction out of `services/index.ts`; **A2** Puppeteer out of `api/render/route.ts`) and the entire ranked backlog (Tiers B, C, D) is now worked through as of 2026-08-18 — the row stays open only to re-run the `code-simplifier` against future drift. Follow project rituals (TDD for `lib/`, `npm test` + `typecheck` before "done"). | `TODO` | — |
 
 ### ✅ Completed
 
@@ -1017,6 +1017,13 @@ optionally `deactivate-source`) so WP-49-style recoveries are fully tool-support
 
 ## Changelog
 
+- **2026-08-18** — **WP-SIMPLIFY Tier D done: client-component de-duplication (D1–D3).** (1) A `useDeleteSeries`
+  hook single-sources the confirm/busy/error delete machine behind the shelf + detail delete components (each
+  keeps its own JSX; Escape-to-cancel standardized to a window listener). (2) `add/page.tsx` gets a typed
+  `AddSeriesResponse` union + a `postSeries` helper, removing three progressive `as` casts. (3) `SeriesDetail.tsx`
+  folds `backfill` + `trackUnlocks` into a shared `postAction` helper. Behavior-preserving; no unit harness for
+  client components, so verified against the full **Playwright E2E suite (11 passed)** + typecheck. This closes out
+  the SIMPLIFICATION-PLAN backlog — both structural items (A1, A2) and every tier (B, C, D) are now landed.
 - **2026-08-18** — **WP-SIMPLIFY A1 done: `backfill` pure-core extraction out of `services/index.ts`.**
   The last concentrated debt from the simplification pass — `backfillFromToc`'s un-unit-tested decision logic
   (the reindex-collision predicate, the three-way title-source choice, the self-heal TOC-discovery hop) — now
