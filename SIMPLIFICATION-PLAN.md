@@ -6,18 +6,18 @@
 
 ## Status (2026-08-18)
 
-**Done** (each committed to `main`, all gates green — unit / typecheck / integration):
-A3, A4, Tier C (C1–C6), Tier B (B1–B6), A2.
+**Done** (all gates green — unit / typecheck / integration):
+A3, A4, Tier C (C1–C6), Tier B (B1–B6), A2, **A1**.
 
-**Remaining:** **A1** (the strategic `backfill` core extraction — its own TDD work package) and
-the optional **Tier D** (client-component hooks). Full detail for both below.
+**Remaining:** only the optional **Tier D** (client-component hooks). Full detail below.
 
 ## Overall health
 
 The codebase is in **good shape** and follows a deliberate ports-and-adapters discipline:
 pure, fake-tested cores behind ports, with Prisma/HTTP/Puppeteer bound only at the edges.
-After the work above, the remaining concentrated debt is `services/index.ts`'s `backfillFromToc`
-(genuine, untested decision logic in the edge layer) — that's A1.
+The last concentrated debt — `services/index.ts`'s `backfillFromToc` decision logic — was
+resolved by **A1** (done 2026-08-18): extracted to a pure, fake-tested `services/backfill.ts`
+(`computeBackfillPlan` + `chooseTitleUpdate` + a `runBackfill` orchestrator behind `BackfillPorts`).
 
 ---
 
@@ -40,97 +40,18 @@ After the work above, the remaining concentrated debt is `services/index.ts`'s `
 
 ---
 
-## ⏳ A1 — Extract a `backfill` core out of `services/index.ts` (own WP, test-first)
+## ✅ A1 — Extract a `backfill` core out of `services/index.ts` — **DONE 2026-08-18**
 
-- **Where:** `src/server/services/index.ts` — `backfillFromToc` (currently ~438–539),
-  called by `backfillWithEscalation` (~547) and `switchToPageWatch` (~574). Line numbers drift; grep
-  the function names.
-- **Problem:** The file header declares itself "the thin edge… logic lives in ./poll and ./addSeries
-  (unit-tested with fakes)." But `backfillFromToc` holds real, un-unit-tested decision logic — the
-  subtlest branches in the file — currently reachable only through the integration test. (The Tier B
-  extractions removed the mechanical duplication; the *decision* logic is what's left.)
-
-### The crux: I/O and decisions are interleaved
-
-`backfillFromToc` is **not** "load everything → decide once → write once." Two of its fetches are
-*conditional on prior pure decisions*, so a single `computeBackfill(stored, toc, opts)` over
-pre-fetched inputs does not fit. Current flow (I = I/O, D = pure decision):
-
-1. **I** load owned series (ownership + `title`/`titleIsManual`); bail if not owned
-2. **I** load active source; bail if none
-3. **D** `tocUrl = source.tocUrl ?? source.url`
-4. **I** `fetch(tocUrl)`; bail unless SUCCESS & not-304
-5. **D** `landingBody = source.tocUrl == null ? res.body : null`
-6. **self-heal, only if `source.tocUrl == null`:** **D** `findTocUrl(res.body)` → **I** `fetch(link)` →
-   **D** accept the follow (reassign `tocUrl`/`res`/`discoveredTocUrl`)
-7. **D** `parseToc(res.body, tocUrl)` → `toc`
-8. **title:** **D** pick `titleBody` (captured landing → else needs a fetch) → **I** *conditional*
-   `fetch(source.url)` → **D** `extractSeriesTitle` → `titleUpdated`
-9. **D** `tocReadingOrder(toc)` → `order`
-10. **I** load stored chapters
-11. **D** `diffChapters`, the `tocReindexable` collision predicate, the reindex position map
-12. **D** assemble the write list (createMany-with-position, `becameFreeOps`, `accessReconciledOps`,
-    reindex updates, optional `tocUrl`/`title` persists)
-13. **I** `db.$transaction([...])`
-
-Steps 6 and 8 are the reason this is HIGH-effort: the seam has to let pure decisions drive fetches,
-not run after them.
-
-### A viable seam (starting proposal, not the mandate)
-
-Split into **(a) a thin async orchestrator** that owns the interleaving, behind ports, and
-**(b) pure, unit-tested pieces** it drives. The already-pure lib building blocks it composes —
-`findTocUrl`, `parseToc`, `tocReadingOrder`, `diffChapters`, `extractSeriesTitle`, `canonicalUrl` —
-stay put; the new pure code is the *glue decisions* plus the write-planner:
-
-```ts
-// services/backfill.ts — pure, NO db import (mirrors scheduleNotify.ts's shape)
-export interface BackfillMeta {          // what a DB loader supplies up front
-  currentTitle: string; titleIsManual: boolean;
-  sourceId: string; sourceUrl: string; host: string; tocUrl: string | null;
-}
-export interface BackfillPlan {          // pure description of intended writes (no Prisma)
-  newChapters: { title: string; url: string; guid: string | null; number: number | null;
-                 access: 'FREE' | 'LOCKED' | 'UNKNOWN'; position: number | null }[];
-  becameFree: KnownChapter[]; accessReconciled: KnownChapter[];
-  reindex: { id: string; position: number }[];
-  persistTocUrl?: string; persistTitle?: string;
-}
-/** Steps 9,11,12 as one pure function over already-fetched inputs. */
-export function computeBackfillPlan(
-  stored: KnownChapter[], toc: FeedItem[], meta: BackfillMeta,
-  opts: { discoveredTocUrl: string | null; titleUpdate: string | undefined },
-): BackfillPlan { /* diff + tocReindexable + reindex map + persists */ }
-/** Step 8's decision, isolated and pure. */
-export function chooseTitleUpdate(
-  meta: { titleIsManual: boolean; currentTitle: string; host: string },
-  titleBody: string | null, tocBody: string,
-): string | undefined { /* extractSeriesTitle + the != current guard */ }
-
-export interface BackfillPorts {         // the interleaved I/O, injected
-  fetch: FetchImpl;
-  loadSeriesMeta: (seriesId: string) => Promise<BackfillMeta | null>;  // ownership + active source
-  loadStoredChapters: (seriesId: string) => Promise<KnownChapter[]>;
-  applyBackfillPlan: (seriesId: string, plan: BackfillPlan) => Promise<void>;
-}
-```
-
-`index.ts` keeps only the thin orchestrator (the step 1–13 sequence, driving `BackfillPorts` +
-the pure helpers) and the Prisma binding of the four ports — exactly how `pollPorts`/`evaluateSchedules`
-are wired today. `applyBackfillPlan` is where `createMany`/`becameFreeOps`/`accessReconciledOps`/the
-reindex/persist ops get built from the plan.
-
-### Test baseline
-
-- **Current safety net:** `tests/integration/services.test.ts` exercises `backfillWithEscalation`
-  (hence `backfillFromToc`) against the real test DB — keep it green as the binding check.
-  `tests/unit/server/addSeries.test.ts` covers the adjacent add path, not backfill's decisions.
-- **Goal:** unit-test `computeBackfillPlan` + `chooseTitleUpdate` with fakes (no DB) — the
-  self-heal accept/reject, the three title-source branches, and the `tocReindexable` collision cases
-  (listed / absent-unpositioned / absent-with-position) — the way `poll`/`scheduleNotify` cores are tested.
-
-- **Risk/effort:** MED risk / HIGH effort. The strategic item — **its own work package, TDD**,
-  stop-at-WP-boundary per CLAUDE.md. Best given its own focused session, not tacked onto a sweep.
+`backfillFromToc`'s un-unit-tested decision logic (the `tocReindexable` collision predicate, the
+three-way title-source choice, the self-heal TOC-discovery hop) moved into a pure, fake-tested
+`services/backfill.ts`: `computeBackfillPlan(stored, toc, opts)` + `chooseTitleUpdate(meta, titleBody,
+tocBody)` + a thin async `runBackfill` orchestrator driving injected `BackfillPorts` (mirrors
+`pollPorts`/`schedulePorts`). `index.ts` keeps only the Prisma port binding; `loadSeriesMeta` folds the
+ownership + active-source loads into one. 23 unit tests in `tests/unit/server/backfill.test.ts` (self-heal
+accept/reject, title-source branches, the three reindex cases); the integration suite stays green as the
+binding check. Two proposal corrections made against the code: `computeBackfillPlan`'s `stored` is
+`StoredChapter` (`KnownChapter` + `position`, which the reindex predicate needs) and takes no `meta`;
+`applyBackfillPlan(sourceId, plan)` threads the runtime `sourceId`.
 
 ---
 

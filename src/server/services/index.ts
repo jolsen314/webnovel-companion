@@ -4,10 +4,8 @@ import { politeFetch, type PoliteResult } from '../../lib/feeds/fetch';
 import { makeRenderFetch } from '../../lib/feeds/renderFetch';
 import type { SeriesMatch } from '../../lib/feeds/discover';
 import type { FailureType } from '../../lib/health';
-import { diffChapters, canonicalUrl, type KnownChapter } from '../../lib/feeds/diff';
-import { parseToc, tocReadingOrder } from '../../lib/feeds/pageWatch';
-import { findTocUrl } from '../../lib/feeds/discover';
-import { extractSeriesTitle } from '../../lib/feeds/title';
+import { type KnownChapter } from '../../lib/feeds/diff';
+import { runBackfill, type BackfillPorts, type BackfillPlan, type StoredChapter } from './backfill';
 import {
   pollAllSources as pollAllCore,
   sourceTierWhere,
@@ -432,110 +430,94 @@ export function addSeries(
   });
 }
 
-/** One-time TOC read for a feed (or any) series: add the older tail the feed window never showed and
- *  reconcile feed-originated UNKNOWN chapters to the TOC's FREE/LOCKED. Silent — never pushes, never
- *  touches source health/etag (it reads the reading page, not the feed). */
-export async function backfillFromToc(
-  seriesId: string,
-  fetchImpl: FetchImpl = fetchPort,
-): Promise<{ added: number; reconciled: number; titleUpdated?: string }> {
-  const owned = await db.series.findFirst({
-    where: { id: seriesId, userId: getCurrentUserId() },
-    select: { id: true, title: true, titleIsManual: true },
-  });
-  if (!owned) return { added: 0, reconciled: 0 };
-  const source = await db.source.findFirst({ where: { seriesId, isActive: true } });
-  if (!source) return { added: 0, reconciled: 0 };
-  // WP-37: fetch the real TOC page. If tocUrl is unset (pre-WP-37 series, or a landing page
-  // that only later linked a TOC), self-heal: fetch the landing page, discover its TOC link,
-  // follow it one hop, and persist tocUrl so future backfills/polls go straight there.
-  let tocUrl = source.tocUrl ?? source.url;
-  let res = await fetchImpl(tocUrl, {});
-  if (res.outcome !== 'SUCCESS' || res.notModified) return { added: 0, reconciled: 0 };
+/** Project a stored chapter row onto the pure `StoredChapter` the backfill planner consumes:
+ *  `toKnownChapter`'s diff identity plus the `position` its reindex-collision predicate reads. */
+function toStoredChapter(c: {
+  id: string;
+  guid: string | null;
+  url: string;
+  access: 'FREE' | 'LOCKED' | 'UNKNOWN';
+  position: number | null;
+}): StoredChapter {
+  return { ...toKnownChapter(c), id: c.id, position: c.position };
+}
 
-  // WP-30: the landing page (source.url) is the title source. On the self-heal path this first
-  // `res` IS the landing page — capture it before findTocUrl/follow reassigns `res` to the TOC body.
-  const landingBody: string | null = source.tocUrl == null ? res.body : null;
-
-  let discoveredTocUrl: string | null = null;
-  if (source.tocUrl == null) {
-    const link = findTocUrl(res.body, source.url);
-    if (link != null && link !== tocUrl) {
-      const followed = await fetchImpl(link, {});
-      if (followed.outcome === 'SUCCESS' && !followed.notModified) {
-        tocUrl = link;
-        res = followed;
-        discoveredTocUrl = link;
-      }
-    }
-  }
-
-  const toc = parseToc(res.body, tocUrl);
-
-  // Title source: the captured landing body (self-heal, free) → else one extra source.url fetch
-  // (tocUrl-set path) → else the TOC body we already have.
-  let titleBody = landingBody;
-  if (titleBody == null && !owned.titleIsManual) {
-    const landing = await fetchImpl(source.url, {});
-    titleBody = landing.outcome === 'SUCCESS' && !landing.notModified ? landing.body : res.body;
-  }
-  const extractedTitle = owned.titleIsManual ? null : extractSeriesTitle(titleBody ?? res.body, { siteName: source.host });
-  const titleUpdated =
-    !owned.titleIsManual && extractedTitle != null && extractedTitle !== owned.title ? extractedTitle : undefined;
-
-  const order = tocReadingOrder(toc);
-  const storedRows = await db.chapter.findMany({
-    where: { seriesId },
-    select: { id: true, guid: true, url: true, access: true, position: true },
-  });
-  const stored = storedRows.map(toKnownChapter);
-  const diff = diffChapters(stored, toc);
-  // Re-index positions only when this TOC read is authoritative for the whole reading order.
-  // Safe when every already-stored chapter is either listed in the TOC OR still unpositioned:
-  //   - listed → gets its normalized index;
-  //   - absent but unpositioned → a feed-ahead chapter (published to the feed before the
-  //     hand-maintained TOC lists it); left null, it sorts last (= newest), colliding with nothing.
-  // Blocked only when an absent chapter already HAS a position — a windowed/trimmed TOC (site
-  // dropped an old chapter), where re-indexing the present chapters into a fresh 0..N-1 block
-  // would collide with the dropped chapter's retained position. Then we leave positions as-is.
-  const tocReindexable =
-    order != null && storedRows.every((s) => order.has(canonicalUrl(s.url)) || s.position == null);
-
+/** Turn a pure `BackfillPlan` into the write transaction — createMany-with-position, the shared
+ *  becameFree/accessReconciled ops, the reindex updates, and the optional tocUrl/title persists. */
+async function applyBackfillPlan(seriesId: string, sourceId: string, plan: BackfillPlan): Promise<void> {
   const now = new Date();
   await db.$transaction([
-    ...(diff.new.length > 0
+    ...(plan.newChapters.length > 0
       ? [
           db.chapter.createMany({
-            data: diff.new.map((c) => ({
+            data: plan.newChapters.map((c) => ({
               seriesId,
-              sourceId: source.id,
+              sourceId,
               title: c.title,
               url: c.url,
-              guid: c.guid ?? null,
-              number: c.number ?? null,
-              access: c.access ?? 'UNKNOWN',
-              position: tocReindexable ? (order!.get(canonicalUrl(c.url)) ?? null) : null,
+              guid: c.guid,
+              number: c.number,
+              access: c.access,
+              position: c.position,
             })),
             skipDuplicates: true,
           }),
         ]
       : []),
-    ...becameFreeOps(diff.becameFree, now),
-    ...accessReconciledOps(diff.accessReconciled),
-    ...(tocReindexable
-      ? stored.flatMap((s) => {
-          const pos = order!.get(canonicalUrl(s.url));
-          return pos != null ? [db.chapter.updateMany({ where: { id: s.id }, data: { position: pos } })] : [];
-        })
+    ...becameFreeOps(plan.becameFree, now),
+    ...accessReconciledOps(plan.accessReconciled),
+    ...plan.reindex.map((r) => db.chapter.updateMany({ where: { id: r.id }, data: { position: r.position } })),
+    ...(plan.persistTocUrl != null
+      ? [db.source.update({ where: { id: sourceId }, data: { tocUrl: plan.persistTocUrl } })]
       : []),
-    ...(discoveredTocUrl != null
-      ? [db.source.update({ where: { id: source.id }, data: { tocUrl: discoveredTocUrl } })]
-      : []),
-    ...(titleUpdated != null
-      ? [db.series.update({ where: { id: seriesId }, data: { title: titleUpdated } })]
+    ...(plan.persistTitle != null
+      ? [db.series.update({ where: { id: seriesId }, data: { title: plan.persistTitle } })]
       : []),
   ]);
-  return { added: diff.new.length, reconciled: diff.accessReconciled.length, titleUpdated };
+}
+
+/** Prisma bindings for a backfill run: ownership + active source folded into one meta load, the
+ *  stored-chapter load, and the plan-writer — the decision logic lives in `runBackfill` + the pure
+ *  `services/backfill` core (unit-tested with fakes), exactly like `pollPorts`/`schedulePorts`. */
+function backfillPorts(seriesId: string, fetchImpl: FetchImpl): BackfillPorts {
+  return {
+    fetch: (url) => fetchImpl(url, {}),
+    loadSeriesMeta: async () => {
+      const owned = await db.series.findFirst({
+        where: { id: seriesId, userId: getCurrentUserId() },
+        select: { title: true, titleIsManual: true },
+      });
+      if (!owned) return null;
+      const source = await db.source.findFirst({ where: { seriesId, isActive: true } });
+      if (!source) return null;
+      return {
+        currentTitle: owned.title,
+        titleIsManual: owned.titleIsManual,
+        sourceId: source.id,
+        sourceUrl: source.url,
+        host: source.host,
+        tocUrl: source.tocUrl,
+      };
+    },
+    loadStoredChapters: async () =>
+      (
+        await db.chapter.findMany({
+          where: { seriesId },
+          select: { id: true, guid: true, url: true, access: true, position: true },
+        })
+      ).map(toStoredChapter),
+    applyBackfillPlan: (sourceId, plan) => applyBackfillPlan(seriesId, sourceId, plan),
+  };
+}
+
+/** One-time TOC read for a feed (or any) series: add the older tail the feed window never showed and
+ *  reconcile feed-originated UNKNOWN chapters to the TOC's FREE/LOCKED. Silent — never pushes, never
+ *  touches source health/etag (it reads the reading page, not the feed). Thin edge over `runBackfill`. */
+export function backfillFromToc(
+  seriesId: string,
+  fetchImpl: FetchImpl = fetchPort,
+): Promise<{ added: number; reconciled: number; titleUpdated?: string }> {
+  return runBackfill(backfillPorts(seriesId, fetchImpl));
 }
 
 /** Shared plain→render escalation for a TOC backfill: read plain first; if that produced

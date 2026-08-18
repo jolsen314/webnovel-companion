@@ -135,7 +135,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 | WP-47 | *(low)* Client resubscribe on VAPID key mismatch — `resyncSubscription` re-posts a stale browser sub whose `applicationServerKey` ≠ current key, so a 403-pruned sub churns (prune→re-add) and the client shows "subscribed" while receiving nothing; detect the key mismatch on load and unsubscribe + re-subscribe under the new key. Makes key rotation self-healing on the client | `TODO` | WP-09 |
 | WP-WORKID | *(low, future)* Map a source to a community novel-aggregator's canonical work ID (lists a work's alternative/translated titles) for automatic cross-translation identity — described generically here (no real aggregator name, anonymity rule) | `TODO` | WP-05, WP-17 |
 | WP-31 | *(low — see WP-45)* Renderer per-host interaction descriptor — clicks Free/Premium **tabs** (+ tab-membership access) **and client-side numbered pagination** ("Prev/Next" TOCs that replace ~50/page → click Next & union pages). **Only for interaction sites with NO data API** — where a source exposes a chapter API, **WP-45 supersedes this** (a probe found the main tab/pagination sources *do* have APIs → dropped in priority). | `TODO` | WP-17b, WP-20 |
-| WP-SIMPLIFY | *(low, ongoing — pick up opportunistically)* Behavior-preserving code simplification — the backlog of DRY/clarity/consistency refinements found by a read-only `code-simplifier` pass. **Details, ranked tiers, and the explicit "don't touch" list live in [SIMPLIFICATION-PLAN.md](SIMPLIFICATION-PLAN.md)** — not enumerated as WPs here. Two items are structural enough to graduate to their own WP when scheduled (a `backfill` pure-core extraction out of `services/index.ts`; moving Puppeteer logic out of `api/render/route.ts`); the rest are safe mechanical/style sweeps. Follow project rituals (TDD for `lib/`, `npm test` + `typecheck` before "done"). | `TODO` | — |
+| WP-SIMPLIFY | *(low, ongoing — pick up opportunistically)* Behavior-preserving code simplification — the backlog of DRY/clarity/consistency refinements found by a read-only `code-simplifier` pass. **Details, ranked tiers, and the explicit "don't touch" list live in [SIMPLIFICATION-PLAN.md](SIMPLIFICATION-PLAN.md)** — not enumerated as WPs here. Both structural items have now graduated + landed (**A1** `backfill` pure-core extraction out of `services/index.ts`, done 2026-08-18; **A2** Puppeteer out of `api/render/route.ts`); remaining backlog is the optional Tier D client-component hooks + safe mechanical/style sweeps. Follow project rituals (TDD for `lib/`, `npm test` + `typecheck` before "done"). | `TODO` | — |
 
 ### ✅ Completed
 
@@ -1017,6 +1017,16 @@ optionally `deactivate-source`) so WP-49-style recoveries are fully tool-support
 
 ## Changelog
 
+- **2026-08-18** — **WP-SIMPLIFY A1 done: `backfill` pure-core extraction out of `services/index.ts`.**
+  The last concentrated debt from the simplification pass — `backfillFromToc`'s un-unit-tested decision logic
+  (the reindex-collision predicate, the three-way title-source choice, the self-heal TOC-discovery hop) — now
+  lives in a pure, fake-tested `server/services/backfill.ts`: `computeBackfillPlan` (diff + `tocReindexable` +
+  reindex map + persists), `chooseTitleUpdate` (the title decision), and a thin async `runBackfill` orchestrator
+  driven by injected `BackfillPorts` (mirrors `pollPorts`/`schedulePorts`). `index.ts` keeps only the Prisma
+  binding of the four ports (`loadSeriesMeta` folds the ownership + active-source loads into one). 23 new unit
+  tests cover the self-heal accept/reject, the title-source branches, and the three reindex cases that were
+  previously reachable only through the integration DB. Behavior-preserving: all 84 integration tests stay green.
+  Remaining WP-SIMPLIFY backlog: the optional Tier D (client-component hooks).
 - **2026-08-17** — **WP-50 done: link-only add (reframed from "reject no-chapter adds").** The original WP-50
   scope — reject a PAGE_WATCH resolution that seeds 0 chapters — was reframed on the owner's call: now that
   delete is one click (WP-51), being able to add a blocked/unreadable series as a link-only shelf entry is more
