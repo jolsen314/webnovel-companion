@@ -10,15 +10,24 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
-    # Collapse routine minor/patch bumps into one PR to cut review noise;
-    # majors still come as individual PRs so breaking changes stay visible.
+    # Two grouped PRs at most: routine minor/patch, and a separate majors PR.
+    # Majors are kept (not ignored) so their changelogs + CI stay visible for
+    # review; grouping keeps them to one PR instead of one-per-dependency.
+    # Security fixes are independent of this and unaffected by grouping.
     groups:
       minor-and-patch:
         update-types:
           - minor
           - patch
+      major-updates:
+        update-types:
+          - major
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    groups:
+      actions:
+        patterns:
+          - "*"
