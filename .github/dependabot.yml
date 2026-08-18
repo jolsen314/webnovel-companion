@@ -22,6 +22,15 @@ updates:
       major-updates:
         update-types:
           - major
+    # Prisma 7 is a real migration (schema `url` → prisma.config.ts + driver
+    # adapters), not a drop-in bump — do it deliberately, not via Dependabot.
+    # Keep prisma + @prisma/client in lockstep and pinned to 6.x here; this
+    # ignore applies to version updates only (security updates are unaffected).
+    ignore:
+      - dependency-name: "prisma"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@prisma/client"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /

@@ -31,7 +31,9 @@ jobs:
           node-version: 22
 
       # Fails the job (red check = the alert) when a high/critical advisory is
-      # present. Non-blocking by intent: leave this check un-required so it
-      # informs without gating merges. Lower to --audit-level=moderate to widen.
-      - name: npm audit (high+)
-        run: npm audit --audit-level=high
+      # present, EXCEPT ids justified in .github/audit-allowlist.txt. Same
+      # script the local dependency hook uses, so CI and dev agree. Non-blocking
+      # by intent: leave this check un-required so it informs without gating.
+      - name: npm audit (high+, allowlist-aware)
+        run: |
+          bash scripts/check-advisories.sh && echo "No unaccepted high/critical advisories."
