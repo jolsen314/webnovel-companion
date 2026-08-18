@@ -4,6 +4,7 @@ import { getCurrentUserId } from '../user';
 import { politeFetch, type PoliteResult } from '../../lib/feeds/fetch';
 import { makeRenderFetch } from '../../lib/feeds/renderFetch';
 import type { SeriesMatch } from '../../lib/feeds/discover';
+import type { ApiDescriptor } from '../../lib/feeds/apiAdapter';
 import type { FailureType } from '../../lib/health';
 import { type KnownChapter } from '../../lib/feeds/diff';
 import { runBackfill, type BackfillPorts, type BackfillPlan, type StoredChapter } from './backfill';
@@ -86,6 +87,8 @@ function rowToPollable(row: {
   host: string;
   feedUrl: string | null;
   tocUrl: string | null;
+  apiUrl: string | null;
+  apiMap: unknown; // Prisma Json — cast to ApiDescriptor below
   matchType: string;
   matchValue: string | null;
   etag: string | null;
@@ -104,8 +107,9 @@ function rowToPollable(row: {
     seriesStatus: row.series.status,
     type: row.type,
     fetchMode: row.fetchMode,
-    fetchUrl: row.feedUrl ?? row.tocUrl ?? row.url, // WP-37: page-watch hits the TOC page
+    fetchUrl: row.apiUrl ?? row.feedUrl ?? row.tocUrl ?? row.url, // WP-45: API endpoint wins; then WP-37 TOC
     match: toSeriesMatch(row.matchType, row.matchValue),
+    apiMap: (row.apiMap as ApiDescriptor | null) ?? null, // WP-45
     etag: row.etag,
     lastModified: row.lastModified,
     health: row.health,

@@ -1,6 +1,7 @@
 import { diffChapters, type FeedItem, type KnownChapter } from '../../lib/feeds/diff';
 import { parseFeed } from '../../lib/feeds/parse';
 import { parseToc } from '../../lib/feeds/pageWatch';
+import { parseApiChapters, type ApiDescriptor } from '../../lib/feeds/apiAdapter';
 import { filterBySeriesMatch, type SeriesMatch } from '../../lib/feeds/discover';
 import { step, type FailureType, type HealthState, type SourceHealth } from '../../lib/health';
 import { parseRetryAfter, type PoliteResult } from '../../lib/feeds/fetch';
@@ -98,13 +99,15 @@ export interface PollableSource {
   /** The reader's shelf status (WP-27a) — gates whether/how often this source polls. */
   seriesStatus: SeriesStatus;
   /** FEED → parse as a feed + apply the series matcher; PAGE_WATCH → parse the TOC;
-   *  API → parse via its `apiMap` descriptor (WP-45; wiring lands in a later task). */
+   *  API → parse via its `apiMap` descriptor (WP-45). */
   type: 'FEED' | 'PAGE_WATCH' | 'API';
   /** PLAIN → `politeFetch`; RENDER → the headless renderer (WP-17b). */
   fetchMode: 'PLAIN' | 'RENDER';
   /** The URL to GET (feedUrl ?? url). */
   fetchUrl: string;
   match: SeriesMatch;
+  /** WP-45: per-source API field descriptor when type === 'API'; null otherwise. */
+  apiMap: ApiDescriptor | null;
   etag: string | null;
   lastModified: string | null;
   // current health columns
@@ -288,6 +291,10 @@ export async function processFetched(
         ) {
           escalateToRender = true;
         }
+      } else if (src.type === 'API') {
+        // WP-45: the API returns the complete list with access — TOC semantics. No render
+        // escalation (an API source is not a render fallback) and no matcher (already scoped).
+        mine = src.apiMap ? parseApiChapters(res.body, src.apiMap, src.fetchUrl) : [];
       } else {
         const parsed = await parseFeed(res.body);
         mine = filterBySeriesMatch(parsed.items, src.match);

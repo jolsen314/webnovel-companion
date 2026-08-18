@@ -24,6 +24,7 @@ import {
 import { parseRetryAfter, type PoliteResult } from '../../../src/lib/feeds/fetch';
 import type { SeriesMatch } from '../../../src/lib/feeds/discover';
 import type { KnownChapter } from '../../../src/lib/feeds/diff';
+import { type ApiDescriptor } from '../../../src/lib/feeds/apiAdapter';
 
 const RSS = (items: string) =>
   `<?xml version="1.0"?><rss version="2.0"><channel><title>T</title>${items}</channel></rss>`;
@@ -48,6 +49,7 @@ function source(overrides: Partial<PollableSource> = {}): PollableSource {
     lastCheckedAt: null,
     backoffUntil: null,
     seriesStatus: 'READING',
+    apiMap: null,
     ...overrides,
   };
 }
@@ -287,6 +289,41 @@ describe('pollSource', () => {
     );
     expect(effects.newChapters).toEqual([]);
     expect(effects.accessReconciled.map((c) => c.url)).toEqual(['https://x.example/novel/a/chapter-1/']);
+  });
+
+  // ── WP-45: API source ────────────────────────────────────────────────────
+  test('API source: JSON body → new chapters diffed and seeded', async () => {
+    const api: ApiDescriptor = { urlField: 'url', titleField: 'title', isFreeField: 'free' };
+    const src = source({
+      type: 'API',
+      fetchMode: 'PLAIN',
+      fetchUrl: 'https://api.example/works/1/chapters',
+      apiMap: api,
+    });
+    const body = JSON.stringify([
+      { title: 'Ch 1', url: 'https://api.example/read/1', free: true },
+      { title: 'Ch 2', url: 'https://api.example/read/2', free: true },
+    ]);
+    const effects = await processFetched(src, ok(body), null, ports(ok(body), []));
+    expect(effects.newChapters.map((c) => c.url)).toEqual([
+      'https://api.example/read/1',
+      'https://api.example/read/2',
+    ]);
+  });
+
+  test('API source: a LOCKED→FREE isFree flip produces a becameFree effect', async () => {
+    const api: ApiDescriptor = { urlField: 'url', titleField: 'title', isFreeField: 'free' };
+    const src = source({
+      type: 'API',
+      fetchMode: 'PLAIN',
+      fetchUrl: 'https://api.example/works/1/chapters',
+      apiMap: api,
+    });
+    const stored = [{ id: 'c1', url: 'https://api.example/read/1', access: 'LOCKED' as const }];
+    const body = JSON.stringify([{ title: 'Ch 1', url: 'https://api.example/read/1', free: true }]);
+    const effects = await processFetched(src, ok(body), null, ports(ok(body), stored));
+    expect(effects.becameFree.map((c) => c.id)).toEqual(['c1']);
+    expect(effects.newChapters).toEqual([]);
   });
 });
 
