@@ -1,18 +1,18 @@
 import { NextResponse } from 'next/server';
 import { getSeries, updateSeries, deleteSeries } from '../../../../server/services';
 import { parseSeriesUpdate } from '../../../../server/api/validation';
-import { jsonError, readJson } from '../../../../server/api/http';
+import { jsonError, readJson, type IdParams } from '../../../../server/api/http';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(_request: Request, { params }: IdParams) {
   const { id } = await params;
   const series = await getSeries(id);
   if (!series) return NextResponse.json({ error: 'Series not found.' }, { status: 404 });
   return NextResponse.json({ series });
 }
 
-export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function PATCH(request: Request, { params }: IdParams) {
   const { id } = await params;
 
   const body = await readJson(request);
@@ -26,7 +26,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   return NextResponse.json({ ok: true });
 }
 
-export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(_request: Request, { params }: IdParams) {
   const { id } = await params;
   const result = await deleteSeries(id);
   if (!result.deleted) return NextResponse.json({ error: 'Series not found.' }, { status: 404 });

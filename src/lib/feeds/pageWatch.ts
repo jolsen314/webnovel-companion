@@ -161,8 +161,10 @@ export function tocReadingOrder(toc: readonly { url: string; number: number | nu
   }
   const total = up + down;
   if (total === 0) return null;
-  const ascending = up / total >= DIRECTION_MAJORITY ? true : down / total >= DIRECTION_MAJORITY ? false : null;
-  if (ascending === null) return null;
+  let ascending: boolean;
+  if (up / total >= DIRECTION_MAJORITY) ascending = true;
+  else if (down / total >= DIRECTION_MAJORITY) ascending = false;
+  else return null; // no clear majority direction → numeric signal too weak to trust
 
   const map = new Map<string, number>();
   const n = toc.length;

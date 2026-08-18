@@ -7,6 +7,8 @@
  * pages are Cloudflare-blocked (so `guessFeedUrls` provides fallbacks to try directly).
  */
 
+import type { FeedItem } from './diff';
+
 export interface DiscoveredFeed {
   url: string;
   type: 'rss' | 'atom';
@@ -38,8 +40,6 @@ export function discoverFeeds(html: string, baseUrl: string): DiscoveredFeed[] {
   }
   return feeds;
 }
-
-import type { FeedItem } from './diff';
 
 /**
  * How to isolate one series' items within a (possibly site-wide, multi-novel) feed.

@@ -181,28 +181,25 @@ export function SeriesDetail(props: {
       <DeleteSeries id={props.id} title={props.title} chapterCount={props.chapters.length} />
 
       <ol className="chapters">
-        {arranged.map((c) => {
-          const read = c.read;
-          return (
-            <li key={c.id} className={`chapter ${read ? 'chapter--read' : ''}`}>
-              {c.number != null && <span className="chapter__num">#{c.number}</span>}
-              <a className="chapter__title" href={c.url} target="_blank" rel="noreferrer">
-                {c.title}
-              </a>
-              <button
-                type="button"
-                className="chapter__mark"
-                disabled={busy}
-                onClick={() => {
-                  setLastRead(c.id);
-                  void patch({ lastReadChapterId: c.id });
-                }}
-              >
-                {lastRead === c.id ? 'current' : 'mark read'}
-              </button>
-            </li>
-          );
-        })}
+        {arranged.map((c) => (
+          <li key={c.id} className={`chapter ${c.read ? 'chapter--read' : ''}`}>
+            {c.number != null && <span className="chapter__num">#{c.number}</span>}
+            <a className="chapter__title" href={c.url} target="_blank" rel="noreferrer">
+              {c.title}
+            </a>
+            <button
+              type="button"
+              className="chapter__mark"
+              disabled={busy}
+              onClick={() => {
+                setLastRead(c.id);
+                void patch({ lastReadChapterId: c.id });
+              }}
+            >
+              {lastRead === c.id ? 'current' : 'mark read'}
+            </button>
+          </li>
+        ))}
       </ol>
     </>
   );

@@ -24,3 +24,6 @@ export async function readJson(request: Request): Promise<ParseResult<unknown>> 
 export function jsonError(error: string, status = 400): NextResponse {
   return NextResponse.json({ error }, { status });
 }
+
+/** The App Router's second handler arg for a `[id]` dynamic route (params is a Promise here). */
+export type IdParams = { params: Promise<{ id: string }> };

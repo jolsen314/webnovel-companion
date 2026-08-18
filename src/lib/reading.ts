@@ -46,6 +46,14 @@ function readingBucket(c: OrderableChapter): 0 | 1 | 2 {
   return 1;
 }
 
+/** Ascending codepoint comparison — a stable final tie-break. Deliberately not `localeCompare`
+ *  (locale-dependent), so ordering stays deterministic across environments. */
+function compareStrings(a: string, b: string): number {
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+}
+
 /** Order chapters for reading: un-numbered prologues first, then the numbered main sequence,
  *  then Extra/Side content — per the owner's rule. Pure; returns a new array. */
 export function orderChaptersForReading<T extends OrderableChapter>(chapters: readonly T[]): T[] {
@@ -72,6 +80,6 @@ export function orderChaptersForReading<T extends OrderableChapter>(chapters: re
     const da = a.discoveredAt.getTime();
     const dbb = b.discoveredAt.getTime();
     if (da !== dbb) return da - dbb;
-    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+    return compareStrings(a.id, b.id);
   });
 }

@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { switchToPageWatch } from '../../../../../server/services';
+import type { IdParams } from '../../../../../server/api/http';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(_request: Request, { params }: IdParams) {
   const { id } = await params;
   const result = await switchToPageWatch(id);
   if (!result.ok) {

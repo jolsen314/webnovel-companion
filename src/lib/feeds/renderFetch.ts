@@ -31,6 +31,13 @@ export interface RenderFetchConfig {
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
+/** Map an HTTP status onto a `PoliteResult` failure, or null when it isn't a failure (<400). */
+function httpFailureOutcome(status: number): PoliteResult | null {
+  if (status >= 500) return { outcome: 'HTTP_5XX', status };
+  if (status >= 400) return { outcome: 'HTTP_4XX', status };
+  return null;
+}
+
 export function makeRenderFetch(
   config: RenderFetchConfig,
   httpImpl: RenderHttp = globalThis.fetch as unknown as RenderHttp,
@@ -57,8 +64,8 @@ export function makeRenderFetch(
     }
 
     // The renderer service itself failing (auth, crash, unreachable route).
-    if (res.status >= 500) return { outcome: 'HTTP_5XX', status: res.status };
-    if (res.status >= 400) return { outcome: 'HTTP_4XX', status: res.status };
+    const serviceFailure = httpFailureOutcome(res.status);
+    if (serviceFailure) return serviceFailure;
 
     let payload: { status?: number; finalUrl?: string; html?: string };
     try {
@@ -69,8 +76,8 @@ export function makeRenderFetch(
 
     // The target page's own status, as observed by the renderer.
     const pageStatus = payload.status ?? 200;
-    if (pageStatus >= 500) return { outcome: 'HTTP_5XX', status: pageStatus };
-    if (pageStatus >= 400) return { outcome: 'HTTP_4XX', status: pageStatus };
+    const pageFailure = httpFailureOutcome(pageStatus);
+    if (pageFailure) return pageFailure;
 
     return {
       outcome: 'SUCCESS',

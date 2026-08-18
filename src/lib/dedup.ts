@@ -27,13 +27,14 @@ export function canonicalSeriesId(input: { feedUrl: string | null; tocUrl?: stri
   const base = stripSchemeWww(canonicalUrl(input.feedUrl ?? input.tocUrl ?? input.sourceUrl));
   if (input.feedUrl === null) return base; // page-watch: keyed on tocUrl ?? sourceUrl
   const m = input.match;
-  const suffix =
-    m.type === 'WHOLE_FEED'
-      ? m.type
-      : m.type === 'CATEGORY'
-        ? `CATEGORY:${slugify(m.value)}` // name↔slug convergence
-        : `PATH_PREFIX:${m.value}`; // path is identical across positive/fallback matches
-  return `${base}#${suffix}`;
+  switch (m.type) {
+    case 'WHOLE_FEED':
+      return `${base}#WHOLE_FEED`;
+    case 'CATEGORY':
+      return `${base}#CATEGORY:${slugify(m.value)}`; // name↔slug convergence
+    case 'PATH_PREFIX':
+      return `${base}#PATH_PREFIX:${m.value}`; // path is identical across positive/fallback matches
+  }
 }
 
 /** Normalize a title to lowercase alphanumeric tokens, dropping a single leading article. */
