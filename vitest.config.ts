@@ -19,8 +19,12 @@ export default defineConfig({
           name: 'integration',
           include: ['tests/integration/**/*.test.ts'],
           setupFiles: ['./tests/integration/setup.ts'],
-          // Serialize: all integration files share one worker so DB state can't race.
-          poolOptions: { forks: { singleFork: true } },
+          // Serialize: run integration files one at a time in a single worker so
+          // shared test-DB state can't race. Vitest 4 removed `poolOptions`
+          // (its settings became top-level), so `forks.singleFork` is now
+          // expressed as maxWorkers:1 + fileParallelism:false.
+          maxWorkers: 1,
+          fileParallelism: false,
         },
       },
     ],
