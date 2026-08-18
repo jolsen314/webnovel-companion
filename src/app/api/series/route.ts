@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { addSeries, listSeries } from '../../../server/services';
 import { parseAddSeriesBody } from '../../../server/api/validation';
+import { jsonError, readJson } from '../../../server/api/http';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,15 +11,11 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: 'Expected a JSON body.' }, { status: 400 });
-  }
+  const body = await readJson(request);
+  if (!body.ok) return jsonError(body.error);
 
-  const parsed = parseAddSeriesBody(body);
-  if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+  const parsed = parseAddSeriesBody(body.value);
+  if (!parsed.ok) return jsonError(parsed.error);
 
   try {
     const result = await addSeries(parsed.value);

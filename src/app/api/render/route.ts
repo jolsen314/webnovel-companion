@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import chromium from '@sparticuz/chromium';
 import puppeteer from 'puppeteer-core';
 import { assertPublicUrl } from '../../../server/render/ssrfGuard';
+import { jsonError, readJson } from '../../../server/api/http';
 
 /**
  * Headless render endpoint (WP-17b) — the Vercel `@sparticuz/chromium` prototype. The
@@ -27,21 +28,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: 'Expected a JSON body.' }, { status: 400 });
-  }
-  const url = (body as { url?: unknown })?.url;
+  const body = await readJson(request);
+  if (!body.ok) return jsonError(body.error);
+  const url = (body.value as { url?: unknown })?.url;
   if (typeof url !== 'string') {
-    return NextResponse.json({ error: 'A "url" string is required.' }, { status: 400 });
+    return jsonError('A "url" string is required.');
   }
   // SSRF guard: only public http(s) targets (no metadata/loopback/RFC1918).
   try {
     await assertPublicUrl(url);
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'URL not allowed.' }, { status: 400 });
+    return jsonError(e instanceof Error ? e.message : 'URL not allowed.');
   }
 
   let browser: Awaited<ReturnType<typeof puppeteer.launch>> | undefined;

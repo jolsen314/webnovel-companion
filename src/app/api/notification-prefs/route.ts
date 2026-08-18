@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getNotificationPrefs, updateNotificationPrefs } from '../../../server/services';
 import { parseNotificationPrefsPatch } from '../../../server/api/validation';
+import { jsonError, readJson } from '../../../server/api/http';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,15 +12,11 @@ export async function GET() {
 
 /** Update a subset of the per-type push toggles. */
 export async function PUT(request: Request) {
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: 'Expected a JSON body.' }, { status: 400 });
-  }
+  const body = await readJson(request);
+  if (!body.ok) return jsonError(body.error);
 
-  const parsed = parseNotificationPrefsPatch(body);
-  if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+  const parsed = parseNotificationPrefsPatch(body.value);
+  if (!parsed.ok) return jsonError(parsed.error);
 
   return NextResponse.json(await updateNotificationPrefs(parsed.value));
 }

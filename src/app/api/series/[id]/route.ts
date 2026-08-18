@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSeries, updateSeries, deleteSeries } from '../../../../server/services';
 import { parseSeriesUpdate } from '../../../../server/api/validation';
+import { jsonError, readJson } from '../../../../server/api/http';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,15 +15,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: 'Expected a JSON body.' }, { status: 400 });
-  }
+  const body = await readJson(request);
+  if (!body.ok) return jsonError(body.error);
 
-  const parsed = parseSeriesUpdate(body);
-  if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+  const parsed = parseSeriesUpdate(body.value);
+  if (!parsed.ok) return jsonError(parsed.error);
 
   const updated = await updateSeries(id, parsed.value);
   if (!updated) return NextResponse.json({ error: 'Series not found.' }, { status: 404 });
