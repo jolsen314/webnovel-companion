@@ -1,0 +1,37 @@
+name: Security audit
+
+# Three triggers, covering every way the advisory picture changes:
+#   - pull_request:      advisories you *introduce* via a PR (earliest gate).
+#   - push (main):       advisories you introduce by committing straight to
+#                        main without a PR — audited immediately, not next week.
+#   - schedule (weekly): advisories newly *published* against deps you already
+#                        have (npm audit queries the registry live).
+# Kept separate from ci.yml so the weekly cron stays fast — no Postgres,
+# no Playwright, no build. `npm audit` reads package-lock.json directly.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 13 * * 1' # Mondays 13:00 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: security-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      # Fails the job (red check = the alert) when a high/critical advisory is
+      # present. Non-blocking by intent: leave this check un-required so it
+      # informs without gating merges. Lower to --audit-level=moderate to widen.
+      - name: npm audit (high+)
+        run: npm audit --audit-level=high

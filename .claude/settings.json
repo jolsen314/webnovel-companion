@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/audit-on-dep-change.sh\"",
+            "timeout": 60,
+            "statusMessage": "Checking npm advisories…"
+          }
+        ]
+      }
+    ]
+  }
+}

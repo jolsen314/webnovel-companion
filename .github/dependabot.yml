@@ -1,0 +1,24 @@
+# Dependabot: keep dependencies patched and alert on new advisories against
+# packages we already have. Security updates (from the advisory database) are
+# raised automatically when GitHub "Dependabot alerts" are enabled for the repo
+# (Settings → Advanced Security → Dependabot). This file adds scheduled version
+# updates on top of those.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    # Collapse routine minor/patch bumps into one PR to cut review noise;
+    # majors still come as individual PRs so breaking changes stay visible.
+    groups:
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
