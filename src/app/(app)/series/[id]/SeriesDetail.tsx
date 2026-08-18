@@ -4,9 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { arrangeChapters, type ChapterDisplayMode } from '../../../../lib/reading';
 import { DeleteSeries } from './DeleteSeries';
-
-const STATUSES = ['READING', 'COMPLETED', 'PAUSED', 'DROPPED', 'PLANNED'] as const;
-type Status = (typeof STATUSES)[number];
+import { SERIES_STATUSES, type SeriesStatus } from '../../../../lib/series';
 
 const DISPLAY_MODES: { mode: ChapterDisplayMode; label: string }[] = [
   { mode: 'oldest', label: 'Oldest' },
@@ -25,14 +23,14 @@ export interface ChapterLite {
 export function SeriesDetail(props: {
   id: string;
   title: string;
-  status: Status;
+  status: SeriesStatus;
   rating: number | null;
   chapters: ChapterLite[];
   lastReadChapterId: string | null;
   sourceType: 'FEED' | 'PAGE_WATCH';
 }) {
   const router = useRouter();
-  const [status, setStatus] = useState<Status>(props.status);
+  const [status, setStatus] = useState<SeriesStatus>(props.status);
   const [rating, setRating] = useState<number | null>(props.rating);
   const [lastRead, setLastRead] = useState<string | null>(props.lastReadChapterId);
   const [busy, setBusy] = useState(false);
@@ -106,12 +104,12 @@ export function SeriesDetail(props: {
             value={status}
             disabled={busy}
             onChange={(e) => {
-              const s = e.target.value as Status;
+              const s = e.target.value as SeriesStatus;
               setStatus(s);
               void patch({ status: s });
             }}
           >
-            {STATUSES.map((s) => (
+            {SERIES_STATUSES.map((s) => (
               <option key={s} value={s}>
                 {s[0] + s.slice(1).toLowerCase()}
               </option>

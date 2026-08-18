@@ -3,10 +3,9 @@ import { notFound } from 'next/navigation';
 import { getSeries } from '../../../../server/services';
 import { EditableTitle } from './EditableTitle';
 import { SeriesDetail, type ChapterLite } from './SeriesDetail';
+import { SERIES_STATUSES } from '../../../../lib/series';
 
 export const dynamic = 'force-dynamic';
-
-const STATUSES = ['READING', 'COMPLETED', 'PAUSED', 'DROPPED', 'PLANNED'] as const;
 
 export default async function SeriesPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -20,8 +19,8 @@ export default async function SeriesPage({ params }: { params: Promise<{ id: str
     number: c.number,
     url: c.url,
   }));
-  const status = STATUSES.includes(series.status as (typeof STATUSES)[number])
-    ? (series.status as (typeof STATUSES)[number])
+  const status = SERIES_STATUSES.includes(series.status as (typeof SERIES_STATUSES)[number])
+    ? (series.status as (typeof SERIES_STATUSES)[number])
     : 'READING';
 
   return (

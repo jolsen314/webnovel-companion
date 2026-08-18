@@ -5,6 +5,9 @@
  */
 
 import type { PollTier } from '../services/poll';
+import { SERIES_STATUSES, type SeriesStatus } from '../../lib/series';
+
+export type { SeriesStatus };
 
 export type ParseResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
@@ -42,9 +45,6 @@ export function parseAddSeriesBody(input: unknown): ParseResult<AddSeriesBody> {
   }
   return ok(value);
 }
-
-const SERIES_STATUSES = ['READING', 'COMPLETED', 'PAUSED', 'DROPPED', 'PLANNED'] as const;
-export type SeriesStatus = (typeof SERIES_STATUSES)[number];
 
 export interface SeriesUpdate {
   status?: SeriesStatus;

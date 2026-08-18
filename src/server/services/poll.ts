@@ -4,6 +4,7 @@ import { parseToc } from '../../lib/feeds/pageWatch';
 import { filterBySeriesMatch, type SeriesMatch } from '../../lib/feeds/discover';
 import { step, type FailureType, type HealthState, type SourceHealth } from '../../lib/health';
 import { parseRetryAfter, type PoliteResult } from '../../lib/feeds/fetch';
+import type { SeriesStatus } from '../../lib/series';
 
 /**
  * Poll orchestration: composes the (pure, tested) feed pipeline —
@@ -55,9 +56,9 @@ export function sourceTierWhere(tier: PollTier): { isActive: true; type?: 'FEED'
   return tier === 'plain' ? { isActive: true, type: 'FEED', fetchMode: 'PLAIN' } : { isActive: true };
 }
 
-/** The reader's shelf status for a series (mirrors the Prisma SeriesStatus enum as a local union
- *  so poll.ts stays Prisma-free). WP-27a. */
-export type SeriesStatus = 'READING' | 'COMPLETED' | 'PAUSED' | 'DROPPED' | 'PLANNED';
+/** Re-exported from `lib/series` (the single source of truth) so poll's existing consumers
+ *  keep importing `SeriesStatus` from here. WP-27a. */
+export type { SeriesStatus };
 
 /** Minutes between eligible polls per shelf status. 0 = every run; null = never auto-poll
  *  (re-enters only when the reader changes the status, e.g. promote to READING). WP-27a. */
