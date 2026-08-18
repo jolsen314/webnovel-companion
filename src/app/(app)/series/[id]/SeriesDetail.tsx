@@ -27,7 +27,7 @@ export function SeriesDetail(props: {
   rating: number | null;
   chapters: ChapterLite[];
   lastReadChapterId: string | null;
-  sourceType: 'FEED' | 'PAGE_WATCH';
+  sourceType: 'FEED' | 'PAGE_WATCH' | 'API';
 }) {
   const router = useRouter();
   const [status, setStatus] = useState<SeriesStatus>(props.status);

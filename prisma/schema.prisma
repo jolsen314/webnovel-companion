@@ -27,6 +27,7 @@ enum SeriesStatus {
 enum SourceType {
   FEED
   PAGE_WATCH
+  API // WP-45: read a chapter data API (JSON) directly instead of render + DOM scrape
 }
 
 /// How a source is fetched (WP-17b). PLAIN = politeFetch; RENDER = headless renderer.
@@ -148,6 +149,11 @@ model Source {
   // WP-37: the chapter table-of-contents page, when it differs from `url` (the landing/reading
   // page). null → the landing page IS the TOC; consumers fall back to `url`. Shared with WP-34.
   tocUrl    String?
+
+  // WP-45: API-first source. `apiUrl` is the chapter-data endpoint (fetched in place of the
+  // page); `apiMap` is the per-source field descriptor (see lib/feeds/apiAdapter.ts ApiDescriptor).
+  apiUrl String?
+  apiMap Json?
 
   // Series isolation within a (possibly site-wide, multi-novel) feed.
   matchType  SourceMatch @default(WHOLE_FEED)

@@ -97,8 +97,9 @@ export interface PollableSource {
   seriesId: string;
   /** The reader's shelf status (WP-27a) — gates whether/how often this source polls. */
   seriesStatus: SeriesStatus;
-  /** FEED → parse as a feed + apply the series matcher; PAGE_WATCH → parse the TOC. */
-  type: 'FEED' | 'PAGE_WATCH';
+  /** FEED → parse as a feed + apply the series matcher; PAGE_WATCH → parse the TOC;
+   *  API → parse via its `apiMap` descriptor (WP-45; wiring lands in a later task). */
+  type: 'FEED' | 'PAGE_WATCH' | 'API';
   /** PLAIN → `politeFetch`; RENDER → the headless renderer (WP-17b). */
   fetchMode: 'PLAIN' | 'RENDER';
   /** The URL to GET (feedUrl ?? url). */
