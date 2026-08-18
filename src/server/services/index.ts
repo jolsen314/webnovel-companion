@@ -46,6 +46,7 @@ export {
   mergeSeries,
   listSeriesForCleanup,
   reclassifySource,
+  setApiDescriptor,
 } from './cleanup';
 import { reclassifySource } from './cleanup';
 

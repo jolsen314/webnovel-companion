@@ -1,6 +1,8 @@
+import type { Prisma } from '@prisma/client';
 import { db } from '../db';
 import { getCurrentUserId } from '../user';
 import { chaptersToMove } from '../../lib/chapters/merge';
+import type { ApiDescriptor } from '../../lib/feeds/apiAdapter';
 import { ownsSeries, ownsSource } from './ownership';
 
 /**
@@ -67,6 +69,31 @@ export async function reclassifySource(
       matchType: 'WHOLE_FEED',
       matchValue: null,
       ...(opts.render ? { fetchMode: 'RENDER' as const } : {}),
+    },
+  });
+  return { updated: true };
+}
+
+/** WP-45: point an owned source at a chapter data API — set type=API, the endpoint, and the
+ *  field descriptor; drop the now-irrelevant feed matcher + stale validators. `render` marks a
+ *  CF-gated API that must be fetched through the headless browser (WP-45b). */
+export async function setApiDescriptor(
+  sourceId: string,
+  opts: { endpoint: string; map: ApiDescriptor; render?: boolean },
+): Promise<{ updated: boolean }> {
+  if (!(await ownsSource(sourceId))) return { updated: false };
+  await db.source.update({
+    where: { id: sourceId },
+    data: {
+      type: 'API',
+      apiUrl: opts.endpoint,
+      apiMap: opts.map as unknown as Prisma.InputJsonValue,
+      feedUrl: null,
+      matchType: 'WHOLE_FEED',
+      matchValue: null,
+      etag: null,
+      lastModified: null,
+      fetchMode: opts.render ? 'RENDER' : 'PLAIN',
     },
   });
   return { updated: true };

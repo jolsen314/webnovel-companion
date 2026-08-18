@@ -13,6 +13,7 @@ import {
   backfillFromToc,
   backfillWithEscalation,
   reclassifySource,
+  setApiDescriptor,
   switchToPageWatch,
   type FetchImpl,
 } from '../../src/server/services';
@@ -1250,6 +1251,33 @@ describe('pollAllSources tier filter (real DB, WP-43)', () => {
     const effects = await pollAllSources(fetch, undefined, undefined, 'all');
 
     expect(effects).toHaveLength(3);
+  });
+});
+
+describe('setApiDescriptor (real DB, WP-45)', () => {
+  test('setApiDescriptor flips a source to API with endpoint + descriptor', async () => {
+    const series = await db.series.create({
+      data: {
+        userId: getCurrentUserId(),
+        title: 'Alpha',
+        sources: { create: { url: 'https://spa.example/series/alpha', host: 'spa.example', type: 'FEED', feedUrl: 'https://spa.example/feed/' } },
+      },
+      include: { sources: true },
+    });
+    const sourceId = series.sources[0]!.id;
+
+    const res = await setApiDescriptor(sourceId, {
+      endpoint: 'https://api.example/works/1/chapters',
+      map: { urlField: 'url', titleField: 'title', isFreeField: 'free' },
+    });
+    expect(res.updated).toBe(true);
+
+    const row = await db.source.findUniqueOrThrow({ where: { id: sourceId } });
+    expect(row.type).toBe('API');
+    expect(row.apiUrl).toBe('https://api.example/works/1/chapters');
+    expect(row.feedUrl).toBeNull();
+    expect(row.fetchMode).toBe('PLAIN');
+    expect(row.apiMap).toMatchObject({ urlField: 'url', isFreeField: 'free' });
   });
 });
 
