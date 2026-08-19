@@ -2,6 +2,21 @@ import { parseChapterNumber } from './parse';
 import type { TocChapter } from './pageWatch';
 
 /**
+ * WP-45b: pagination descriptor — stores the query parameter name and per-page count for
+ * paginated JSON API sources.
+ */
+export interface PaginationSpec {
+  /** Query param to increment (e.g. "page"). */
+  pageParam: string;
+  /** Page size / the site's cap (e.g. 200) — per-descriptor, never hardcoded. */
+  perPage: number;
+  /** Runaway backstop (default 20). */
+  maxPages?: number;
+  /** Dot-path to each page's item array; mirrors ApiDescriptor.listPath. */
+  listPath?: string;
+}
+
+/**
  * WP-45: read a source's chapter data API (JSON) directly. An API returns the COMPLETE
  * chapter list with lock state — TOC semantics — so this parser emits the same `TocChapter[]`
  * the page-watch path produces, and the diff / "now free" machinery downstream is untouched.
@@ -21,6 +36,8 @@ export interface ApiDescriptor {
   isFreeField?: string;
   /** How to read `isFreeField`: 'truthy' (default) = "is free"; 'falsy' = the field is `locked` (inverse). */
   isFreeWhen?: 'truthy' | 'falsy';
+  /** WP-45b: when present, the source is paginated — fetch every page and union (see fetchApiPages). */
+  pagination?: PaginationSpec;
 }
 
 function getPath(obj: unknown, path: string): unknown {
