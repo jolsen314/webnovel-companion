@@ -53,6 +53,27 @@ export async function renderPage(url: string): Promise<{ status: number; finalUr
     const resp = await page.goto(url, { waitUntil: 'networkidle2', timeout: 45_000 });
     await new Promise((r) => setTimeout(r, 2_000)); // let client-rendered lists settle
 
+    // WP-45b SPIKE (throwaway probe — keep only if the CF-gated JSON read validates):
+    // auto-detect a JSON resource. On a JSON navigation `page.content()` returns the browser's
+    // JSON-*viewer* HTML, not the raw body. But once `goto` has (for a CF-gated endpoint)
+    // triggered + solved the challenge and left us on the domain holding the `cf_clearance`
+    // cookie, an in-page same-origin fetch reuses that cookie and returns the RAW JSON. The
+    // fetch still flows through the request interception above, so it stays SSRF-guarded. If
+    // the response isn't JSON, fall through to the existing DOM/load-more behavior unchanged.
+    const jsonProbe = await page.evaluate(async (u) => {
+      try {
+        const r = await fetch(u, { credentials: 'include' });
+        const ct = r.headers.get('content-type') ?? '';
+        if (!/\bjson\b/i.test(ct)) return null;
+        return { status: r.status, body: await r.text() };
+      } catch {
+        return null;
+      }
+    }, url);
+    if (jsonProbe) {
+      return { status: jsonProbe.status, finalUrl: page.url(), html: jsonProbe.body };
+    }
+
     // Loop-click a "load more" control until it's gone (paginated TOCs).
     for (let i = 0; i < 60; i++) {
       const clicked = await page.evaluate((pattern) => {
