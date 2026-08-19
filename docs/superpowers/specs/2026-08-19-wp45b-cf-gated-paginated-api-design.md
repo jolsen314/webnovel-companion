@@ -175,6 +175,16 @@ Validate that if `pagination` is present it has `pageParam` + a positive `perPag
 - **Unit — poll:** a paginated `API`/`PLAIN` source → `fetchApiPages` unions pages → `diffChapters` gets all chapters;
   a paginated `API`/`RENDER` source → one `renderFetch` call carrying `pagination`, its unioned JSON body → all
   chapters + a `locked:true→false` `becameFree`.
+- **Unit — THE poll-budget guarantee (load-bearing).** Give `fetchApiPages(RENDER, …)` a fake `renderFetch` that
+  **counts calls**, and a multi-page series (e.g. 7 pages). Assert `renderFetch` is called **exactly once** — i.e. one
+  browser invocation per series per poll, never one-per-page. This is the regression guard against the exact failure
+  mode (looping `renderFetch`) that would blow `POLL_BUDGET_MS`. Conversely, the PLAIN branch's page loop calls
+  `ports.fetch` once per page (cheap HTTP), which the plain `fetchApiPages` test already asserts by call count.
+  (No real browser: the render page loop lives inside `renderPage`'s `page.evaluate`, which can't launch Chromium, so
+  the single-`renderFetch`-call assertion is a complete proof of "one browser, N in-page fetches.")
+- **Empirical (owner, one-time):** during the render-loop build, temporary `console.log('browser launched')` +
+  `console.log('in-page fetch page N')`; owner hits a real multi-page series on a preview and confirms the Vercel logs
+  show **one** launch + N in-page fetches. Removed before merge.
 - **Unit — content-type/JSON decision** extracted from `renderPage` where testable (the pure predicate); the
   browser-loop internals are validated by the live spike.
 - **Integration:** a paginated API source seeded at add + re-polled (mirrors the WP-45 integration test, with a 2-page
@@ -189,5 +199,8 @@ Validate that if `pagination` is present it has `pageParam` + a positive `perPag
 - A paginated **plain** API source unions all pages too (latent WP-45 gap closed).
 - `renderPage` returns raw JSON for a JSON resource (auto-detected) and is unchanged for HTML.
 - The page loop stops on a short page, caps at `maxPages`, and **logs on cap-hit**; `perPage` is descriptor-driven.
+- **One browser per series per poll — proven by test.** A paginated RENDER source calls `renderFetch` **exactly once**
+  regardless of page count (call-count unit test); the poll-budget cost note is recorded (one render + N in-page
+  fetches ≠ N renders).
 - `lib/` core is pure + test-first; non-paginated + non-API sources are byte-for-byte unchanged; PLAN.md WP-45b → DONE
   with a changelog line; `NEXT` advanced.
