@@ -131,12 +131,15 @@ export async function addSeries(input: AddSeriesInput, ports: AddSeriesPorts): P
     // feed↔TOC merge, the WP-49 divert check, and the page-watch seed below.
     const pageToc = pageOk ? parseToc(pageBody, url) : [];
 
-    // WP-45: API-first. If the (plainly-fetched) page reveals a chapter data API, read it
-    // directly — the complete list with access, no feed and no render. Only on the PLAIN pass:
-    // a CF-gated API reached via the RENDER pass needs the render transport (WP-45b), out of scope.
+    // WP-45: API-first. If the (plainly-fetched) page reveals one or more chapter-data API
+    // candidates, try each in document order and take the first that actually yields chapters —
+    // mirrors the feed-candidate loop below. A page can advertise a decoy `.json` pointer (e.g.
+    // a settings/config file) ahead of the real chapter-data file; without trying every
+    // candidate, the decoy's empty parse would wrongly fall through to feed/page-watch even
+    // though a valid chapter API was on the page. Only on the PLAIN pass: a CF-gated API reached
+    // via the RENDER pass needs the render transport (WP-45b), out of scope.
     if (pageOk && bodyMode === 'PLAIN') {
-      const api = probeForApi(pageBody, url);
-      if (api) {
+      for (const api of probeForApi(pageBody, url)) {
         const apiRes = await ports.fetch(api.apiUrl);
         if (apiRes.outcome === 'SUCCESS' && !apiRes.notModified) {
           const apiChapters = parseApiChapters(apiRes.body, api.descriptor, api.apiUrl);

@@ -25,7 +25,7 @@ export interface ApiDescriptor {
 
 function getPath(obj: unknown, path: string): unknown {
   return path.split('.').reduce<unknown>((acc, key) => {
-    if (acc != null && typeof acc === 'object' && key in (acc as Record<string, unknown>)) {
+    if (acc != null && typeof acc === 'object' && Object.hasOwn(acc as object, key)) {
       return (acc as Record<string, unknown>)[key];
     }
     return undefined;
