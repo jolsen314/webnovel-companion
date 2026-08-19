@@ -210,6 +210,12 @@ async function cmdSetApiDescriptor(args: string[], render: boolean, apply: boole
     throw new UsageError('--map must be valid JSON');
   }
   if (!map.urlField || !map.titleField) throw new UsageError('--map needs at least urlField and titleField');
+  if (render) {
+    console.warn(
+      'warning: --render sets fetchMode=RENDER, but the CF-gated render-returns-JSON transport (WP-45b) is not ' +
+        'built yet; this source will not fetch until WP-45b lands.',
+    );
+  }
   if (!apply) {
     console.log(`[dry run] set-api-descriptor would set source ${sourceId} → API`);
     console.log(`  endpoint=${endpoint}  fetchMode=${render ? 'RENDER' : 'PLAIN'}  map=${JSON.stringify(map)}`);

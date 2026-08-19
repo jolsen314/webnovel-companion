@@ -152,7 +152,7 @@ For a bespoke REST endpoint the page doesn't advertise (the plain-REST "biggest 
 has from the network probe), a CLI command sets the descriptor on an existing series' source — the reliable path for
 the first render-eliminating source. Lives alongside the WP-38/WP-49 `db:cleanup` / `reclassify-source` tooling.
 
-- `set-api-descriptor <seriesId> --endpoint <apiUrl> --map <spec> [--render]`: sets `type=API`, `apiUrl`,
+- `set-api-descriptor <sourceId> --endpoint <apiUrl> --map <spec> [--render]`: sets `type=API`, `apiUrl`,
   `apiMap` (parsed from `--map`), and `fetchMode` (`PLAIN` default, `RENDER` with `--render` for a future CF-gated
   source); clears the now-irrelevant `feedUrl` and stale `etag`/`lastModified` validators (mirroring `reclassify-source`).
 - Anonymity: the command takes the endpoint/map as **arguments**, so no real host is committed.

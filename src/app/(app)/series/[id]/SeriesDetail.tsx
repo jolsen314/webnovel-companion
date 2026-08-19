@@ -145,17 +145,19 @@ export function SeriesDetail(props: {
           </div>
         </div>
 
-        <div className="control">
-          <span className="control__label">Chapters</span>
-          <button type="button" className="control__action" disabled={busy} onClick={() => void backfill()}>
-            Backfill from TOC
-          </button>
-          {backfillMessage && (
-            <span className="control__hint" role="status">
-              {backfillMessage}
-            </span>
-          )}
-        </div>
+        {props.sourceType !== 'API' && (
+          <div className="control">
+            <span className="control__label">Chapters</span>
+            <button type="button" className="control__action" disabled={busy} onClick={() => void backfill()}>
+              Backfill from TOC
+            </button>
+            {backfillMessage && (
+              <span className="control__hint" role="status">
+                {backfillMessage}
+              </span>
+            )}
+          </div>
+        )}
 
         {props.sourceType === 'FEED' && (
           <div className="control">

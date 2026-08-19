@@ -544,6 +544,28 @@ describe('addSeries', () => {
     ]);
   });
 
+  test('API probe fires but parseApiChapters yields none → falls through to FEED, no API source created', async () => {
+    // The shell advertises both a .json data pointer (probeForApi fires) and a feed. The API
+    // fetch succeeds but returns a non-array JSON object, so parseApiChapters yields [] — the
+    // `apiChapters.length > 0` guard must reject it and let the normal ladder run to FEED.
+    const url = 'https://spa.example/series/beta';
+    const apiUrl = 'https://spa.example/data/beta.json';
+    const feedUrl = 'https://spa.example/feed/';
+    const shell = `<html><head><link rel="alternate" type="application/rss+xml" href="${feedUrl}"></head><body><div data-title="/data/beta.json"></div></body></html>`;
+    const p = ports({
+      [url]: ok(shell),
+      [apiUrl]: ok(JSON.stringify({})), // not an array → parseApiChapters yields []
+      [feedUrl]: ok(RSS(ITEM('g1', 'https://spa.example/read/1'))),
+    });
+
+    const result = await addSeries({ url }, p);
+    if (result.kind !== 'created') throw new Error('expected created');
+
+    expect(result.resolved.type).not.toBe('API');
+    expect(result.resolved.type).toBe('FEED');
+    expect(result.resolved.apiUrl).toBeNull();
+  });
+
   test('no API signal → falls through to today\'s FEED resolution', async () => {
     const url = 'https://translator.example/novel/alpha/';
     const feedUrl = 'https://translator.example/feed/';
