@@ -519,6 +519,100 @@ describe('addSeries', () => {
 
     expect(result.resolved.type).toBe('FEED');
   });
+
+  test('page reveals a JSON data API → resolves an API source, no feed/render', async () => {
+    const url = 'https://spa.example/series/alpha';
+    const apiUrl = 'https://spa.example/data/alpha.json';
+    const shell = `<html><body><div data-title="/data/alpha.json"></div></body></html>`;
+    const apiBody = JSON.stringify([
+      { title: 'Ch 1: Start', url: 'https://spa.example/read/1' },
+      { title: 'Ch 2: Next', url: 'https://spa.example/read/2' },
+    ]);
+    const p = ports({ [url]: ok(shell), [apiUrl]: ok(apiBody) });
+
+    const result = await addSeries({ url }, p);
+    if (result.kind !== 'created') throw new Error('expected created');
+
+    expect(result.resolved.type).toBe('API');
+    expect(result.resolved.fetchMode).toBe('PLAIN');
+    expect(result.resolved.apiUrl).toBe(apiUrl);
+    expect(result.resolved.apiMap).toMatchObject({ urlField: 'url', titleField: 'title' });
+    expect(result.resolved.feedUrl).toBeNull();
+    expect(result.resolved.chapters.map((c) => c.url)).toEqual([
+      'https://spa.example/read/1',
+      'https://spa.example/read/2',
+    ]);
+  });
+
+  test('API probe fires but parseApiChapters yields none → falls through to FEED, no API source created', async () => {
+    // The shell advertises both a .json data pointer (probeForApi fires) and a feed. The API
+    // fetch succeeds but returns a non-array JSON object, so parseApiChapters yields [] — the
+    // `apiChapters.length > 0` guard must reject it and let the normal ladder run to FEED.
+    const url = 'https://spa.example/series/beta';
+    const apiUrl = 'https://spa.example/data/beta.json';
+    const feedUrl = 'https://spa.example/feed/';
+    const shell = `<html><head><link rel="alternate" type="application/rss+xml" href="${feedUrl}"></head><body><div data-title="/data/beta.json"></div></body></html>`;
+    const p = ports({
+      [url]: ok(shell),
+      [apiUrl]: ok(JSON.stringify({})), // not an array → parseApiChapters yields []
+      [feedUrl]: ok(RSS(ITEM('g1', 'https://spa.example/read/1'))),
+    });
+
+    const result = await addSeries({ url }, p);
+    if (result.kind !== 'created') throw new Error('expected created');
+
+    expect(result.resolved.type).not.toBe('API');
+    expect(result.resolved.type).toBe('FEED');
+    expect(result.resolved.apiUrl).toBeNull();
+  });
+
+  test('a DECOY .json data attr (fails to parse) precedes the REAL one → tries both, resolves API from the second', async () => {
+    // The shell advertises a decoy .json pointer FIRST (e.g. a settings/config file whose body
+    // isn't a chapter array) and the real chapter-data .json SECOND. probeForApi now returns
+    // both candidates in document order; addSeries must try the decoy, see parseApiChapters
+    // yield [], and move on to the real one rather than falling through to FEED.
+    const url = 'https://spa.example/series/gamma';
+    const decoyUrl = 'https://spa.example/settings.json';
+    const realUrl = 'https://spa.example/data/gamma-chapters.json';
+    const shell = `<html><body>
+      <div id="decoy" data-config="/settings.json"></div>
+      <div id="app" data-chapters="/data/gamma-chapters.json"></div>
+    </body></html>`;
+    const p = ports({
+      [url]: ok(shell),
+      [decoyUrl]: ok(JSON.stringify({})), // not an array → parseApiChapters yields []
+      [realUrl]: ok(
+        JSON.stringify([
+          { title: 'Ch 1: Start', url: 'https://spa.example/read/1' },
+          { title: 'Ch 2: Next', url: 'https://spa.example/read/2' },
+        ]),
+      ),
+    });
+
+    const result = await addSeries({ url }, p);
+    if (result.kind !== 'created') throw new Error('expected created');
+
+    expect(result.resolved.type).toBe('API');
+    expect(result.resolved.apiUrl).toBe(realUrl);
+    expect(result.resolved.chapters.map((c) => c.url)).toEqual([
+      'https://spa.example/read/1',
+      'https://spa.example/read/2',
+    ]);
+  });
+
+  test('no API signal → falls through to today\'s FEED resolution', async () => {
+    const url = 'https://translator.example/novel/alpha/';
+    const feedUrl = 'https://translator.example/feed/';
+    const p = ports({
+      [url]: ok(PAGE(feedUrl)),
+      [feedUrl]: ok(RSS(ITEM('g1', 'https://translator.example/alpha-1/'))),
+    });
+
+    const result = await addSeries({ url }, p);
+    if (result.kind !== 'created') throw new Error('expected created');
+    expect(result.resolved.type).toBe('FEED');
+    expect(result.resolved.apiUrl).toBeNull();
+  });
 });
 
 describe('addSeries dedup (WP-39)', () => {

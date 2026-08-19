@@ -14,6 +14,8 @@ import type { FeedItem } from '../../lib/feeds/diff';
 import type { PoliteResult } from '../../lib/feeds/fetch';
 import { canonicalSeriesId, findSimilarTitle } from '../../lib/dedup';
 import { RENDER_ESCALATION_MAX } from './poll';
+import { probeForApi } from '../../lib/feeds/apiProbe';
+import { parseApiChapters, type ApiDescriptor } from '../../lib/feeds/apiAdapter';
 
 /**
  * Add-time source resolution: given a URL the user pastes, discover a feed (or fall
@@ -35,7 +37,9 @@ export interface ResolvedSource {
   host: string;
   feedUrl: string | null;
   tocUrl: string | null; // WP-37: separate chapter-TOC page, when discoverable
-  type: 'FEED' | 'PAGE_WATCH';
+  type: 'FEED' | 'PAGE_WATCH' | 'API';
+  apiUrl: string | null; // WP-45: the chapter-data endpoint when type === 'API'
+  apiMap: ApiDescriptor | null; // WP-45: per-source field descriptor when type === 'API'
   linkOnly: boolean; // WP-50: link-only entry — created via allowLinkOnly, excluded from polling
   fetchMode: 'PLAIN' | 'RENDER'; // WP-46: RENDER when the source needs our headless renderer
   match: SeriesMatch;
@@ -106,7 +110,7 @@ export async function addSeries(input: AddSeriesInput, ports: AddSeriesPorts): P
   if (input.allowLinkOnly) {
     const core: ResolvedCore = {
       seriesTitle: input.title ?? titleFromUrl(url),
-      sourceUrl: url, host, feedUrl: null, tocUrl: null,
+      sourceUrl: url, host, feedUrl: null, tocUrl: null, apiUrl: null, apiMap: null,
       type: 'PAGE_WATCH', fetchMode: 'PLAIN', match: { type: 'WHOLE_FEED' },
       chapters: [], linkOnly: true,
     };
@@ -126,6 +130,39 @@ export async function addSeries(input: AddSeriesInput, ports: AddSeriesPorts): P
     // Parse the page's own chapter list once (empty when the page didn't load). Reused by the
     // feed↔TOC merge, the WP-49 divert check, and the page-watch seed below.
     const pageToc = pageOk ? parseToc(pageBody, url) : [];
+
+    // WP-45: API-first. If the (plainly-fetched) page reveals one or more chapter-data API
+    // candidates, try each in document order and take the first that actually yields chapters —
+    // mirrors the feed-candidate loop below. A page can advertise a decoy `.json` pointer (e.g.
+    // a settings/config file) ahead of the real chapter-data file; without trying every
+    // candidate, the decoy's empty parse would wrongly fall through to feed/page-watch even
+    // though a valid chapter API was on the page. Only on the PLAIN pass: a CF-gated API reached
+    // via the RENDER pass needs the render transport (WP-45b), out of scope.
+    if (pageOk && bodyMode === 'PLAIN') {
+      for (const api of probeForApi(pageBody, url)) {
+        const apiRes = await ports.fetch(api.apiUrl);
+        if (apiRes.outcome === 'SUCCESS' && !apiRes.notModified) {
+          const apiChapters = parseApiChapters(apiRes.body, api.descriptor, api.apiUrl);
+          if (apiChapters.length > 0) {
+            const core: ResolvedCore = {
+              seriesTitle: input.title ?? pageTitle ?? titleFromUrl(url),
+              sourceUrl: url,
+              host,
+              feedUrl: null,
+              tocUrl: null,
+              apiUrl: api.apiUrl,
+              apiMap: api.descriptor,
+              type: 'API',
+              linkOnly: false,
+              fetchMode: 'PLAIN',
+              match: { type: 'WHOLE_FEED' },
+              chapters: withReadingPositions(apiChapters, apiChapters),
+            };
+            return finalize(core, ports);
+          }
+        }
+      }
+    }
 
     // Candidate feeds: advertised <link alternate> if we could read the page, else common
     // WordPress/Blogger guesses. Guesses are tried even when the page fetch FAILED —
@@ -178,7 +215,8 @@ export async function addSeries(input: AddSeriesInput, ports: AddSeriesPorts): P
               : titleFromUrl(url));
         const tocUrl = pageOk ? findTocUrl(pageBody, url) : null;
         const core: ResolvedCore = {
-          seriesTitle, sourceUrl: url, host, feedUrl, tocUrl, type: 'FEED', linkOnly: false, fetchMode: 'PLAIN', match, chapters,
+          seriesTitle, sourceUrl: url, host, feedUrl, tocUrl, apiUrl: null, apiMap: null,
+          type: 'FEED', linkOnly: false, fetchMode: 'PLAIN', match, chapters,
         };
         return finalize(core, ports);
       }
@@ -217,6 +255,8 @@ export async function addSeries(input: AddSeriesInput, ports: AddSeriesPorts): P
         host,
         feedUrl: null,
         tocUrl,
+        apiUrl: null,
+        apiMap: null,
         type: 'PAGE_WATCH',
         linkOnly: false,
         fetchMode,

@@ -16,8 +16,10 @@ import {
   listSeriesForCleanup,
   backfillFromToc,
   reclassifySource,
+  setApiDescriptor,
   renderPort,
 } from '../src/server/services/index';
+import type { ApiDescriptor } from '../src/lib/feeds/apiAdapter';
 
 class UsageError extends Error {}
 
@@ -33,6 +35,7 @@ Commands:
   merge-series --from <fromId> --into <intoId>
   backfill <seriesId> [--render]
   reclassify-source <sourceId> [--render]
+  set-api-descriptor <sourceId> --endpoint <url> --map <json> [--render]
 
 Without --apply, mutating commands print a dry-run plan and make no changes.
 "list" is always read-only.`);
@@ -193,6 +196,36 @@ async function cmdReclassifySource(sourceId: string | undefined, render: boolean
   console.log(res.updated ? `Reclassified source ${sourceId} → PAGE_WATCH${render ? '/RENDER' : ''}.` : `Source ${sourceId} not found.`);
 }
 
+async function cmdSetApiDescriptor(args: string[], render: boolean, apply: boolean): Promise<void> {
+  const sourceId = args[0];
+  if (!sourceId) throw new UsageError('set-api-descriptor requires <sourceId>');
+  const endpoint = flagValue(args, '--endpoint');
+  const mapJson = flagValue(args, '--map');
+  if (!endpoint) throw new UsageError('set-api-descriptor requires --endpoint <url>');
+  if (!mapJson) throw new UsageError('set-api-descriptor requires --map <json>');
+  let map: ApiDescriptor;
+  try {
+    map = JSON.parse(mapJson);
+  } catch {
+    throw new UsageError('--map must be valid JSON');
+  }
+  if (!map.urlField || !map.titleField) throw new UsageError('--map needs at least urlField and titleField');
+  if (render) {
+    console.warn(
+      'warning: --render sets fetchMode=RENDER, but the CF-gated render-returns-JSON transport (WP-45b) is not ' +
+        'built yet; this source will not fetch until WP-45b lands.',
+    );
+  }
+  if (!apply) {
+    console.log(`[dry run] set-api-descriptor would set source ${sourceId} → API`);
+    console.log(`  endpoint=${endpoint}  fetchMode=${render ? 'RENDER' : 'PLAIN'}  map=${JSON.stringify(map)}`);
+    console.log('Re-run with --apply to update.');
+    return;
+  }
+  const res = await setApiDescriptor(sourceId, { endpoint, map, render });
+  console.log(res.updated ? `Set API descriptor on source ${sourceId}.` : `No source ${sourceId} for the current user.`);
+}
+
 async function cmdBackfill(seriesId: string | undefined, render: boolean, apply: boolean): Promise<void> {
   if (!seriesId) throw new UsageError('backfill requires <seriesId>');
   if (render && !renderPort()) {
@@ -234,6 +267,8 @@ async function main(): Promise<void> {
       return cmdBackfill(args[0], render, apply);
     case 'reclassify-source':
       return cmdReclassifySource(args[0], render, apply);
+    case 'set-api-descriptor':
+      return cmdSetApiDescriptor(args, render, apply);
     default:
       throw new UsageError(cmd ? `Unknown command: ${cmd}` : 'No command given');
   }

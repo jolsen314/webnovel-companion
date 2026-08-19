@@ -27,7 +27,7 @@ export function SeriesDetail(props: {
   rating: number | null;
   chapters: ChapterLite[];
   lastReadChapterId: string | null;
-  sourceType: 'FEED' | 'PAGE_WATCH';
+  sourceType: 'FEED' | 'PAGE_WATCH' | 'API';
 }) {
   const router = useRouter();
   const [status, setStatus] = useState<SeriesStatus>(props.status);
@@ -145,17 +145,19 @@ export function SeriesDetail(props: {
           </div>
         </div>
 
-        <div className="control">
-          <span className="control__label">Chapters</span>
-          <button type="button" className="control__action" disabled={busy} onClick={() => void backfill()}>
-            Backfill from TOC
-          </button>
-          {backfillMessage && (
-            <span className="control__hint" role="status">
-              {backfillMessage}
-            </span>
-          )}
-        </div>
+        {props.sourceType !== 'API' && (
+          <div className="control">
+            <span className="control__label">Chapters</span>
+            <button type="button" className="control__action" disabled={busy} onClick={() => void backfill()}>
+              Backfill from TOC
+            </button>
+            {backfillMessage && (
+              <span className="control__hint" role="status">
+                {backfillMessage}
+              </span>
+            )}
+          </div>
+        )}
 
         {props.sourceType === 'FEED' && (
           <div className="control">

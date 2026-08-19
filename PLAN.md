@@ -46,12 +46,14 @@ uncommitted notes." Real names/URLs live only in those local notes and in scratc
 
 ## Current focus
 
-> **NEXT: WP-45 — API-first adapter for render sources.** Probe a source for a **chapter data API** (JSON/REST or
-> a static file) and read it directly instead of render + interaction/scrape — biggest wins on the JS/paid
-> sources, where a network probe found the main render/interaction sources already expose such an API. Full
-> priority order = the **▶ Active queue** table.
+> **NEXT: WP-45b — CF-gated REST API transport.** Fast-follow to WP-45: reach a chapter data API that sits behind
+> the Cloudflare challenge — `renderPage` returns raw JSON on an `application/json` navigation (skipping the
+> load-more loop) plus a `set-api-descriptor --render` seeding path. Full priority order = the **▶ Active queue**
+> table.
 >
-> **Recently landed (newest first):** WP-50 (link-only add — when a site is CF-blocked or a page has no chapter
+> **Recently landed (newest first):** WP-45 (API-first adapter, plain-REST slice — `type=API` +
+> `apiUrl`/`apiMap`; pure `parseApiChapters`+`probeForApi`; add-time auto-probe + `set-api-descriptor` CLI escape
+> hatch; poll reads the JSON API and fires WP-20 unlocks natively, render eliminated, 304-able) · WP-50 (link-only add — when a site is CF-blocked or a page has no chapter
 > list, a reason-specific confirm offers a link-only shelf entry; `needsConfirm`/`allowLinkOnly`,
 > `Source.linkOnly` excluded from polling, badge on shelf+detail; filed WP-NOTES + WP-RETRY) · WP-PW (Playwright E2E harness — gate-off `next dev` + dedicated
 > `webnovel_e2e` seed/reset; specs for delete, title edit, library/detail controls + chapter links, and the
@@ -114,7 +116,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 
 | ID | Work package | Status | Depends on |
 |----|--------------|--------|------------|
-| WP-45 | **API-first adapter for render sources** — probe a source for a **chapter data API** (JSON/REST or static file) and read it directly instead of render + interaction/scrape. Three shapes seen: a **plain public REST API** (*eliminates render*; returns free+premium + per-chapter access & an unlock-schedule timestamp → native WP-20 + unlock *prediction*), a **CF-gated REST API** (all chapters + per-chapter lock, but still needs render to reach), and a **static JSON file**. Generalizes the old static-SPA-only scope; biggest wins on the JS/paid sources. **Priority raised** — a network probe showed the main render/interaction sources expose such APIs | `NEXT` | WP-17b, WP-20 |
+| WP-45b | **CF-gated REST API transport** (fast-follow to WP-45) — reach a chapter data API that sits **behind the Cloudflare challenge**: `renderPage` returns raw JSON on an `application/json` navigation (skips the load-more loop) so the poll can parse it, plus a `set-api-descriptor --render` seeding path. Schema already accommodates it (`type=API, fetchMode=RENDER`, `apiUrl`); the poll `fetcher` ternary already routes RENDER→render. Discovery is manual-only (a CF-gated page 403s, so the auto-probe can't read it). | `NEXT` | WP-45, WP-17b |
 | WP-NOTES | Detail-page notes UI — a notes textarea on the series detail page → the existing `PATCH /api/series/[id]` (`notes` is already validated + persisted; only the UI is missing). Pairs with link-only entries (manual tracking) | `TODO` | WP-10 |
 | WP-52 | Poll-time hard-fail render escalation — when a **PLAIN** source's poll fetch fails with a **Cloudflare signature (403 / HTTP_4XX)** and a renderer is available, escalate that poll to **RENDER** and persist `fetchMode = RENDER`. The **poll-time analog of WP-46's add-time hard-fail escalation**, and the current poll escalation's blind spot: it handles *"rendered too few"* (under-fetch / regression) but **not** *"the fetch was blocked."* Affects **every** CF-guarded source that landed as PLAIN — those silently stop getting chapters until a manual backfill — not just the one seen in local testing. Test-first (the escalation decision + an integration test) | `TODO` | WP-46, WP-17b |
 | WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` + schema + cron wiring **done**; **editor UI + push delivery (WP-09) remain** (picking up later) | `TODO` | WP-07, WP-10 |
@@ -133,6 +135,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 | WP-RETRY | *(low)* Retry / auto-upgrade a link-only source — a manual "retry fetching chapters" that re-runs resolution on a `linkOnly` source and upgrades it to a tracked FEED/PAGE_WATCH source when the site becomes reachable (renderer added, feed appears, URL fixed) | `TODO` | WP-50, WP-17b |
 | WP-32 | *(low)* `parseToc` robustness — follow split/paginated sibling TOCs (bounded "next chapters" hops) + **all non-chapter anchor filtering** (pagination + shortcut/CTA like "Last chapter"/"Read") + **URL-slug number authority** (trust a delimited `/chapter-<N>-` over a concatenated title number) | `TODO` | WP-17, WP-35 |
 | WP-47 | *(low)* Client resubscribe on VAPID key mismatch — `resyncSubscription` re-posts a stale browser sub whose `applicationServerKey` ≠ current key, so a 403-pruned sub churns (prune→re-add) and the client shows "subscribed" while receiving nothing; detect the key mismatch on load and unsubscribe + re-subscribe under the new key. Makes key rotation self-healing on the client | `TODO` | WP-09 |
+| WP-APIZERO | *(low)* API-source parsed-zero regression signal — when an API source's fetch succeeds (200) but `parseApiChapters` yields fewer chapters than stored (or 0 while stored > 0) — a misconfigured descriptor or a drifted API shape — surface a health nudge / re-probe instead of failing silently. Today an API source has no escalation (render escalation is PAGE_WATCH-only), so a broken descriptor looks identical to a healthy-but-quiet source. Mirror PAGE_WATCH's `read < stored` regression signal (`poll.ts`). Non-destructive (`diffChapters` never deletes). Sibling to WP-16 (host health) / WP-45b | `TODO` | WP-45, WP-16 |
 | WP-WORKID | *(low, future)* Map a source to a community novel-aggregator's canonical work ID (lists a work's alternative/translated titles) for automatic cross-translation identity — described generically here (no real aggregator name, anonymity rule) | `TODO` | WP-05, WP-17 |
 | WP-31 | *(low — see WP-45)* Renderer per-host interaction descriptor — clicks Free/Premium **tabs** (+ tab-membership access) **and client-side numbered pagination** ("Prev/Next" TOCs that replace ~50/page → click Next & union pages). **Only for interaction sites with NO data API** — where a source exposes a chapter API, **WP-45 supersedes this** (a probe found the main tab/pagination sources *do* have APIs → dropped in priority). | `TODO` | WP-17b, WP-20 |
 | WP-SIMPLIFY | *(low, ongoing — pick up opportunistically)* Behavior-preserving code simplification — the backlog of DRY/clarity/consistency refinements found by a read-only `code-simplifier` pass. **Details, ranked tiers, and the explicit "don't touch" list live in [SIMPLIFICATION-PLAN.md](SIMPLIFICATION-PLAN.md)** — not enumerated as WPs here. Both structural items landed (**A1** `backfill` pure-core extraction out of `services/index.ts`; **A2** Puppeteer out of `api/render/route.ts`) and the entire ranked backlog (Tiers B, C, D) is now worked through as of 2026-08-18 — the row stays open only to re-run the `code-simplifier` against future drift. Follow project rituals (TDD for `lib/`, `npm test` + `typecheck` before "done"). | `TODO` | — |
@@ -140,7 +143,8 @@ later-tier tables are reference only. `⭐` = load-bearing.
 ### ✅ Completed
 
 WP-00, WP-GH, WP-CI, WP-12 (bootstrap / CI / docs) · WP-01, WP-03 (pure diff / health) · WP-04, WP-05, WP-FE (schema, feed parse/discover, fetcher) · WP-06, WP-07, WP-08 (Next shell, services, API) · WP-09, WP-10, WP-AUTH, WP-11 (Web Push, library/detail UI, auth gate, deploy) · WP-17, WP-17b (page-watch + headless renderer) · WP-20 (paid→free "now free") · WP-33 (full-TOC backfill + `accessReconciled`) · WP-35 (TOC-order chapters + display toggle) · WP-36 (`parseToc` content scoping) · WP-38 (contaminated-series recovery script) · WP-42 (poll-once-per-feed + politeness) · WP-41 (poll time-budget guard + rotation) · WP-43 (frequent PLAIN-tier polling) · WP-27a (status-gated + cadence polling) · WP-39 (add-time dedup) · WP-37 (per-series chapter-TOC URL) ·
-WP-39b (deeper add-dedup, re-scoped: tocUrl page-watch keying + create-then-annotate) · WP-48 (Blogger feed-path in `guessFeedUrls`) · WP-46 (add-time render escalation + poll regression guard) · WP-49 (page-watch divert for un-isolable multi-novel advertised feeds) · WP-34 (feed→TOC switch to lock-monitoring) · WP-30 (series title backfill + manual title-edit UI) · WP-51 (client-side delete series — detail + shelf) · WP-PW (Playwright E2E harness + WP-10/30/34/51 coverage + CI job) · WP-50 (link-only add when chapters can't be read).
+WP-39b (deeper add-dedup, re-scoped: tocUrl page-watch keying + create-then-annotate) · WP-48 (Blogger feed-path in `guessFeedUrls`) · WP-46 (add-time render escalation + poll regression guard) · WP-49 (page-watch divert for un-isolable multi-novel advertised feeds) · WP-34 (feed→TOC switch to lock-monitoring) · WP-30 (series title backfill + manual title-edit UI) · WP-51 (client-side delete series — detail + shelf) · WP-PW (Playwright E2E harness + WP-10/30/34/51 coverage + CI job) · WP-50 (link-only add when chapters can't be read) ·
+WP-45 (API-first adapter, plain-REST slice).
 
 ### ⏭ Later tiers (M2–M4)
 
@@ -873,45 +877,59 @@ sources into their own bounded pass. Cheap, and it's a **latent correctness** is
 the moment there are more sources than fit in 60s — worth doing before it bites, not after. Pairs with WP-27 (cadence
 gating trims the daily set) and WP-40 (making CF-static cheap/304 shrinks per-source cost).
 
-### WP-45 — API-first adapter for render sources (generalized from static-SPA JSON)
+### WP-45 — API-first adapter for render sources (plain-REST slice)
 
-**Priority raised (2026-08-13).** Originally scoped to one static-JSON SPA and filed low. A **network probe across the
-render/interaction sources** changed that: several expose a **chapter data API** that's far better than render +
-DOM-scrape/interaction — some **eliminate render entirely** and even carry the paid→free **unlock schedule**. So an
-**API-first adapter** — *probe for a chapter data source before defaulting to render + interaction* — is now a real
-strategy, not a one-off. **Three shapes seen (anonymized):**
-- **A plain, public REST API** (JS-rendered paid source): one un-authed GET returns **all** chapters (free + premium,
-  by volume) with per-chapter `isFree` / **`freeAt` (scheduled-unlock timestamp)** / `price`. **No CF, no render, no
-  tab-clicking** → this source should leave the render tier entirely; it moots **WP-31**'s tab-capture *and* gives
-  native **WP-20** unlocks *and* predicted unlocks (better than WP-29 guessing). Biggest win.
-- **A CF-gated REST API** (WordPress paid source): returns all chapters + per-chapter `locked`, but the endpoint is
-  **behind the CF challenge** — reachable only from the CF-cleared browser (still needs render), though it skips the
-  Alpine pagination click-through and the DOM lock-marker heuristics once past CF.
-- **A static JSON file** (the original 2026-07-30 SPA): plain, `etag`/304-able, CORS-open; adapter reads it directly.
-- **Not universal:** some render sources **embed** their chapter data in-page and expose **no** API (a load-more source
-  fetched only banners/similar-projects) → those still need render + interaction. And **static-HTML sources don't need
-  this** (chapters already in the HTML). So the adapter is opportunistic, discovered per source.
+**DONE (2026-08-18).** A source can now be tracked by reading its chapter data **API (JSON)** directly instead of
+headless render + DOM scrape. Shipped as the **plain public REST slice** (render-eliminating). An API source is
+modeled as "a TOC delivered as JSON": the parser emits the existing `TocChapter[]` shape, so `diffChapters` +
+"now free" + notify are untouched. `type` (how to parse: `FEED | PAGE_WATCH | API`) stays orthogonal to `fetchMode`
+(how to transport: `PLAIN | RENDER`).
+- **Schema (additive):** `SourceType.API`; `Source.apiUrl` (endpoint) + `Source.apiMap` (`Json` field descriptor).
+  `fetchUrl` = `apiUrl ?? feedUrl ?? tocUrl ?? url`.
+- **Pure `parseApiChapters(body, descriptor, baseUrl)`** (`lib/feeds/apiAdapter.ts`) — JSON → `TocChapter[]`; access
+  from a per-chapter `isFree` flag (`isFreeWhen:'falsy'` inverts a `locked` field), tolerant number parsing (field →
+  title → url), relative-URL resolution, shape-drift/bad-JSON → `[]`.
+- **Pure `probeForApi(html, baseUrl)`** (`lib/feeds/apiProbe.ts`) — generic, host-agnostic add-time detection (first
+  detector: a page shell pointing at a `.json` data file); extensible; `null` → today's add ladder runs unchanged.
+  No per-host code.
+- **Add-time wiring** — `addSeries` probes the plainly-fetched page first; a hit resolves an API source (no
+  feed/render), a miss falls through byte-for-byte to the existing ladder.
+- **Manual escape hatch** — `set-api-descriptor <sourceId> --endpoint <url> --map <json> [--render]` (service
+  `setApiDescriptor` + the `db:cleanup` CLI) configures an API source for a bespoke endpoint the page doesn't
+  advertise. Endpoint/map are arguments — no host in git.
+- **Poll wiring** — `processFetched` parses an `API` source via its descriptor into the same `diffChapters`, so
+  `becameFree`/notify fire natively; conditional-GET (304) works (a win over render). No render escalation, no
+  matcher for API.
+- Tested: unit (`parseApiChapters`, `probeForApi`); add-time (probe→API source; no-signal→FEED unchanged); poll
+  (API diff + LOCKED→FREE `becameFree`); integration proving the real WP-20 unlock end-to-end off an API source (a
+  poll sees `isFree:false`→stores the chapter LOCKED; a later poll sees `isFree:true`→`becameFree` +
+  `becameFreeAt`, no render, no manual state).
 
-**Work:** a per-source **API descriptor** (endpoint template + field mapping: url/permalink, number, title, access
-`isFree`/`locked`, unlock `freeAt`) tried **before** render; falls back to render + interaction when no API is found.
-Feed the access/`freeAt` fields straight into WP-20. Bespoke per source, but the payoff (drop render, native unlocks)
-is now high enough to prioritize. Relates to WP-17b (render fallback), WP-20 (access/unlocks), WP-31 (superseded where
-an API exists), WP-27 (a completed source is also "fetch-once, rarely re-poll").
+**`freeAt` deferred (noted for later):** the plain public REST API also exposes a **per-chapter `freeAt`**
+scheduled-unlock timestamp. This slice consumes only `isFree` (native WP-20). Capturing `freeAt` later (a
+`Chapter.freeAt` column) enables **predicted** unlocks — feeding WP-29 (manual release schedule) / WP-27b. Not
+built here.
 
-**Original motivation (owner testing, 2026-07-30):** a **static SPA** (a Cloudflare Pages host) returns only a ~2.4 KB shell on
-plain fetch — an empty chapter container + a single **"Read" CTA** — and injects its full chapter list (hundreds)
-*client-side* from a **static JSON data file** the shell points at (`data-title="…/<slug>.json"`). So `parseToc` on the
-plain HTML captures just the CTA; the chapters are invisible without JS. **RENDER captures them all** (validated: the JS
-fills the list, not virtualized), and the WP-17b escalation self-heals it (plain add seeds 1 chapter → next poll parses
-≤5 → escalates to RENDER → the poll after gets the full list).
+**Follow-up (WP-SIMPLIFY):** `SourceType` is hand-duplicated as inline string-literal unions
+(`PollableSource.type`, `SeriesDetail.sourceType`) rather than one canonical `lib/` type like
+`SeriesStatus`/`SourceHealth`/`FailureType`; consolidating it would make the next enum change a one-line edit.
+Pre-existing; deferred.
 
-**The optimization:** that JSON is **static, `etag`/304-able, and CORS-open** — a per-site **JSON adapter** could read it
-directly (chapter url from an index field, number from the `"Ch N: …"` title, series title from a sibling meta JSON),
-skipping the headless render entirely: cheap, conditional-GET-friendly, and **correct titles** (render's first-wins
-dedupe otherwise labels ch 1 with the "Read" CTA text — the WP-32 anchor issue). **Cost:** the JSON shape is
-site-specific, so this is a **bespoke adapter per source**, not generic. *(2026-08-13: this static-JSON case was the
-first of the three shapes above; the probe finding several more — including render-eliminating and access-carrying
-APIs — is what raised the overall priority.)*
+### WP-45b — CF-gated REST API transport (fast-follow to WP-45)
+
+The second API shape a network probe found: a REST API returning all chapters + per-chapter lock, but **behind the
+Cloudflare challenge** — reachable only from the CF-cleared browser. WP-45 designed the seam and scoped this out.
+
+**Why it's a separate piece (not free):** (1) **Discovery is manual-only** — the add-time auto-probe reads the
+*plain page HTML*, but a CF-gated source's page fetch is the thing that 403s, so there is no HTML to probe and the
+endpoint can't be reached plainly; such a source is configured via `set-api-descriptor --render` after the add.
+(2) **Every fetch needs render** — `renderPage` today does goto + load-more + returns DOM HTML; WP-45b needs it to
+detect an `application/json` navigation, **skip the load-more loop, and return the raw JSON body** so the poll can
+`parseApiChapters` it. The schema already accommodates it (`type=API, fetchMode=RENDER`, `apiUrl`) and the poll
+`fetcher` ternary already routes RENDER→render, so WP-45b = the render-returns-JSON change + the `--render`
+seeding/first-poll path.
+
+**Depends on:** WP-45, WP-17b.
 
 ### WP-48 — Blogger feed-path in `guessFeedUrls`
 
@@ -1017,6 +1035,18 @@ optionally `deactivate-source`) so WP-49-style recoveries are fully tool-support
 
 ## Changelog
 
+- **2026-08-18** — **WP-45 follow-up: probe hardening (multi-candidate).** `probeForApi` now returns *all*
+  `.json` `data-*` candidates on the page (deduped, document order, capped at 5) instead of only the first; add-time
+  resolution tries each in turn and takes the first that actually parses to chapters, so a decoy `.json` pointer
+  (e.g. a settings/config file) ahead of the real chapter-data file no longer wrongly falls through to feed/page-watch.
+  Micro-cleanup: `apiAdapter.ts`'s `getPath` uses `Object.hasOwn` instead of `key in` (own-property check). Filed
+  **WP-APIZERO** (API-source parsed-zero regression signal, low priority).
+- **2026-08-18** — **WP-45 DONE — API-first adapter (plain-REST slice).** A source can be tracked by reading its
+  chapter data API (JSON) directly instead of render + DOM scrape: schema `SourceType.API` + `Source.apiUrl`/`apiMap`;
+  pure `parseApiChapters` + generic `probeForApi`; add-time auto-probe + a `set-api-descriptor` CLI escape hatch; the
+  poll reads the API and fires WP-20 unlocks natively (render eliminated, 304-able). Filed **WP-45b** (CF-gated REST
+  transport: `renderPage` returns raw JSON) and a **`freeAt`** note (per-chapter scheduled-unlock, deferred →
+  predicted unlocks). `NEXT` → WP-45b.
 - **2026-08-18** — **WP-SIMPLIFY Tier D done: client-component de-duplication (D1–D3).** (1) A `useDeleteSeries`
   hook single-sources the confirm/busy/error delete machine behind the shelf + detail delete components (each
   keeps its own JSX; Escape-to-cancel standardized to a window listener). (2) `add/page.tsx` gets a typed

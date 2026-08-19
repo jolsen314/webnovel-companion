@@ -13,6 +13,7 @@ import {
   backfillFromToc,
   backfillWithEscalation,
   reclassifySource,
+  setApiDescriptor,
   switchToPageWatch,
   type FetchImpl,
 } from '../../src/server/services';
@@ -1250,6 +1251,107 @@ describe('pollAllSources tier filter (real DB, WP-43)', () => {
     const effects = await pollAllSources(fetch, undefined, undefined, 'all');
 
     expect(effects).toHaveLength(3);
+  });
+});
+
+describe('setApiDescriptor (real DB, WP-45)', () => {
+  test('setApiDescriptor flips a source to API with endpoint + descriptor', async () => {
+    const series = await db.series.create({
+      data: {
+        userId: getCurrentUserId(),
+        title: 'Alpha',
+        sources: { create: { url: 'https://spa.example/series/alpha', host: 'spa.example', type: 'FEED', feedUrl: 'https://spa.example/feed/' } },
+      },
+      include: { sources: true },
+    });
+    const sourceId = series.sources[0]!.id;
+
+    const res = await setApiDescriptor(sourceId, {
+      endpoint: 'https://api.example/works/1/chapters',
+      map: { urlField: 'url', titleField: 'title', isFreeField: 'free' },
+    });
+    expect(res.updated).toBe(true);
+
+    const row = await db.source.findUniqueOrThrow({ where: { id: sourceId } });
+    expect(row.type).toBe('API');
+    expect(row.apiUrl).toBe('https://api.example/works/1/chapters');
+    expect(row.feedUrl).toBeNull();
+    expect(row.fetchMode).toBe('PLAIN');
+    expect(row.apiMap).toMatchObject({ urlField: 'url', isFreeField: 'free' });
+  });
+
+  test('WP-45: add-time probe persists an API source (static-JSON shape, chapter seeded)', async () => {
+    const url = 'https://spa.example/series/alpha';
+    const apiUrl = 'https://spa.example/data/alpha.json';
+    const shell = `<html><body><div data-title="/data/alpha.json"></div></body></html>`;
+    const chapterUrl = 'https://spa.example/read/1';
+    const apiBody = JSON.stringify([{ title: 'Ch 1', url: chapterUrl }]);
+
+    // Add-time probe: the shell's data-title pointer to a .json file triggers probeForApi, which
+    // reads the flat-array static-JSON shape (no isFree) and persists an API source.
+    const { seriesId } = await created(addSeries({ url }, fetchFrom({ [url]: okRes(shell), [apiUrl]: okRes(apiBody) })));
+
+    const source = await db.source.findFirstOrThrow({ where: { seriesId } });
+    expect(source.type).toBe('API');
+    expect(source.apiUrl).toBe(apiUrl);
+    expect(source.apiMap).toMatchObject({ urlField: 'url', titleField: 'title' });
+    const seeded = await db.chapter.findFirstOrThrow({ where: { seriesId, url: chapterUrl } });
+    expect(seeded).toBeTruthy();
+  });
+
+  test('WP-45/WP-20: an isFree-aware API source polls a chapter in LOCKED, then a later poll observes it unlock', async () => {
+    // A plain-REST API source, wired via the CLI escape hatch (setApiDescriptor) since the
+    // add-time auto-probe only detects the static-JSON shell shape, not a bare REST endpoint.
+    const apiUrl = 'https://api.example/works/1/chapters';
+    const chapterUrl = 'https://api.example/read/1';
+    const series = await db.series.create({
+      data: {
+        userId: getCurrentUserId(),
+        title: 'Beta',
+        sources: { create: { url: 'https://api.example/series/beta', host: 'api.example', type: 'FEED', feedUrl: 'https://api.example/feed/' } },
+      },
+      include: { sources: true },
+    });
+    const sourceId = series.sources[0]!.id;
+    await setApiDescriptor(sourceId, {
+      endpoint: apiUrl,
+      map: { urlField: 'url', numberField: 'num', titleField: 'title', isFreeField: 'free' },
+    });
+
+    // Poll 1: the API reports the chapter locked (free: false) — no manual DB write, the poll
+    // itself must be what stores it as LOCKED via the real API-adapter diff.
+    const t0 = new Date('2026-07-29T12:00:00Z');
+    await pollAllSources(
+      fetchFrom({ [apiUrl]: okRes(JSON.stringify([{ num: 1, title: 'Ch 1', url: chapterUrl, free: false }])) }),
+      undefined,
+      t0,
+    );
+    const locked = await db.chapter.findFirstOrThrow({ where: { seriesId: series.id, url: chapterUrl } });
+    expect(locked.access).toBe('LOCKED');
+    expect(locked.becameFreeAt).toBeNull();
+
+    // Poll 2, past the WP-42 host min-poll-interval floor: the API now reports it free →
+    // becameFree flips access + stamps becameFreeAt, persisted end-to-end through the real DB.
+    const t1 = new Date(t0.getTime() + 20 * 60_000); // 20 min later, past the 15-min floor
+    const effects = await pollAllSources(
+      fetchFrom({ [apiUrl]: okRes(JSON.stringify([{ num: 1, title: 'Ch 1', url: chapterUrl, free: true }])) }),
+      undefined,
+      t1,
+    );
+    expect(effects[0]!.becameFree.map((c) => c.url)).toEqual([chapterUrl]);
+
+    const unlocked = await db.chapter.findFirstOrThrow({ where: { seriesId: series.id, url: chapterUrl } });
+    expect(unlocked.access).toBe('FREE');
+    expect(unlocked.becameFreeAt).not.toBeNull();
+
+    // Poll 3, same body, well past the floor again: already FREE in storage, must not re-fire.
+    const t2 = new Date(t1.getTime() + 20 * 60_000);
+    const again = await pollAllSources(
+      fetchFrom({ [apiUrl]: okRes(JSON.stringify([{ num: 1, title: 'Ch 1', url: chapterUrl, free: true }])) }),
+      undefined,
+      t2,
+    );
+    expect(again[0]!.becameFree).toEqual([]);
   });
 });
 
