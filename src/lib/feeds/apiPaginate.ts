@@ -1,8 +1,9 @@
 /**
  * WP-45b: pure helpers for paginated API sources — build each page's URL, locate the item
- * array, and decide the last page. Shared by the PLAIN Node-side loop (fetchApiPages); the
- * RENDER in-page loop re-implements the same tiny logic inside page.evaluate (browser context
- * can't import this). Pure — no I/O.
+ * array, and decide the last page. Shared by the PLAIN Node-side loop (fetchApiPages) and, via
+ * `server/render/renderJson.ts`'s `collectJsonResult`, the RENDER path too: only the single
+ * per-page `fetch` runs in-browser (`page.evaluate`'d), the loop/union/stop logic here runs in
+ * Node either way. Pure — no I/O.
  */
 export function pageUrl(baseUrl: string, pageParam: string, n: number): string {
   const u = new URL(baseUrl);
