@@ -4,6 +4,9 @@
 // Without --apply, every mutating command prints the plan it would execute and makes
 // no writes. `list` is always read-only. Run via `tsx`; do NOT point this at prod —
 // see PLAN.md / the task brief for the local-test-DB verification workflow.
+//
+// Full reference (every command, examples, and the set-api-descriptor gotchas):
+//   docs/db-cleanup-cli.md
 import { fileURLToPath } from 'node:url';
 import { db } from '../src/server/db';
 import { getCurrentUserId } from '../src/server/user';
@@ -39,7 +42,9 @@ Commands:
   set-api-descriptor <sourceId> --endpoint <url> --map <json> [--render]
 
 Without --apply, mutating commands print a dry-run plan and make no changes.
-"list" is always read-only.`);
+"list" is always read-only.
+
+Full reference + gotchas (esp. set-api-descriptor): docs/db-cleanup-cli.md`);
 }
 
 function flagValue(args: string[], name: string): string | undefined {
