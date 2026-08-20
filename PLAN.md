@@ -46,13 +46,16 @@ uncommitted notes." Real names/URLs live only in those local notes and in scratc
 
 ## Current focus
 
-> **NEXT: WP-52 — Poll-time hard-fail render escalation.** When a **PLAIN** source's poll fetch fails with a
-> Cloudflare signature (403 / HTTP_4XX) and a renderer is available, escalate that poll to **RENDER** and persist
-> `fetchMode = RENDER` — the poll-time analog of WP-46's add-time hard-fail escalation, closing the current poll
-> escalation's blind spot (it handles under-fetch but not "the fetch was blocked"). Full priority order = the
-> **▶ Active queue** table.
+> **NEXT: WP-30b — `lib/feeds/title.ts` extraction fixes.** (1) A consent/cookie-banner `<h1>` reject-list so a
+> CCPA/cookie `<h1>` isn't grabbed as the title (fall through to `og:title` → `<title>`); (2) HTML-entity decode at
+> extraction so `&#8217;`/`&#038;`/`&nbsp;` don't bake into the DB as raw codes. Backend/pure, TDD. Full priority
+> order = the **▶ Active queue** table.
 >
-> **Recently landed (newest first):** WP-NOTES (detail-page notes UI — a collapsible notes block on the series
+> **Recently landed (newest first):** WP-52 (poll-time hard-fail render escalation — a PLAIN **page-watch** poll
+> blocked by Cloudflare **403** now flips `escalateToRender`, so `applyPollEffects` persists `fetchMode = RENDER`
+> and the next poll renders; scoped to 403 [not any 4xx — a gone 404 can't be rendered back and the flip is
+> one-way] and PAGE_WATCH [a FEED source polls its feed plainly]; the poll-time analog of WP-46's add-time
+> hard-fail render; unit + integration tested) · WP-NOTES (detail-page notes UI — a collapsible notes block on the series
 > detail page over the already-persisted `notes` field; save-on-blur only when changed, content-aware default
 > [open when notes exist, collapsed when empty], one-line truncated preview when collapsed; E2E-covered) · WP-45b (CF-gated render transport + paginated API sources — `renderPage`
 > clears Cloudflare once and returns clean JSON via an in-page same-origin fetch reusing the `cf_clearance` cookie;
@@ -124,9 +127,8 @@ later-tier tables are reference only. `⭐` = load-bearing.
 
 | ID | Work package | Status | Depends on |
 |----|--------------|--------|------------|
-| WP-52 | Poll-time hard-fail render escalation — when a **PLAIN** source's poll fetch fails with a **Cloudflare signature (403 / HTTP_4XX)** and a renderer is available, escalate that poll to **RENDER** and persist `fetchMode = RENDER`. The **poll-time analog of WP-46's add-time hard-fail escalation**, and the current poll escalation's blind spot: it handles *"rendered too few"* (under-fetch / regression) but **not** *"the fetch was blocked."* Affects **every** CF-guarded source that landed as PLAIN — those silently stop getting chapters until a manual backfill — not just the one seen in local testing. Test-first (the escalation decision + an integration test) | `NEXT` | WP-46, WP-17b |
-| WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` + schema + cron wiring **done**; **editor UI + push delivery (WP-09) remain** (picking up later) | `TODO` | WP-07, WP-10 |
-| WP-30b | `lib/feeds/title.ts` extraction fixes — **(1) consent/cookie-banner `<h1>` reject-list**: the sole `<h1>` on some sites is a CCPA/cookie banner, so it's grabbed as the title; treat a boilerplate/consent `<h1>` as not-a-title (small known-phrase reject-list and/or skip an `<h1>` inside a consent/cookie container) and fall through to `og:title` → `<title>`. **(2) HTML-entity decode at extraction**: `extractSeriesTitle` stores the page `<h1>`/`og:title`/`<title>` without decoding HTML entities (`&#8217;`/`&#8216;`/`&#8220;`/`&#038;`/`&nbsp;` bake into the DB as raw codes instead of glyphs); decode named + numeric entities at extraction so new adds are clean and WP-30's non-manual backfill self-heals existing rows (display-side decode fallback stays WP-28). Backend/pure `lib/feeds/title.ts` fix; TDD | `TODO` | WP-30 |
+| WP-30b | `lib/feeds/title.ts` extraction fixes — **(1) consent/cookie-banner `<h1>` reject-list**: the sole `<h1>` on some sites is a CCPA/cookie banner, so it's grabbed as the title; treat a boilerplate/consent `<h1>` as not-a-title (small known-phrase reject-list and/or skip an `<h1>` inside a consent/cookie container) and fall through to `og:title` → `<title>`. **(2) HTML-entity decode at extraction**: `extractSeriesTitle` stores the page `<h1>`/`og:title`/`<title>` without decoding HTML entities (`&#8217;`/`&#8216;`/`&#8220;`/`&#038;`/`&nbsp;` bake into the DB as raw codes instead of glyphs); decode named + numeric entities at extraction so new adds are clean and WP-30's non-manual backfill self-heals existing rows (display-side decode fallback stays WP-28). Backend/pure `lib/feeds/title.ts` fix; TDD | `NEXT` | WP-30 |
+| WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` + schema + cron wiring **done**; **editor UI + push delivery (WP-09) remain** | `TODO` | WP-07, WP-10 |
 | WP-28 | Frontend styling & theming — ordering, feed-page vs library split, theme system (night default + cultivation ancient-scroll, sci-fi holographic-panel), long-title readability (wrap/clamp vs ellipsis) | `TODO` | WP-10 |
 | WP-18 | Completed shelf + backfill + "Move to Completed?" | `TODO` | WP-10 |
 | WP-19 | Non-destructive re-pointing + "find new source" helper (also: on a duplicate add (WP-39), optionally offer to attach the pasted URL as an **alternate source** on the existing series rather than only rejecting) | `TODO` | WP-16, WP-18 |
@@ -153,7 +155,8 @@ later-tier tables are reference only. `⭐` = load-bearing.
 WP-00, WP-GH, WP-CI, WP-12 (bootstrap / CI / docs) · WP-01, WP-03 (pure diff / health) · WP-04, WP-05, WP-FE (schema, feed parse/discover, fetcher) · WP-06, WP-07, WP-08 (Next shell, services, API) · WP-09, WP-10, WP-AUTH, WP-11 (Web Push, library/detail UI, auth gate, deploy) · WP-17, WP-17b (page-watch + headless renderer) · WP-20 (paid→free "now free") · WP-33 (full-TOC backfill + `accessReconciled`) · WP-35 (TOC-order chapters + display toggle) · WP-36 (`parseToc` content scoping) · WP-38 (contaminated-series recovery script) · WP-42 (poll-once-per-feed + politeness) · WP-41 (poll time-budget guard + rotation) · WP-43 (frequent PLAIN-tier polling) · WP-27a (status-gated + cadence polling) · WP-39 (add-time dedup) · WP-37 (per-series chapter-TOC URL) ·
 WP-39b (deeper add-dedup, re-scoped: tocUrl page-watch keying + create-then-annotate) · WP-48 (Blogger feed-path in `guessFeedUrls`) · WP-46 (add-time render escalation + poll regression guard) · WP-49 (page-watch divert for un-isolable multi-novel advertised feeds) · WP-34 (feed→TOC switch to lock-monitoring) · WP-30 (series title backfill + manual title-edit UI) · WP-51 (client-side delete series — detail + shelf) · WP-PW (Playwright E2E harness + WP-10/30/34/51 coverage + CI job) · WP-50 (link-only add when chapters can't be read) ·
 WP-45 (API-first adapter, plain-REST slice) · WP-45b (CF-gated render transport + paginated API sources) ·
-WP-NOTES (detail-page notes UI — collapsible, save-on-blur, content-aware default + truncated preview).
+WP-NOTES (detail-page notes UI — collapsible, save-on-blur, content-aware default + truncated preview) ·
+WP-52 (poll-time hard-fail render escalation — PAGE_WATCH PLAIN + Cloudflare 403 → persist RENDER).
 
 ### ⏭ Later tiers (M2–M4)
 
@@ -1064,6 +1067,24 @@ optionally `deactivate-source`) so WP-49-style recoveries are fully tool-support
 
 ## Changelog
 
+- **2026-08-20** — **WP-52 DONE — poll-time hard-fail render escalation.** Closed the poll escalation's blind spot:
+  it handled *"rendered too few"* (under-fetch / regression, WP-46) but not *"the fetch was blocked."* A **PLAIN
+  page-watch** poll blocked by Cloudflare now escalates to RENDER. In [`processFetched`](src/server/services/poll.ts)
+  the failure path sets `escalateToRender = true` when `ports.renderFetch && src.fetchMode === 'PLAIN' && src.type
+  === 'PAGE_WATCH' && res.outcome === 'HTTP_4XX' && res.status === 403`; `applyPollEffects` already persists
+  `fetchMode = RENDER` from that flag ([index.ts](src/server/services/index.ts)), so the **next** poll renders and
+  self-heals (deferred, matching the existing `escalateToRender` semantics — no extra render this poll). The
+  poll-time analog of WP-46's add-time hard-fail render. **Scoping decisions (owner-approved):** gated on **403
+  specifically, not any 4xx** — `PoliteResult` carries the real status, and a 404/410 gone page can't be rendered
+  back while the flip is one-way, so a dead PLAIN page would otherwise get pinned to expensive renders forever; and
+  **PAGE_WATCH only** — a FEED source keeps polling its feed plainly even when the page is CF-blocked (the
+  feed-even-when-page-blocked strategy; API render-escalation stays out of scope, sibling to WP-APIZERO). Health
+  still steps on the 403 (accrues toward the down alert) — escalation doesn't suppress the signal. Test-first:
+  6 unit cases (403→escalate; 404/FEED/already-RENDER/no-renderer/timeout+5xx→no) + 2 integration cases (a
+  CF-blocked PAGE_WATCH poll persists `fetchMode = RENDER`; a 404 stays PLAIN) — RED watched at both the pure-decision
+  and DB-persistence layers before GREEN. `npm test` (463) + `npm run typecheck` + integration (117) green. `NEXT`
+  advances to **WP-30b**. *(Also reordered the active queue: WP-30b to the top, WP-29 after it — WP-29's "picking
+  up later" deferral dropped, per owner.)*
 - **2026-08-20** — **WP-NOTES DONE — detail-page notes UI.** Added a collapsible **Notes** block to the series
   detail page ([`SeriesDetail.tsx`](<src/app/(app)/series/[id]/SeriesDetail.tsx>)) over the already-persisted
   `notes` field (validation + service shipped earlier; only the UI was missing). The page now passes

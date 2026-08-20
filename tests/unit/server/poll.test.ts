@@ -24,6 +24,7 @@ import {
 import { parseRetryAfter, type PoliteResult } from '../../../src/lib/feeds/fetch';
 import type { SeriesMatch } from '../../../src/lib/feeds/discover';
 import type { KnownChapter } from '../../../src/lib/feeds/diff';
+import type { FailureType } from '../../../src/lib/health';
 import { type ApiDescriptor } from '../../../src/lib/feeds/apiAdapter';
 
 const RSS = (items: string) =>
@@ -254,6 +255,59 @@ describe('pollSource', () => {
       ports(ok(toc('https://x.example/a/chapter-1/'))),
     );
     expect(effects.escalateToRender).toBe(false);
+  });
+
+  // ── WP-52: poll-time hard-fail (Cloudflare 403) render escalation ──────────
+  const fail = (outcome: FailureType, status?: number): PoliteResult => ({ outcome, status, retryAfter: null });
+
+  test('escalates a PAGE_WATCH source to RENDER on a Cloudflare 403 block', async () => {
+    const p = renderPorts(fail('HTTP_4XX', 403), ok('<ul></ul>'));
+    const effects = await pollSource(
+      source({ type: 'PAGE_WATCH', fetchMode: 'PLAIN', fetchUrl: 'https://x.example/a/', match: { type: 'WHOLE_FEED' } }),
+      p,
+    );
+    expect(effects.escalateToRender).toBe(true);
+  });
+
+  test('does not escalate on a 404 (page gone, not blocked — render would not help)', async () => {
+    const p = renderPorts(fail('HTTP_4XX', 404), ok('<ul></ul>'));
+    const effects = await pollSource(
+      source({ type: 'PAGE_WATCH', fetchMode: 'PLAIN', fetchUrl: 'https://x.example/a/', match: { type: 'WHOLE_FEED' } }),
+      p,
+    );
+    expect(effects.escalateToRender).toBe(false);
+  });
+
+  test('does not escalate a FEED source on a 403 (a feed polls plainly)', async () => {
+    const p = renderPorts(fail('HTTP_4XX', 403), ok('<ul></ul>'));
+    const effects = await pollSource(source({ type: 'FEED', fetchMode: 'PLAIN' }), p);
+    expect(effects.escalateToRender).toBe(false);
+  });
+
+  test('does not escalate a 403 when already RENDER mode', async () => {
+    // RENDER-mode goes through renderFetch; simulate that transport also returning a 403.
+    const p = renderPorts(ok('<ul></ul>'), fail('HTTP_4XX', 403));
+    const effects = await pollSource(
+      source({ type: 'PAGE_WATCH', fetchMode: 'RENDER', fetchUrl: 'https://x.example/a/', match: { type: 'WHOLE_FEED' } }),
+      p,
+    );
+    expect(effects.escalateToRender).toBe(false);
+  });
+
+  test('does not escalate on a 403 when no renderer is configured', async () => {
+    const effects = await pollSource(
+      source({ type: 'PAGE_WATCH', fetchMode: 'PLAIN', fetchUrl: 'https://x.example/a/', match: { type: 'WHOLE_FEED' } }),
+      ports(fail('HTTP_4XX', 403)),
+    );
+    expect(effects.escalateToRender).toBe(false);
+  });
+
+  test('does not escalate on a transient timeout / 5xx (not a block signature)', async () => {
+    const src = source({ type: 'PAGE_WATCH', fetchMode: 'PLAIN', fetchUrl: 'https://x.example/a/', match: { type: 'WHOLE_FEED' } });
+    const timeout = await pollSource(src, renderPorts(fail('TIMEOUT'), ok('<ul></ul>')));
+    expect(timeout.escalateToRender).toBe(false);
+    const server = await pollSource(src, renderPorts(fail('HTTP_5XX', 503), ok('<ul></ul>')));
+    expect(server.escalateToRender).toBe(false);
   });
 
   test('does not re-report already-stored chapters', async () => {
