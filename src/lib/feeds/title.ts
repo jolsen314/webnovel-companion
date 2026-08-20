@@ -6,9 +6,15 @@
  * which is almost always a site separator, is stripped even without a known site name.
  *
  * Each candidate is also rejected outright if it loosely matches the site name (see
- * `matchesSiteName`) — e.g. a site that puts its brand in the first <h1> — falling through to
- * the next signal in precedence. If every signal is empty or is just the site name, returns null.
+ * `matchesSiteName`) — e.g. a site that puts its brand in the first <h1> — or if it looks like a
+ * consent/cookie banner (WP-30b: some sites' sole <h1> is a CCPA/cookie notice), falling through
+ * to the next signal in precedence. If every signal is empty/site-name/consent, returns null.
+ *
+ * HTML entities in every candidate are decoded (WP-30b) so `&#8217;`/`&#038;`/`&nbsp;` land as
+ * glyphs, not raw codes; new adds are clean and WP-30's backfill self-heals existing rows.
  */
+
+import { decodeHTML } from 'entities';
 
 /** Loose site-name match: case-insensitive, ignoring a leading www., a trailing TLD, and any
  *  non-alphanumerics — so a spaced display name ("Verdant Scrolls") matches a concatenated host
@@ -28,8 +34,33 @@ export function matchesSiteName(text: string, siteName: string): boolean {
 
 function clean(s: string | null | undefined): string | null {
   if (!s) return null;
-  const t = s.replace(/\s+/g, ' ').trim();
+  // Decode HTML entities (named + numeric) before collapsing whitespace, so a decoded &nbsp;
+  // (U+00A0, which \s matches) folds into a normal space rather than baking in raw.
+  const t = decodeHTML(s).replace(/\s+/g, ' ').trim();
   return t.length > 0 ? t : null;
+}
+
+/**
+ * Boilerplate seen as the sole <h1> on some sites: a CCPA/cookie consent banner instead of the
+ * series name (WP-30b). Loose substring match on known consent/cookie phrases — conservative
+ * enough not to reject a real title, since these strings don't occur in webnovel names.
+ */
+const CONSENT_PHRASES = [
+  'we value your privacy',
+  'your privacy choices',
+  'opt out of the sale or sharing of personal information',
+  'do not sell or share my personal information',
+  'uses cookies',
+  'we use cookies',
+  'cookie preferences',
+  'cookie policy',
+  'cookie consent',
+  'accept all cookies',
+  'manage consent',
+];
+function looksLikeConsentBanner(text: string): boolean {
+  const t = text.toLowerCase();
+  return CONSENT_PHRASES.some((p) => t.includes(p));
 }
 
 function attrContent(html: string, re: RegExp): string | null {
@@ -53,7 +84,10 @@ function stripSiteSuffix(title: string, siteName?: string): string {
 export function extractSeriesTitle(html: string, opts?: { siteName?: string }): string | null {
   const siteName = opts?.siteName;
   const qualifies = (candidate: string | null): candidate is string =>
-    candidate != null && candidate.length > 0 && (siteName == null || !matchesSiteName(candidate, siteName));
+    candidate != null &&
+    candidate.length > 0 &&
+    !looksLikeConsentBanner(candidate) &&
+    (siteName == null || !matchesSiteName(candidate, siteName));
 
   const h1Raw = /<h1\b[^>]*>([\s\S]*?)<\/h1>/i.exec(html)?.[1] ?? null;
   const h1Text = h1Raw != null ? clean(h1Raw.replace(/<[^>]*>/g, '')) : null;
