@@ -53,6 +53,47 @@ describe('extractSeriesTitle', () => {
     const html = `<h1>Lunar Press</h1><title>Lunar Press</title>`;
     expect(extractSeriesTitle(html, { siteName: 'lunarpress.example' })).toBeNull();
   });
+
+  // WP-30b (1): a consent/cookie-banner <h1> must not be taken as the title.
+  test('skips a "we value your privacy" consent <h1>, falling through to <title>', () => {
+    const html = `<h1>We value your privacy</h1><head><title>Cradle of Ash — Verdant Scrolls</title></head>`;
+    expect(extractSeriesTitle(html, { siteName: 'verdantscrolls.example' })).toBe('Cradle of Ash');
+  });
+
+  test('skips a CCPA opt-out consent <h1>, falling through to og:title', () => {
+    const html = `<h1>Opt out of the sale or sharing of personal information</h1>
+      <head><meta property="og:title" content="Silver Moon Saga | Lunar Press"></head>`;
+    expect(extractSeriesTitle(html, { siteName: 'lunarpress.example' })).toBe('Silver Moon Saga');
+  });
+
+  test('skips a cookie-notice <h1>, falling through to <title>', () => {
+    const html = `<h1>This website uses cookies to ensure you get the best experience</h1>
+      <head><title>Star Chef | Some Site</title></head>`;
+    expect(extractSeriesTitle(html)).toBe('Star Chef');
+  });
+
+  // WP-30b (2): HTML entities must be decoded at extraction, not baked into the DB raw.
+  test('decodes a numeric entity in <h1> (&#8217; → ’)', () => {
+    expect(extractSeriesTitle(`<h1>Rowan&#8217;s Tale</h1>`)).toBe('Rowan’s Tale');
+  });
+
+  test('decodes a hex numeric entity in <h1> (&#x2019; → ’)', () => {
+    expect(extractSeriesTitle(`<h1>Rowan&#x2019;s Tale</h1>`)).toBe('Rowan’s Tale');
+  });
+
+  test('decodes &#038; / &amp; ampersand in <h1>', () => {
+    expect(extractSeriesTitle(`<h1>Swords &#038; Sorcery</h1>`)).toBe('Swords & Sorcery');
+    expect(extractSeriesTitle(`<h1>Cloak &amp; Dagger</h1>`)).toBe('Cloak & Dagger');
+  });
+
+  test('decodes &nbsp; and collapses it to a normal space', () => {
+    expect(extractSeriesTitle(`<h1>Ash&nbsp;Reign</h1>`)).toBe('Ash Reign');
+  });
+
+  test('decodes entities in a <title> fallback before stripping the site suffix', () => {
+    const html = `<head><title>Emperor&#8217;s Return | Lunar Press</title></head>`;
+    expect(extractSeriesTitle(html, { siteName: 'lunarpress.example' })).toBe('Emperor’s Return');
+  });
 });
 
 describe('matchesSiteName', () => {
