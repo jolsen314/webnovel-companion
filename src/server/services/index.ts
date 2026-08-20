@@ -4,7 +4,7 @@ import { getCurrentUserId } from '../user';
 import { politeFetch, type PoliteResult } from '../../lib/feeds/fetch';
 import { makeRenderFetch } from '../../lib/feeds/renderFetch';
 import type { SeriesMatch } from '../../lib/feeds/discover';
-import type { ApiDescriptor } from '../../lib/feeds/apiAdapter';
+import type { ApiDescriptor, PaginationSpec } from '../../lib/feeds/apiAdapter';
 import type { FailureType } from '../../lib/health';
 import { type KnownChapter } from '../../lib/feeds/diff';
 import { runBackfill, type BackfillPorts, type BackfillPlan, type StoredChapter } from './backfill';
@@ -60,7 +60,7 @@ import { reclassifySource } from './cleanup';
 /** The HTTP port. Defaults to real `politeFetch`; integration tests inject a fake. */
 export type FetchImpl = (
   url: string,
-  opts?: { etag?: string | null; lastModified?: string | null },
+  opts?: { etag?: string | null; lastModified?: string | null; pagination?: PaginationSpec },
 ) => Promise<PoliteResult>;
 
 const fetchPort: FetchImpl = (url, opts) =>
