@@ -46,12 +46,16 @@ uncommitted notes." Real names/URLs live only in those local notes and in scratc
 
 ## Current focus
 
-> **NEXT: WP-45b — CF-gated REST API transport.** Fast-follow to WP-45: reach a chapter data API that sits behind
-> the Cloudflare challenge — `renderPage` returns raw JSON on an `application/json` navigation (skipping the
-> load-more loop) plus a `set-api-descriptor --render` seeding path. Full priority order = the **▶ Active queue**
-> table.
+> **NEXT: WP-NOTES — Detail-page notes UI.** A notes textarea on the series detail page wired to the existing
+> `PATCH /api/series/[id]` (`notes` is already validated + persisted server-side; only the UI is missing). Pairs
+> with link-only entries (manual tracking). Full priority order = the **▶ Active queue** table.
 >
-> **Recently landed (newest first):** WP-45 (API-first adapter, plain-REST slice — `type=API` +
+> **Recently landed (newest first):** WP-45b (CF-gated render transport + paginated API sources — `renderPage`
+> clears Cloudflare once and returns clean JSON via an in-page same-origin fetch reusing the `cf_clearance` cookie;
+> API sources fetch + union every page via an optional `ApiDescriptor.pagination`, PLAIN looping Node-side GETs and
+> RENDER making exactly one render call that loops in-page — one browser per series per poll, proven by a
+> call-count test; short-page stop + cap 20 + log; `set-api-descriptor --render` now functional; also closes the
+> latent WP-45 plain-pagination gap) · WP-45 (API-first adapter, plain-REST slice — `type=API` +
 > `apiUrl`/`apiMap`; pure `parseApiChapters`+`probeForApi`; add-time auto-probe + `set-api-descriptor` CLI escape
 > hatch; poll reads the JSON API and fires WP-20 unlocks natively, render eliminated, 304-able) · WP-50 (link-only add — when a site is CF-blocked or a page has no chapter
 > list, a reason-specific confirm offers a link-only shelf entry; `needsConfirm`/`allowLinkOnly`,
@@ -116,8 +120,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 
 | ID | Work package | Status | Depends on |
 |----|--------------|--------|------------|
-| WP-45b | **CF-gated REST API transport** (fast-follow to WP-45) — reach a chapter data API that sits **behind the Cloudflare challenge**: `renderPage` returns raw JSON on an `application/json` navigation (skips the load-more loop) so the poll can parse it, plus a `set-api-descriptor --render` seeding path. Schema already accommodates it (`type=API, fetchMode=RENDER`, `apiUrl`); the poll `fetcher` ternary already routes RENDER→render. Discovery is manual-only (a CF-gated page 403s, so the auto-probe can't read it). | `NEXT` | WP-45, WP-17b |
-| WP-NOTES | Detail-page notes UI — a notes textarea on the series detail page → the existing `PATCH /api/series/[id]` (`notes` is already validated + persisted; only the UI is missing). Pairs with link-only entries (manual tracking) | `TODO` | WP-10 |
+| WP-NOTES | Detail-page notes UI — a notes textarea on the series detail page → the existing `PATCH /api/series/[id]` (`notes` is already validated + persisted; only the UI is missing). Pairs with link-only entries (manual tracking) | `NEXT` | WP-10 |
 | WP-52 | Poll-time hard-fail render escalation — when a **PLAIN** source's poll fetch fails with a **Cloudflare signature (403 / HTTP_4XX)** and a renderer is available, escalate that poll to **RENDER** and persist `fetchMode = RENDER`. The **poll-time analog of WP-46's add-time hard-fail escalation**, and the current poll escalation's blind spot: it handles *"rendered too few"* (under-fetch / regression) but **not** *"the fetch was blocked."* Affects **every** CF-guarded source that landed as PLAIN — those silently stop getting chapters until a manual backfill — not just the one seen in local testing. Test-first (the escalation decision + an integration test) | `TODO` | WP-46, WP-17b |
 | WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` + schema + cron wiring **done**; **editor UI + push delivery (WP-09) remain** (picking up later) | `TODO` | WP-07, WP-10 |
 | WP-30b | `lib/feeds/title.ts` extraction fixes — **(1) consent/cookie-banner `<h1>` reject-list**: the sole `<h1>` on some sites is a CCPA/cookie banner, so it's grabbed as the title; treat a boilerplate/consent `<h1>` as not-a-title (small known-phrase reject-list and/or skip an `<h1>` inside a consent/cookie container) and fall through to `og:title` → `<title>`. **(2) HTML-entity decode at extraction**: `extractSeriesTitle` stores the page `<h1>`/`og:title`/`<title>` without decoding HTML entities (`&#8217;`/`&#8216;`/`&#8220;`/`&#038;`/`&nbsp;` bake into the DB as raw codes instead of glyphs); decode named + numeric entities at extraction so new adds are clean and WP-30's non-manual backfill self-heals existing rows (display-side decode fallback stays WP-28). Backend/pure `lib/feeds/title.ts` fix; TDD | `TODO` | WP-30 |
@@ -144,7 +147,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 
 WP-00, WP-GH, WP-CI, WP-12 (bootstrap / CI / docs) · WP-01, WP-03 (pure diff / health) · WP-04, WP-05, WP-FE (schema, feed parse/discover, fetcher) · WP-06, WP-07, WP-08 (Next shell, services, API) · WP-09, WP-10, WP-AUTH, WP-11 (Web Push, library/detail UI, auth gate, deploy) · WP-17, WP-17b (page-watch + headless renderer) · WP-20 (paid→free "now free") · WP-33 (full-TOC backfill + `accessReconciled`) · WP-35 (TOC-order chapters + display toggle) · WP-36 (`parseToc` content scoping) · WP-38 (contaminated-series recovery script) · WP-42 (poll-once-per-feed + politeness) · WP-41 (poll time-budget guard + rotation) · WP-43 (frequent PLAIN-tier polling) · WP-27a (status-gated + cadence polling) · WP-39 (add-time dedup) · WP-37 (per-series chapter-TOC URL) ·
 WP-39b (deeper add-dedup, re-scoped: tocUrl page-watch keying + create-then-annotate) · WP-48 (Blogger feed-path in `guessFeedUrls`) · WP-46 (add-time render escalation + poll regression guard) · WP-49 (page-watch divert for un-isolable multi-novel advertised feeds) · WP-34 (feed→TOC switch to lock-monitoring) · WP-30 (series title backfill + manual title-edit UI) · WP-51 (client-side delete series — detail + shelf) · WP-PW (Playwright E2E harness + WP-10/30/34/51 coverage + CI job) · WP-50 (link-only add when chapters can't be read) ·
-WP-45 (API-first adapter, plain-REST slice).
+WP-45 (API-first adapter, plain-REST slice) · WP-45b (CF-gated render transport + paginated API sources).
 
 ### ⏭ Later tiers (M2–M4)
 
@@ -915,21 +918,14 @@ built here.
 `SeriesStatus`/`SourceHealth`/`FailureType`; consolidating it would make the next enum change a one-line edit.
 Pre-existing; deferred.
 
-### WP-45b — CF-gated REST API transport (fast-follow to WP-45)
+### WP-45b — CF-gated render transport + paginated API sources
 
-The second API shape a network probe found: a REST API returning all chapters + per-chapter lock, but **behind the
-Cloudflare challenge** — reachable only from the CF-cleared browser. WP-45 designed the seam and scoped this out.
-
-**Why it's a separate piece (not free):** (1) **Discovery is manual-only** — the add-time auto-probe reads the
-*plain page HTML*, but a CF-gated source's page fetch is the thing that 403s, so there is no HTML to probe and the
-endpoint can't be reached plainly; such a source is configured via `set-api-descriptor --render` after the add.
-(2) **Every fetch needs render** — `renderPage` today does goto + load-more + returns DOM HTML; WP-45b needs it to
-detect an `application/json` navigation, **skip the load-more loop, and return the raw JSON body** so the poll can
-`parseApiChapters` it. The schema already accommodates it (`type=API, fetchMode=RENDER`, `apiUrl`) and the poll
-`fetcher` ternary already routes RENDER→render, so WP-45b = the render-returns-JSON change + the `--render`
-seeding/first-poll path.
-
-**Depends on:** WP-45, WP-17b.
+**DONE (2026-08-20).** A Cloudflare-gated, paginated chapter API is now tracked end-to-end. The renderer clears CF once and reads clean JSON (spike-validated against a real CF endpoint), and API sources fetch + union every page.
+- **Render JSON transport:** `renderPage` detects a JSON resource (by content-type) and returns the raw body via an in-page same-origin `fetch` that reuses the `cf_clearance` cookie `goto` obtained — `page.content()` would return the browser's JSON-viewer HTML instead. The HTML/DOM render path is unchanged.
+- **Pagination (both transports):** an optional `ApiDescriptor.pagination` (`{pageParam, perPage, maxPages?, listPath?}`) drives `fetchApiPages`, which returns one combined root-array body. PLAIN loops Node-side GETs; RENDER makes **exactly one** render call and the render service loops in-page — one browser per series per poll, never one-per-page (guaranteed by a `renderFetch`-called-once test). Stop = a short page (`< perPage`); cap = `maxPages` (default 20) with a log on cap-hit. `perPage` is per-descriptor. Also closes the latent WP-45 gap (a paginated plain API previously read only page 1).
+- **Poll seam:** a paginated API group routes to `fetchApiPages`; the flattened root-array body is parsed with `listPath` as root. Non-paginated + non-API sources are byte-for-byte unchanged.
+- **CLI:** `set-api-descriptor --render` is functional; the `--map` JSON carries the `pagination` block (validated: string `pageParam` + positive `perPage`).
+- The union/stop logic is unit-tested (`collectJsonResult` with an injected page-fetch, `fetchApiPages` with fake ports); the one-browser guarantee is the call-count test; the real CF end-to-end is owner-validated on deploy (a `[render] json pages=N` log confirms one browser + N in-page pages).
 
 ### WP-48 — Blogger feed-path in `guessFeedUrls`
 
@@ -1035,6 +1031,7 @@ optionally `deactivate-source`) so WP-49-style recoveries are fully tool-support
 
 ## Changelog
 
+- **2026-08-20** — **WP-45b DONE — CF-gated render transport + paginated API sources.** The renderer clears Cloudflare and returns clean JSON (in-page fetch reusing the cf_clearance cookie; spike-validated); API sources paginate + union every page across both transports — PLAIN loops Node-side, RENDER makes one render call that loops in-page (one browser per series per poll, proven by a call-count test), short-page stop + cap 20 + log, per-descriptor perPage. `set-api-descriptor --render` now functional; the latent WP-45 plain-pagination gap is closed too.
 - **2026-08-18** — **WP-45 follow-up: probe hardening (multi-candidate).** `probeForApi` now returns *all*
   `.json` `data-*` candidates on the page (deduped, document order, capped at 5) instead of only the first; add-time
   resolution tries each in turn and takes the first that actually parses to chapters, so a decoy `.json` pointer

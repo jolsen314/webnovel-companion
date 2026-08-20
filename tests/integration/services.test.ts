@@ -1383,6 +1383,56 @@ describe('setApiDescriptor (real DB, WP-45)', () => {
     expect(row.fetchMode).toBe('RENDER');
     expect(row.apiMap).toMatchObject({ pagination: { pageParam: 'page', perPage: 200 } });
   });
+
+  test('WP-45b: a paginated PLAIN API source unions every page through a real poll', async () => {
+    // Wired the same way as the WP-45/WP-20 case: a FEED-shaped source flipped to API via the
+    // CLI escape hatch, this time with a `pagination` descriptor. Page 1 comes back FULL
+    // (perPage items) so fetchApiPages must keep going; page 2 comes back SHORT so it must stop
+    // there — proving both the "keep paging" and "stop paging" halves of the loop, plus that the
+    // two pages' items are unioned into storage through the real pollAllSources seam (not just
+    // the pure fetchApiPages unit under test elsewhere).
+    const apiUrl = 'https://api.example/works/1/chapters?per_page=200';
+    const series = await db.series.create({
+      data: {
+        userId: getCurrentUserId(),
+        title: 'Delta',
+        sources: { create: { url: 'https://api.example/series/delta', host: 'api.example', type: 'FEED', feedUrl: 'https://api.example/feed/' } },
+      },
+      include: { sources: true },
+    });
+    const sourceId = series.sources[0]!.id;
+    await setApiDescriptor(sourceId, {
+      endpoint: apiUrl,
+      map: {
+        urlField: 'url',
+        titleField: 'title',
+        isFreeField: 'locked',
+        isFreeWhen: 'falsy',
+        pagination: { pageParam: 'page', perPage: 200 },
+      },
+    });
+
+    const chapter = (n: number) => ({ url: `https://api.example/read/${n}`, title: `Ch ${n}`, locked: false });
+    const page1 = Array.from({ length: 200 }, (_, i) => chapter(i + 1)); // full page → keep paging
+    const page2 = Array.from({ length: 18 }, (_, i) => chapter(200 + i + 1)); // short page → stop
+
+    // A hand-rolled fetch (not the fetchFrom(map) helper) keyed on the `page` query param via
+    // URL parsing — a substring/exact-string key would collide with `per_page=200` sharing the
+    // digits `200` and the literal text `page=`.
+    const fetch: FetchImpl = async (u) => {
+      const page = new URL(u).searchParams.get('page');
+      if (page === '1') return okRes(JSON.stringify(page1));
+      if (page === '2') return okRes(JSON.stringify(page2));
+      return { outcome: 'HTTP_4XX', status: 404 } as PoliteResult;
+    };
+
+    await pollAllSources(fetch, undefined, new Date('2026-07-29T12:00:00Z'));
+
+    const stored = await db.chapter.findMany({ where: { seriesId: series.id } });
+    expect(stored).toHaveLength(218);
+    // Spot-check a page-2-only chapter actually made it in, not just 200 from page 1 padded out.
+    expect(stored.some((c) => c.url === 'https://api.example/read/218')).toBe(true);
+  });
 });
 
 describe('reclassifySource (real DB, WP-34)', () => {
