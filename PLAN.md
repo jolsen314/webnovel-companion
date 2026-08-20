@@ -46,11 +46,15 @@ uncommitted notes." Real names/URLs live only in those local notes and in scratc
 
 ## Current focus
 
-> **NEXT: WP-NOTES — Detail-page notes UI.** A notes textarea on the series detail page wired to the existing
-> `PATCH /api/series/[id]` (`notes` is already validated + persisted server-side; only the UI is missing). Pairs
-> with link-only entries (manual tracking). Full priority order = the **▶ Active queue** table.
+> **NEXT: WP-52 — Poll-time hard-fail render escalation.** When a **PLAIN** source's poll fetch fails with a
+> Cloudflare signature (403 / HTTP_4XX) and a renderer is available, escalate that poll to **RENDER** and persist
+> `fetchMode = RENDER` — the poll-time analog of WP-46's add-time hard-fail escalation, closing the current poll
+> escalation's blind spot (it handles under-fetch but not "the fetch was blocked"). Full priority order = the
+> **▶ Active queue** table.
 >
-> **Recently landed (newest first):** WP-45b (CF-gated render transport + paginated API sources — `renderPage`
+> **Recently landed (newest first):** WP-NOTES (detail-page notes UI — a collapsible notes block on the series
+> detail page over the already-persisted `notes` field; save-on-blur only when changed, content-aware default
+> [open when notes exist, collapsed when empty], one-line truncated preview when collapsed; E2E-covered) · WP-45b (CF-gated render transport + paginated API sources — `renderPage`
 > clears Cloudflare once and returns clean JSON via an in-page same-origin fetch reusing the `cf_clearance` cookie;
 > API sources fetch + union every page via an optional `ApiDescriptor.pagination`, PLAIN looping Node-side GETs and
 > RENDER making exactly one render call that loops in-page — one browser per series per poll, proven by a
@@ -120,8 +124,8 @@ later-tier tables are reference only. `⭐` = load-bearing.
 
 | ID | Work package | Status | Depends on |
 |----|--------------|--------|------------|
-| WP-NOTES | Detail-page notes UI — a notes textarea on the series detail page → the existing `PATCH /api/series/[id]` (`notes` is already validated + persisted; only the UI is missing). Pairs with link-only entries (manual tracking) | `NEXT` | WP-10 |
-| WP-52 | Poll-time hard-fail render escalation — when a **PLAIN** source's poll fetch fails with a **Cloudflare signature (403 / HTTP_4XX)** and a renderer is available, escalate that poll to **RENDER** and persist `fetchMode = RENDER`. The **poll-time analog of WP-46's add-time hard-fail escalation**, and the current poll escalation's blind spot: it handles *"rendered too few"* (under-fetch / regression) but **not** *"the fetch was blocked."* Affects **every** CF-guarded source that landed as PLAIN — those silently stop getting chapters until a manual backfill — not just the one seen in local testing. Test-first (the escalation decision + an integration test) | `TODO` | WP-46, WP-17b || WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` + schema + cron wiring **done**; **editor UI + push delivery (WP-09) remain** (picking up later) | `TODO` | WP-07, WP-10 |
+| WP-52 | Poll-time hard-fail render escalation — when a **PLAIN** source's poll fetch fails with a **Cloudflare signature (403 / HTTP_4XX)** and a renderer is available, escalate that poll to **RENDER** and persist `fetchMode = RENDER`. The **poll-time analog of WP-46's add-time hard-fail escalation**, and the current poll escalation's blind spot: it handles *"rendered too few"* (under-fetch / regression) but **not** *"the fetch was blocked."* Affects **every** CF-guarded source that landed as PLAIN — those silently stop getting chapters until a manual backfill — not just the one seen in local testing. Test-first (the escalation decision + an integration test) | `NEXT` | WP-46, WP-17b |
+| WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` + schema + cron wiring **done**; **editor UI + push delivery (WP-09) remain** (picking up later) | `TODO` | WP-07, WP-10 |
 | WP-30b | `lib/feeds/title.ts` extraction fixes — **(1) consent/cookie-banner `<h1>` reject-list**: the sole `<h1>` on some sites is a CCPA/cookie banner, so it's grabbed as the title; treat a boilerplate/consent `<h1>` as not-a-title (small known-phrase reject-list and/or skip an `<h1>` inside a consent/cookie container) and fall through to `og:title` → `<title>`. **(2) HTML-entity decode at extraction**: `extractSeriesTitle` stores the page `<h1>`/`og:title`/`<title>` without decoding HTML entities (`&#8217;`/`&#8216;`/`&#8220;`/`&#038;`/`&nbsp;` bake into the DB as raw codes instead of glyphs); decode named + numeric entities at extraction so new adds are clean and WP-30's non-manual backfill self-heals existing rows (display-side decode fallback stays WP-28). Backend/pure `lib/feeds/title.ts` fix; TDD | `TODO` | WP-30 |
 | WP-28 | Frontend styling & theming — ordering, feed-page vs library split, theme system (night default + cultivation ancient-scroll, sci-fi holographic-panel), long-title readability (wrap/clamp vs ellipsis) | `TODO` | WP-10 |
 | WP-18 | Completed shelf + backfill + "Move to Completed?" | `TODO` | WP-10 |
@@ -148,7 +152,8 @@ later-tier tables are reference only. `⭐` = load-bearing.
 
 WP-00, WP-GH, WP-CI, WP-12 (bootstrap / CI / docs) · WP-01, WP-03 (pure diff / health) · WP-04, WP-05, WP-FE (schema, feed parse/discover, fetcher) · WP-06, WP-07, WP-08 (Next shell, services, API) · WP-09, WP-10, WP-AUTH, WP-11 (Web Push, library/detail UI, auth gate, deploy) · WP-17, WP-17b (page-watch + headless renderer) · WP-20 (paid→free "now free") · WP-33 (full-TOC backfill + `accessReconciled`) · WP-35 (TOC-order chapters + display toggle) · WP-36 (`parseToc` content scoping) · WP-38 (contaminated-series recovery script) · WP-42 (poll-once-per-feed + politeness) · WP-41 (poll time-budget guard + rotation) · WP-43 (frequent PLAIN-tier polling) · WP-27a (status-gated + cadence polling) · WP-39 (add-time dedup) · WP-37 (per-series chapter-TOC URL) ·
 WP-39b (deeper add-dedup, re-scoped: tocUrl page-watch keying + create-then-annotate) · WP-48 (Blogger feed-path in `guessFeedUrls`) · WP-46 (add-time render escalation + poll regression guard) · WP-49 (page-watch divert for un-isolable multi-novel advertised feeds) · WP-34 (feed→TOC switch to lock-monitoring) · WP-30 (series title backfill + manual title-edit UI) · WP-51 (client-side delete series — detail + shelf) · WP-PW (Playwright E2E harness + WP-10/30/34/51 coverage + CI job) · WP-50 (link-only add when chapters can't be read) ·
-WP-45 (API-first adapter, plain-REST slice) · WP-45b (CF-gated render transport + paginated API sources).
+WP-45 (API-first adapter, plain-REST slice) · WP-45b (CF-gated render transport + paginated API sources) ·
+WP-NOTES (detail-page notes UI — collapsible, save-on-blur, content-aware default + truncated preview).
 
 ### ⏭ Later tiers (M2–M4)
 
@@ -194,6 +199,7 @@ every UI-only WP appends its flow(s) to the checklist below at completion, so de
 - [x] WP-51 — delete: detail inline confirm → redirected to shelf, series gone; shelf trash → confirm →
       card disappears, tapping trash does NOT open the card; Cancel guards on both surfaces.
 - [x] WP-50 — link-only add: no-chapters → confirm panel → Add anyway → link-only series on the shelf (stubbed).
+- [x] WP-NOTES — notes: collapsed-when-empty, save on blur → persists, defaults open when present, collapsed preview truncates.
 
 ### WP-GH — Git + private GitHub repo, first push
 
@@ -1058,6 +1064,20 @@ optionally `deactivate-source`) so WP-49-style recoveries are fully tool-support
 
 ## Changelog
 
+- **2026-08-20** — **WP-NOTES DONE — detail-page notes UI.** Added a collapsible **Notes** block to the series
+  detail page ([`SeriesDetail.tsx`](<src/app/(app)/series/[id]/SeriesDetail.tsx>)) over the already-persisted
+  `notes` field (validation + service shipped earlier; only the UI was missing). The page now passes
+  `notes={series.notes ?? ''}` into the client component. **Save-on-blur** via the existing `patch()` helper, but
+  only when the text actually changed (empty is a valid clear); a `savedNotes` ref tracks the last-persisted value
+  and a `Saving…/Saved` `control__hint` (`role="status"`) reports the write. The label is a disclosure toggle
+  (`aria-expanded`/`aria-controls`) with a **content-aware default** derived from the server prop — open when the
+  series already has notes, collapsed when empty (deterministic across server/client → no hydration mismatch, no
+  `localStorage`). When collapsed with notes present, a one-line **ellipsis-truncated preview** sits beside the
+  toggle so content is discoverable without expanding. No `lib/` logic (nothing to TDD there); covered by a new
+  **E2E spec** (`e2e/notes.spec.ts` — collapsed-when-empty → expand → type → blur-persist → reload defaults open →
+  collapse shows a `scrollWidth > clientWidth` truncated preview) appended to the WP-PW checklist. `npm test` (457)
+  + `npm run typecheck` + full E2E (12) green. `NEXT` advances to **WP-52**. *(Also fixed a pre-existing malformed
+  `WP-52 || WP-29` run-on row in the active-queue table.)*
 - **2026-08-20** — **Filed WP-53: make backfill API-aware + re-enable its button on API sources.** After switching a
   CF-gated source to an API descriptor (WP-45) and running `db:cleanup backfill … --render`, it returned **`added 0`**:
   `backfillFromToc`/`backfillPorts` page-watch `source.url` and never read `apiUrl`/`apiMap`, so an API source rendered

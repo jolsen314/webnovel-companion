@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { arrangeChapters, type ChapterDisplayMode } from '../../../../lib/reading';
 import { DeleteSeries } from './DeleteSeries';
@@ -25,6 +25,7 @@ export function SeriesDetail(props: {
   title: string;
   status: SeriesStatus;
   rating: number | null;
+  notes: string;
   chapters: ChapterLite[];
   lastReadChapterId: string | null;
   sourceType: 'FEED' | 'PAGE_WATCH' | 'API';
@@ -33,6 +34,13 @@ export function SeriesDetail(props: {
   const [status, setStatus] = useState<SeriesStatus>(props.status);
   const [rating, setRating] = useState<number | null>(props.rating);
   const [lastRead, setLastRead] = useState<string | null>(props.lastReadChapterId);
+  const [notes, setNotes] = useState(props.notes);
+  // Content-aware default: open when the series already has notes, collapsed when empty.
+  // Derived from a server prop, so server and client agree — no hydration mismatch.
+  const [notesOpen, setNotesOpen] = useState(props.notes.trim().length > 0);
+  const [notesHint, setNotesHint] = useState<string | null>(null);
+  // Last value persisted to the server, so blur only PATCHes when the text actually changed.
+  const savedNotes = useRef(props.notes);
   const [busy, setBusy] = useState(false);
   const [backfillMessage, setBackfillMessage] = useState<string | null>(null);
   const [switchMessage, setSwitchMessage] = useState<string | null>(null);
@@ -49,6 +57,20 @@ export function SeriesDetail(props: {
     setMode(next);
     window.localStorage.setItem(DISPLAY_MODE_STORAGE_KEY, next);
   }
+
+  /** Persist notes on blur, but only when they differ from what's stored (empty is a valid
+   *  value — it clears the field). Fires the same PATCH path as the other controls. */
+  async function saveNotes() {
+    if (notes === savedNotes.current) return;
+    savedNotes.current = notes;
+    setNotesHint('Saving…');
+    await patch({ notes });
+    setNotesHint('Saved');
+  }
+
+  // One-line preview shown beside the toggle when collapsed, so notes are discoverable
+  // without expanding. Collapsing always follows a blur-save, so `notes` is up to date.
+  const notesPreview = notes.trim().replace(/\s+/g, ' ');
 
   async function patch(body: Record<string, unknown>) {
     setBusy(true);
@@ -186,6 +208,45 @@ export function SeriesDetail(props: {
           </div>
         </div>
       </div>
+
+      <section className="notes">
+        <button
+          type="button"
+          className="notes__toggle"
+          aria-label="Notes"
+          aria-expanded={notesOpen}
+          aria-controls="series-notes"
+          onClick={() => setNotesOpen((open) => !open)}
+        >
+          <span className="notes__chevron" aria-hidden="true">
+            {notesOpen ? '▾' : '▸'}
+          </span>
+          <span className="control__label">Notes</span>
+          {!notesOpen && notesPreview && <span className="notes__preview">{notesPreview}</span>}
+        </button>
+        {notesOpen && (
+          <div className="notes__body">
+            <textarea
+              id="series-notes"
+              className="notes__area"
+              value={notes}
+              disabled={busy}
+              placeholder="Private notes about this series…"
+              aria-label="Series notes"
+              onChange={(e) => {
+                setNotes(e.target.value);
+                setNotesHint(null);
+              }}
+              onBlur={() => void saveNotes()}
+            />
+            {notesHint && (
+              <span className="control__hint" role="status">
+                {notesHint}
+              </span>
+            )}
+          </div>
+        )}
+      </section>
 
       <DeleteSeries id={props.id} title={props.title} chapterCount={props.chapters.length} />
 

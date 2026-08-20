@@ -363,6 +363,61 @@ body {
   font-size: 0.68rem;
   color: var(--color-muted);
 }
+.notes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin: 0.4rem 0 1rem;
+}
+.notes__toggle {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.notes__chevron {
+  font-size: 0.7rem;
+  color: var(--color-muted);
+}
+.notes__toggle:hover .control__label {
+  color: var(--color-glow);
+}
+.notes__preview {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.82rem;
+  color: var(--color-muted);
+}
+.notes__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.notes__area {
+  font: inherit;
+  color: var(--color-paper);
+  background: var(--color-ink);
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+  min-height: 6rem;
+  resize: vertical;
+}
+.notes__area:focus {
+  outline: none;
+  border-color: var(--color-glow);
+}
+.notes__area:disabled {
+  opacity: 0.6;
+}
 .segmented {
   display: flex;
   gap: 0.3rem;

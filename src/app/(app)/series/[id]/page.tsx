@@ -50,6 +50,7 @@ export default async function SeriesPage({ params }: { params: Promise<{ id: str
         title={series.title}
         status={status}
         rating={series.rating}
+        notes={series.notes ?? ''}
         chapters={chapters}
         lastReadChapterId={series.progress?.lastReadChapterId ?? null}
         sourceType={active?.type ?? 'PAGE_WATCH'}
