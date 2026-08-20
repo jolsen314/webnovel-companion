@@ -1353,6 +1353,36 @@ describe('setApiDescriptor (real DB, WP-45)', () => {
     );
     expect(again[0]!.becameFree).toEqual([]);
   });
+
+  test('WP-45b: setApiDescriptor persists a pagination descriptor with render=true', async () => {
+    const series = await db.series.create({
+      data: {
+        userId: getCurrentUserId(),
+        title: 'Gamma',
+        sources: { create: { url: 'https://cf.example/series/gamma', host: 'cf.example', type: 'FEED', feedUrl: 'https://cf.example/feed/' } },
+      },
+      include: { sources: true },
+    });
+    const sourceId = series.sources[0]!.id;
+
+    const res = await setApiDescriptor(sourceId, {
+      endpoint: 'https://api.cf.example/works/1/chapters',
+      map: {
+        urlField: 'permalink',
+        titleField: 'title',
+        isFreeField: 'locked',
+        isFreeWhen: 'falsy',
+        pagination: { pageParam: 'page', perPage: 200 },
+      },
+      render: true,
+    });
+    expect(res.updated).toBe(true);
+
+    const row = await db.source.findUniqueOrThrow({ where: { id: sourceId } });
+    expect(row.type).toBe('API');
+    expect(row.fetchMode).toBe('RENDER');
+    expect(row.apiMap).toMatchObject({ pagination: { pageParam: 'page', perPage: 200 } });
+  });
 });
 
 describe('reclassifySource (real DB, WP-34)', () => {

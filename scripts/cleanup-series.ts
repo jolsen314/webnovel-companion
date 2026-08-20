@@ -210,11 +210,14 @@ async function cmdSetApiDescriptor(args: string[], render: boolean, apply: boole
     throw new UsageError('--map must be valid JSON');
   }
   if (!map.urlField || !map.titleField) throw new UsageError('--map needs at least urlField and titleField');
+  if (map.pagination) {
+    const { pageParam, perPage } = map.pagination;
+    if (!(typeof pageParam === 'string' && typeof perPage === 'number' && perPage > 0)) {
+      throw new UsageError('--map pagination needs a string pageParam and a positive perPage');
+    }
+  }
   if (render) {
-    console.warn(
-      'warning: --render sets fetchMode=RENDER, but the CF-gated render-returns-JSON transport (WP-45b) is not ' +
-        'built yet; this source will not fetch until WP-45b lands.',
-    );
+    console.log('note: --render uses the headless renderer to clear Cloudflare and read the JSON API (WP-45b).');
   }
   if (!apply) {
     console.log(`[dry run] set-api-descriptor would set source ${sourceId} → API`);
