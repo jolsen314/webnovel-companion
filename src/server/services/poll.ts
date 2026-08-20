@@ -6,6 +6,7 @@ import { filterBySeriesMatch, type SeriesMatch } from '../../lib/feeds/discover'
 import { step, type FailureType, type HealthState, type SourceHealth } from '../../lib/health';
 import { parseRetryAfter, type PoliteResult } from '../../lib/feeds/fetch';
 import type { SeriesStatus } from '../../lib/series';
+import { fetchApiPages } from './apiFetch';
 
 /**
  * Poll orchestration: composes the (pure, tested) feed pipeline —
@@ -158,9 +159,12 @@ export interface PollEffects {
 }
 
 export interface PollPorts {
-  fetch: (url: string, opts: { etag?: string | null; lastModified?: string | null }) => Promise<PoliteResult>;
+  // `opts` is optional (not just its fields) so this stays structurally assignable to `FetchImpl`
+  // (apiFetch.ts / server/services/index.ts) — fetchApiPages (WP-45b) takes `ports` (this type)
+  // directly and calls `ports.fetch(pageUrl)` with no second argument for paginated PLAIN pages.
+  fetch: (url: string, opts?: { etag?: string | null; lastModified?: string | null }) => Promise<PoliteResult>;
   /** Headless-render fetch (WP-17b). Absent → no renderer configured; RENDER falls back to plain. */
-  renderFetch?: (url: string, opts: { etag?: string | null; lastModified?: string | null }) => Promise<PoliteResult>;
+  renderFetch?: (url: string, opts?: { etag?: string | null; lastModified?: string | null }) => Promise<PoliteResult>;
   loadStoredChapters: (seriesId: string) => Promise<KnownChapter[]>;
   applyPollEffects: (effects: PollEffects) => Promise<void>;
 }
@@ -294,7 +298,10 @@ export async function processFetched(
       } else if (src.type === 'API') {
         // WP-45: the API returns the complete list with access — TOC semantics. No render
         // escalation (an API source is not a render fallback) and no matcher (already scoped).
-        mine = src.apiMap ? parseApiChapters(res.body, src.apiMap, src.fetchUrl) : [];
+        // WP-45b: a paginated source's body is already flattened to a root array by
+        // fetchApiPages, so parse with listPath as root.
+        const map = src.apiMap;
+        mine = map ? parseApiChapters(res.body, map.pagination ? { ...map, listPath: undefined } : map, src.fetchUrl) : [];
       } else {
         const parsed = await parseFeed(res.body);
         mine = filterBySeriesMatch(parsed.items, src.match);
@@ -392,8 +399,16 @@ export async function pollAllSources(
     if (clock() - start + groupCostMs(group, hasRenderer) > budgetMs) continue;
 
     const cond = chooseConditionalState(group.sources);
-    const fetcher = group.fetchMode === 'RENDER' && ports.renderFetch ? ports.renderFetch : ports.fetch;
-    const res = await fetcher(group.fetchUrl, { etag: cond.etag, lastModified: cond.lastModified });
+    const first = group.sources[0]!;
+    // WP-45b: a paginated API source is fetched via fetchApiPages (unions every page into one
+    // flattened body) instead of the plain conditional GET / render fetch every other group uses.
+    const paginated = first.type === 'API' && first.apiMap?.pagination != null;
+    const res = paginated
+      ? await fetchApiPages(group.fetchUrl, first.apiMap!, group.fetchMode, ports)
+      : await (group.fetchMode === 'RENDER' && ports.renderFetch ? ports.renderFetch : ports.fetch)(
+          group.fetchUrl,
+          { etag: cond.etag, lastModified: cond.lastModified },
+        );
     const retryAfterAt = parseRetryAfter(res.retryAfter ?? null, now);
 
     for (const src of group.sources) {

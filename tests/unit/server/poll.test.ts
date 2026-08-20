@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import {
   chooseConditionalState,
   groupCostMs,
@@ -360,6 +360,8 @@ describe('pollAllSources', () => {
   function multiPorts(args: {
     sources: PollableSource[];
     fetch: PollPorts['fetch'];
+    /** WP-45b: renderFetch for paginated-API/RENDER groups (and general RENDER-mode tests). */
+    renderFetch?: PollPorts['renderFetch'];
     stored?: Record<string, KnownChapter[]>;
     /** When set, a processed source's lastCheckedAt is stamped to this (mirroring the real edge),
      *  so a multi-run test exercises rotation/cadence across runs. Omit for single-run tests. */
@@ -369,6 +371,7 @@ describe('pollAllSources', () => {
     return {
       applied,
       fetch: args.fetch,
+      renderFetch: args.renderFetch,
       loadActiveSources: async () => args.sources,
       loadStoredChapters: async (seriesId) => args.stored?.[seriesId] ?? [],
       applyPollEffects: async (e) => {
@@ -504,6 +507,62 @@ describe('pollAllSources', () => {
     // group ungated and fetch it.
     expect(fetches).toBe(0);
     expect(effects).toEqual([]);
+  });
+
+  // ── WP-45b: paginated API sources — the fetch seam (not processFetched) branches on
+  // apiMap.pagination, so these exercise pollAllSources (the real group-level fetch path),
+  // not a processFetched-only harness.
+  describe('pollAllSources — paginated API source (WP-45b)', () => {
+    test('paginated API/PLAIN source unions pages then diffs all chapters', async () => {
+      const api: ApiDescriptor = { urlField: 'url', titleField: 't', pagination: { pageParam: 'page', perPage: 200 } };
+      const src = source({ type: 'API', fetchMode: 'PLAIN', fetchUrl: 'https://api.example/ch?per_page=200', apiMap: api });
+      const page = (n: number, count: number) =>
+        ok(JSON.stringify(Array.from({ length: count }, (_, i) => ({ url: `https://api.example/c${n}-${i}`, t: 'C' }))));
+      // fake fetch serves page 1 = 200 items, page 2 = 5 items (short → stop). Reads the actual
+      // `page` query param (NOT a raw substring check) — the base URL's own `per_page=200`
+      // already contains the substring "page=2", so a naive `.includes` would misfire.
+      const p = multiPorts({
+        sources: [src],
+        fetch: async (u: string) => (new URL(u).searchParams.get('page') === '2' ? page(2, 5) : page(1, 200)),
+        stored: { series1: [] },
+      });
+
+      const effects = await pollAllSources(p, NOW);
+
+      expect(effects).toHaveLength(1);
+      expect(effects[0]!.newChapters).toHaveLength(205);
+    });
+
+    test('paginated API/RENDER source: renderFetch called once WITH the pagination spec, union diffed, becameFree fires', async () => {
+      const api: ApiDescriptor = {
+        urlField: 'url',
+        titleField: 't',
+        isFreeField: 'locked',
+        isFreeWhen: 'falsy',
+        pagination: { pageParam: 'page', perPage: 200 },
+      };
+      const src = source({ type: 'API', fetchMode: 'RENDER', fetchUrl: 'https://api.example/ch', apiMap: api });
+      const renderFetch = vi.fn(async (_url: string, _opts?: unknown) =>
+        ok(JSON.stringify([{ url: 'https://api.example/c1', t: 'C1', locked: false }])),
+      );
+      const p = multiPorts({
+        sources: [src],
+        fetch: async () => ok('[]'), // should not be called — RENDER mode goes through renderFetch
+        renderFetch,
+        stored: { series1: [{ id: 'x', url: 'https://api.example/c1', access: 'LOCKED' }] },
+      });
+
+      const effects = await pollAllSources(p, NOW);
+
+      expect(renderFetch).toHaveBeenCalledTimes(1);
+      // The call must carry the pagination spec (so the render service knows to paginate
+      // in-browser) — NOT the plain etag/lastModified opts a non-paginated RENDER group sends.
+      // This is the assertion that actually differs from the pre-WP-45b routing (which always
+      // called renderFetch once too, just with the wrong opts) — a call-count-only check would
+      // pass even without the fetch-seam branch wired in.
+      expect(renderFetch.mock.calls[0]![1]).toEqual({ pagination: api.pagination });
+      expect(effects[0]!.becameFree.map((c) => c.id)).toEqual(['x']);
+    });
   });
 
   describe('pollAllSources — status/cadence gate (WP-27a)', () => {
