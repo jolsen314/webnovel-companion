@@ -89,7 +89,9 @@ export async function renderPage(
     // request interception above.
     const jsonResult = await collectJsonResult(url, opts.pagination, (u) => page.evaluate(jsonPageFetch, u));
     if (jsonResult) {
-      console.log(`[render] json pages=${jsonResult.pages}`); // one browser, N in-page pages — the budget signal
+      // one browser, N in-page pages — the budget signal; flag cap-hit so a truncated list isn't
+      // mistaken for a series that naturally ended after N pages.
+      console.log(`[render] json pages=${jsonResult.pages}${jsonResult.capped ? ' (capped, may be truncated)' : ''}`);
       return { status: jsonResult.status, finalUrl: page.url(), html: jsonResult.body };
     }
 

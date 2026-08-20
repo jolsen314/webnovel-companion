@@ -20,10 +20,17 @@ export async function fetchApiPages(
 ): Promise<PoliteResult> {
   const pg = descriptor.pagination!;
   const maxPages = pg.maxPages ?? 20;
+  // The nested item-array path may be set at the top level (ApiDescriptor.listPath, shared with
+  // the non-paginated parse path) instead of on pagination itself — fall back to it so a
+  // paginated descriptor that only sets the top-level path doesn't silently extract [] per page
+  // (itemsAt() finds nothing at the root → isLastPage(0, perPage) is true → union stops after
+  // page 1 with ZERO chapters).
+  const listPath = pg.listPath ?? descriptor.listPath;
 
   if (fetchMode === 'RENDER' && ports.renderFetch) {
-    // One call — the render service returns the already-unioned root array.
-    return ports.renderFetch(baseUrl, { pagination: pg });
+    // One call — the render service returns the already-unioned root array. Pass the resolved
+    // listPath through so collectJsonResult (which reads pagination.listPath) sees it too.
+    return ports.renderFetch(baseUrl, { pagination: { ...pg, listPath } });
   }
 
   const all: unknown[] = [];
@@ -32,7 +39,7 @@ export async function fetchApiPages(
     if (res.outcome !== 'SUCCESS' || res.notModified) return res; // health scores the failure; retry next poll
     let items: unknown[];
     try {
-      items = itemsAt(JSON.parse(res.body ?? ''), pg.listPath);
+      items = itemsAt(JSON.parse(res.body ?? ''), listPath);
     } catch {
       items = [];
     }

@@ -8,18 +8,18 @@ import { collectJsonResult, type JsonPageFetch } from '../../../src/server/rende
  * logic renderPage wires in is correct, not just that a same-shaped helper exists elsewhere.
  */
 describe('collectJsonResult', () => {
-  test('no pagination: a single fetch, pages=1', async () => {
+  test('no pagination: a single fetch, pages=1, capped=false', async () => {
     const calls: string[] = [];
     const fetchPage: JsonPageFetch = async (u) => {
       calls.push(u);
       return { status: 200, body: '[{"id":1}]' };
     };
     const result = await collectJsonResult('https://api.example/ch', undefined, fetchPage);
-    expect(result).toEqual({ status: 200, body: '[{"id":1}]', pages: 1 });
+    expect(result).toEqual({ status: 200, body: '[{"id":1}]', pages: 1, capped: false });
     expect(calls).toEqual(['https://api.example/ch']);
   });
 
-  test('pagination: unions pages, requesting each pageParam value, until a short page', async () => {
+  test('pagination: unions pages, requesting each pageParam value, until a short page (capped=false)', async () => {
     const calls: string[] = [];
     const fetchPage: JsonPageFetch = async (u) => {
       calls.push(u);
@@ -27,11 +27,16 @@ describe('collectJsonResult', () => {
       return { status: 200, body: JSON.stringify([{ id: 3 }]) }; // short → last page
     };
     const result = await collectJsonResult('https://api.example/ch', { pageParam: 'page', perPage: 2 }, fetchPage);
-    expect(result).toEqual({ status: 200, body: JSON.stringify([{ id: 1 }, { id: 2 }, { id: 3 }]), pages: 2 });
+    expect(result).toEqual({
+      status: 200,
+      body: JSON.stringify([{ id: 1 }, { id: 2 }, { id: 3 }]),
+      pages: 2,
+      capped: false,
+    });
     expect(calls).toEqual(['https://api.example/ch?page=1', 'https://api.example/ch?page=2']);
   });
 
-  test('pagination: stops at maxPages even when the last page fetched is still full', async () => {
+  test('pagination: stops at maxPages even when the last page fetched is still full (capped=true)', async () => {
     const fetchPage: JsonPageFetch = async () => ({ status: 200, body: JSON.stringify([{ id: 1 }, { id: 2 }]) });
     const result = await collectJsonResult(
       'https://api.example/ch',
@@ -39,6 +44,7 @@ describe('collectJsonResult', () => {
       fetchPage,
     );
     expect(result?.pages).toBe(3);
+    expect(result?.capped).toBe(true);
     expect(JSON.parse(result?.body ?? '[]')).toHaveLength(6);
   });
 

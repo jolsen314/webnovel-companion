@@ -15,16 +15,17 @@ export async function collectJsonResult(
   url: string,
   pagination: PaginationSpec | undefined,
   fetchPage: JsonPageFetch,
-): Promise<{ status: number; body: string; pages: number } | null> {
+): Promise<{ status: number; body: string; pages: number; capped: boolean } | null> {
   if (!pagination) {
     const res = await fetchPage(url);
-    return res ? { status: res.status, body: res.body, pages: 1 } : null;
+    return res ? { status: res.status, body: res.body, pages: 1, capped: false } : null;
   }
 
   const max = pagination.maxPages ?? 20;
   const all: unknown[] = [];
   let status = 200;
   let n = 1;
+  let cappedOut = false;
   for (; n <= max; n++) {
     const res = await fetchPage(pageUrl(url, pagination.pageParam, n));
     if (!res) return null; // non-JSON / failed page — discard the whole result, caller falls back to DOM
@@ -37,6 +38,7 @@ export async function collectJsonResult(
     }
     all.push(...items);
     if (isLastPage(items.length, pagination.perPage)) break;
+    if (n === max) cappedOut = true; // loop stopped because it hit maxPages, not a short page
   }
-  return { status, body: JSON.stringify(all), pages: Math.min(n, max) };
+  return { status, body: JSON.stringify(all), pages: Math.min(n, max), capped: cappedOut };
 }

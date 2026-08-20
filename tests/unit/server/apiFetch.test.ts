@@ -33,6 +33,28 @@ describe('fetchApiPages — PLAIN', () => {
     const res = await fetchApiPages('https://api.example/ch', desc(200), 'PLAIN', { fetch });
     expect(res.outcome).toBe('HTTP_5XX');
   });
+
+  test('honors a top-level ApiDescriptor.listPath when pagination.listPath is unset', async () => {
+    // Nested item-array path set at the TOP level only — pagination has no listPath of its own.
+    // If the loop only reads pg.listPath (undefined), itemsAt() finds nothing at the root → 0
+    // items/page → isLastPage(0, perPage) is true → the union stops after page 1 with ZERO
+    // chapters, silently. This asserts the descriptor's top-level listPath is honored instead.
+    const nestedDesc: ApiDescriptor = {
+      listPath: 'data.chapters',
+      urlField: 'url',
+      titleField: 't',
+      pagination: { pageParam: 'page', perPage: 2 },
+    };
+    const page = (items: Array<{ url: string; t: string }>) => JSON.stringify({ data: { chapters: items } });
+    const fetch = vi.fn(async (u: string) =>
+      pageOf(u) === '2'
+        ? ok(page([{ url: '/c2', t: 'C2' }])) // short page (1 < perPage 2) → last page
+        : ok(page([{ url: '/c0', t: 'C0' }, { url: '/c1', t: 'C1' }])),
+    );
+    const res = await fetchApiPages('https://api.example/ch', nestedDesc, 'PLAIN', { fetch });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(body(res))).toHaveLength(3);
+  });
 });
 
 describe('fetchApiPages — RENDER (one-browser guarantee)', () => {
@@ -44,5 +66,20 @@ describe('fetchApiPages — RENDER (one-browser guarantee)', () => {
     expect(renderFetch.mock.calls[0]![1]).toMatchObject({ pagination: { pageParam: 'page', perPage: 200 } });
     expect(fetch).not.toHaveBeenCalled();
     expect(JSON.parse(body(res))).toHaveLength(1300);
+  });
+
+  test('passes the top-level ApiDescriptor.listPath through as pagination.listPath when unset on pagination', async () => {
+    const nestedDesc: ApiDescriptor = {
+      listPath: 'data.chapters',
+      urlField: 'url',
+      titleField: 't',
+      pagination: { pageParam: 'page', perPage: 200 },
+    };
+    const renderFetch = vi.fn(async (_url: string, _opts?: { pagination?: unknown }) => ok(items(5)));
+    const res = await fetchApiPages('https://api.example/ch', nestedDesc, 'RENDER', { fetch: vi.fn(), renderFetch });
+    expect(renderFetch.mock.calls[0]![1]).toMatchObject({
+      pagination: { pageParam: 'page', perPage: 200, listPath: 'data.chapters' },
+    });
+    expect(JSON.parse(body(res))).toHaveLength(5);
   });
 });
