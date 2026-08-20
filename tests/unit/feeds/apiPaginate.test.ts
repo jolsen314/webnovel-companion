@@ -22,6 +22,13 @@ describe('itemsAt', () => {
     expect(itemsAt({ nope: 1 }, 'data.chapters')).toEqual([]);
     expect(itemsAt(42, undefined)).toEqual([]);
   });
+  test('an inherited (prototype) key is not walked', () => {
+    // A key present only on the prototype chain (not an own property) must resolve to []
+    // rather than being read via prototype access — Object.hasOwn guards the walk.
+    const proto = { chapters: [{ a: 1 }] };
+    const node = Object.create(proto) as Record<string, unknown>;
+    expect(itemsAt(node, 'chapters')).toEqual([]);
+  });
 });
 
 describe('isLastPage', () => {

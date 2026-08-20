@@ -9,7 +9,7 @@ import type { PaginationSpec } from '../../lib/feeds/apiAdapter';
  * that reuse the same `pageUrl`/`itemsAt`/`isLastPage` helpers the PLAIN transport's
  * `fetchApiPages` uses, so there's exactly one tested implementation of "how pages union."
  */
-export type JsonPageFetch = (pageUrl: string) => Promise<{ status: number; body: string } | null>;
+export type JsonPageFetch = (url: string) => Promise<{ status: number; body: string } | null>;
 
 export async function collectJsonResult(
   url: string,

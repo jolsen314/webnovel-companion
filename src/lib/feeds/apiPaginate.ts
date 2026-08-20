@@ -15,7 +15,10 @@ export function itemsAt(parsed: unknown, listPath?: string): unknown[] {
   let node: unknown = parsed;
   if (listPath) {
     for (const key of listPath.split('.')) {
-      node = node != null && typeof node === 'object' ? (node as Record<string, unknown>)[key] : undefined;
+      node =
+        node != null && typeof node === 'object' && Object.hasOwn(node as object, key)
+          ? (node as Record<string, unknown>)[key]
+          : undefined;
     }
   }
   return Array.isArray(node) ? node : [];

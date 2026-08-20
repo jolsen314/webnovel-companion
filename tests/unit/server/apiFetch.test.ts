@@ -13,6 +13,16 @@ const body = (res: PoliteResult): string => {
   return res.body;
 };
 
+describe('fetchApiPages — precondition', () => {
+  test('rejects when descriptor.pagination is missing', async () => {
+    const noPaginationDesc: ApiDescriptor = { urlField: 'u', titleField: 't' };
+    const fetch = vi.fn(async () => ok('[]'));
+    await expect(
+      fetchApiPages('https://api.example/ch', noPaginationDesc, 'PLAIN', { fetch }),
+    ).rejects.toThrow(/pagination/i);
+  });
+});
+
 describe('fetchApiPages — PLAIN', () => {
   test('unions pages, stops on the short page, exact fetch count', async () => {
     const fetch = vi.fn(async (u: string) => ok(pageOf(u) === '2' ? items(18) : items(200)));

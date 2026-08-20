@@ -545,9 +545,10 @@ describe('pollAllSources', () => {
       const renderFetch = vi.fn(async (_url: string, _opts?: unknown) =>
         ok(JSON.stringify([{ url: 'https://api.example/c1', t: 'C1', locked: false }])),
       );
+      const fetch = vi.fn(async () => ok('[]')); // should not be called — RENDER mode goes through renderFetch
       const p = multiPorts({
         sources: [src],
-        fetch: async () => ok('[]'), // should not be called — RENDER mode goes through renderFetch
+        fetch,
         renderFetch,
         stored: { series1: [{ id: 'x', url: 'https://api.example/c1', access: 'LOCKED' }] },
       });
@@ -561,6 +562,9 @@ describe('pollAllSources', () => {
       // called renderFetch once too, just with the wrong opts) — a call-count-only check would
       // pass even without the fetch-seam branch wired in.
       expect(renderFetch.mock.calls[0]![1]).toEqual({ pagination: api.pagination });
+      // Explicit non-regression: paginated-API/RENDER routing must never fall through to the
+      // PLAIN fetch port (only renderFetch does the in-browser page loop).
+      expect(fetch).not.toHaveBeenCalled();
       expect(effects[0]!.becameFree.map((c) => c.id)).toEqual(['x']);
     });
   });

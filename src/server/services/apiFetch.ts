@@ -18,7 +18,8 @@ export async function fetchApiPages(
   ports: { fetch: FetchImpl; renderFetch?: FetchImpl },
   log: (msg: string) => void = (m) => console.warn(m),
 ): Promise<PoliteResult> {
-  const pg = descriptor.pagination!;
+  const pg = descriptor.pagination;
+  if (!pg) throw new Error('fetchApiPages: descriptor.pagination is required');
   const maxPages = pg.maxPages ?? 20;
   // The nested item-array path may be set at the top level (ApiDescriptor.listPath, shared with
   // the non-paginated parse path) instead of on pagination itself — fall back to it so a
