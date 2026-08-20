@@ -1,5 +1,6 @@
 import { test, expect } from './support/fixtures';
 import { seedSeries } from './support/db';
+import { actAndWaitForSeriesPatch } from './support/actions';
 
 test('library grid renders and detail controls persist', async ({ page }) => {
   const { id } = await seedSeries({
@@ -24,10 +25,12 @@ test('library grid renders and detail controls persist', async ({ page }) => {
     'https://translator.example/cs/c2',
   );
 
-  // Detail controls: status, rating, mark-read.
-  await page.getByLabel('Status').selectOption('COMPLETED');
-  await page.getByRole('button', { name: '3 stars' }).click();
-  await page.getByRole('button', { name: 'mark read' }).first().click();
+  // Detail controls: status, rating, mark-read. Each fires a fire-and-forget PATCH with an
+  // optimistic UI update, so wait for the server to persist each one before reloading —
+  // otherwise the reload can race the last write and read the pre-write row.
+  await actAndWaitForSeriesPatch(page, id, () => page.getByLabel('Status').selectOption('COMPLETED'));
+  await actAndWaitForSeriesPatch(page, id, () => page.getByRole('button', { name: '3 stars' }).click());
+  await actAndWaitForSeriesPatch(page, id, () => page.getByRole('button', { name: 'mark read' }).first().click());
 
   await page.reload();
   await expect(page.getByLabel('Status')).toHaveValue('COMPLETED');
