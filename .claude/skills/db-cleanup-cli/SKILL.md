@@ -1,15 +1,19 @@
 ---
 name: db-cleanup-cli
 description: >-
-  Usage guidance and safety gotchas for THIS project's `db:cleanup` maintenance CLI
-  (scripts/cleanup-series.ts) — list/prune-chapters/delete-series/reset-chapters/set-source-url/
-  merge-series/backfill/reclassify-source/set-api-descriptor. Consult this BEFORE constructing or
-  running any `npm run db:cleanup -- …` command, converting a series to an API source, writing a
-  `set-api-descriptor` `--map`/`pagination` descriptor, choosing `--render`, or advising the owner
-  on any of these — even when the request doesn't name the command (e.g. "point this series at its
-  JSON API", "delete/merge these series", "repoint a moved source", "backfill missing chapters").
-  These commands write to a real database and have sharp, silent-failure edges (dry-run vs --apply,
-  which DB, set-api-descriptor's `perPage` double-set), so don't hand-build one from memory.
+  Use when the owner wants to change or repair series, sources, or chapters already in THIS
+  project's database via its `db:cleanup` maintenance CLI (scripts/cleanup-series.ts, run as
+  `npm run db:cleanup`). Covers intents like: delete/nuke a series and its chapters, merge two
+  series, prune or reset a series' chapters, backfill missing chapters, or repoint/reclassify a
+  source whose URL moved or changed — even when phrased casually and no command is named.
+  ESPECIALLY use it for pointing or converting a series/source at a JSON chapter API
+  (`set-api-descriptor`): writing the `--map` field-mapping (which JSON keys become chapter
+  url/title/lock state), configuring pagination (per-page + page param) so ALL chapters sync
+  instead of only the first page, routing through the headless renderer for Cloudflare-gated
+  endpoints, or debugging why only the first page came in. These commands write to a real
+  database with silent dry-run-vs-apply and pagination pitfalls, so build the command from this
+  skill and docs/db-cleanup-cli.md rather than from memory. Not for adding a brand-new series
+  (that's the add flow) or writing app code.
 ---
 
 # db:cleanup maintenance CLI
