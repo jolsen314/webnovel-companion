@@ -468,6 +468,34 @@ describe('page-watch source (real DB)', () => {
     expect((await db.source.findFirstOrThrow({ where: { seriesId } })).fetchMode).toBe('PLAIN');
   });
 
+  test('WP-52: a plain page-watch blocked by Cloudflare (403) escalates the source to RENDER', async () => {
+    // Seed plainly (no render port at add → stays PLAIN).
+    const { seriesId } = await created(addSeries(
+      { url: WATCH_URL },
+      fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1) + ROW(W2) + ROW(W3))) }),
+    ));
+    // Next poll's plain fetch is Cloudflare-blocked (403) and a renderer is available → escalate.
+    await pollAllSources(
+      fetchFrom({ [WATCH_URL]: { outcome: 'HTTP_4XX', status: 403 } as PoliteResult }),
+      async () => okRes(TOC(ROW(W1) + ROW(W2) + ROW(W3))),
+    );
+
+    expect((await db.source.findFirstOrThrow({ where: { seriesId } })).fetchMode).toBe('RENDER');
+  });
+
+  test('WP-52: a 404 (page gone, not blocked) does not escalate to RENDER', async () => {
+    const { seriesId } = await created(addSeries(
+      { url: WATCH_URL },
+      fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1) + ROW(W2) + ROW(W3))) }),
+    ));
+    await pollAllSources(
+      fetchFrom({ [WATCH_URL]: { outcome: 'HTTP_4XX', status: 404 } as PoliteResult }),
+      async () => okRes(TOC(ROW(W1))),
+    );
+
+    expect((await db.source.findFirstOrThrow({ where: { seriesId } })).fetchMode).toBe('PLAIN');
+  });
+
   test('WP-20: a stored LOCKED chapter turning FREE stamps becameFreeAt and does not re-fire', async () => {
     // Add with W1 free, W2 locked.
     const { seriesId } = await created(addSeries({ url: WATCH_URL }, fetchFrom({ [WATCH_URL]: okRes(TOC(ROW(W1) + ROW(W2, true))) })));

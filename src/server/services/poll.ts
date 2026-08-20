@@ -152,7 +152,8 @@ export interface PollEffects {
   lastModified: string | null;
   /** Health transitioned INTO LIKELY_DOWN on this poll → fire a "source may be down" alert. */
   crossedDown: boolean;
-  /** A plain page-watch under-read (≤5 chapters) and a renderer is available → switch to RENDER. */
+  /** A plain page-watch that should switch to RENDER, when a renderer is available: either it
+   *  under-read (≤5 chapters, below stored — WP-46) or its fetch was Cloudflare-blocked (403 — WP-52). */
   escalateToRender: boolean;
   /** Skip this host until this time (429/Retry-After on this poll). Null clears any prior backoff. */
   backoffUntil?: Date | null;
@@ -311,6 +312,19 @@ export async function processFetched(
       becameFree = diff.becameFree;
       accessReconciled = diff.accessReconciled;
     }
+  } else if (
+    // Hard-fail escalation (WP-52): a PLAIN page-watch poll blocked by Cloudflare (403) never
+    // recovers on its own — the datacenter IP stays blocked — so escalate to RENDER (which clears
+    // the JS challenge) and let the next poll render. The poll-time analog of WP-46's add-time
+    // hard-fail render. Scoped to 403 (not any 4xx: a 404/gone page can't be rendered back, and the
+    // flip is one-way) and to PAGE_WATCH (a FEED source keeps polling its feed plainly).
+    ports.renderFetch &&
+    src.fetchMode === 'PLAIN' &&
+    src.type === 'PAGE_WATCH' &&
+    res.outcome === 'HTTP_4XX' &&
+    res.status === 403
+  ) {
+    escalateToRender = true;
   }
 
   return {
