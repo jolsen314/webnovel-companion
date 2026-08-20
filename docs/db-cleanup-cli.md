@@ -94,6 +94,18 @@ npm run db:cleanup -- set-api-descriptor <sourceId> \
 Run without `--apply` first to see the plan. **Quote both `--endpoint` and `--map`** (single quotes)
 so the shell doesn't eat the `&` or the JSON's double-quotes.
 
+### Finding the per-series API param (the `<CATEGORY_ID>` in the endpoint)
+
+Most chapter APIs key off a per-series id (`category=<id>`, `book=<id>`, …) that is the **site's**
+internal id — it is **not** stored in our DB, and if the API is **CF-gated** you can't just `curl` it.
+Get it from a real browser session that's already past the challenge: open the series page, watch the
+**Network** tab for the chapters request, and read the id out of its query string (or off the page's
+inline config / the list component's data attribute). The headless renderer sees the same request, so
+capturing it there works too. Sanity-check completeness against the API's **total-count header** (e.g.
+`x-wp-total` on WordPress REST) vs. the number of items you actually union — and note the site's
+**per-page cap**: some APIs silently clamp `per_page` (asking for 500 may still return 200), which sets
+the `perPage` you must use in *both* places (see gotcha #1).
+
 ### `--map` — the `ApiDescriptor`
 
 The `--map` value is JSON describing how to read one chapter item out of the API's JSON:
@@ -153,3 +165,9 @@ public API, omit `--render` (plain fetch, cheaper, `304`-able). `--render` needs
 Chapters populate on the **next poll**, not immediately. If you're validating on a Vercel *preview*
 (where cron doesn't run), either trigger the poll endpoint manually or test the render primitive
 directly via a `POST /api/render` with a `{ url, pagination }` body.
+
+> **Do NOT use `backfill` to populate a freshly-converted API source.** `backfill` page-watches the
+> source's reading `url` and ignores `apiUrl`/`apiMap`, so on an `API` source it just re-reads the page
+> (usually the chapters it already had) and reports `added 0` — it is **not** a bug in your descriptor.
+> Only the **poll** reads the API. (Teaching `backfill` the API path is tracked — WP-53.) Until then,
+> trigger a poll (or wait for cron) to fill an API source.
