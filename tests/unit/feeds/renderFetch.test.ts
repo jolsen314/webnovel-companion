@@ -55,4 +55,15 @@ describe('makeRenderFetch', () => {
     };
     expect((await makeRenderFetch(config, fn)('u')).outcome).toBe('TIMEOUT');
   });
+
+  test('forwards pagination in the POST body', async () => {
+    let sentBody = '';
+    const http = async (_endpoint: string, init: { body: string }) => {
+      sentBody = init.body;
+      return { status: 200, ok: true, json: async () => ({ status: 200, finalUrl: 'u', html: '[]' }) };
+    };
+    const rf = makeRenderFetch({ endpoint: 'https://r.example' }, http);
+    await rf('https://api.example/ch', { pagination: { pageParam: 'page', perPage: 200 } });
+    expect(JSON.parse(sentBody)).toMatchObject({ url: 'https://api.example/ch', pagination: { pageParam: 'page', perPage: 200 } });
+  });
 });

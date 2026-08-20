@@ -1353,6 +1353,164 @@ describe('setApiDescriptor (real DB, WP-45)', () => {
     );
     expect(again[0]!.becameFree).toEqual([]);
   });
+
+  test('WP-45b: setApiDescriptor persists a pagination descriptor with render=true', async () => {
+    const series = await db.series.create({
+      data: {
+        userId: getCurrentUserId(),
+        title: 'Gamma',
+        sources: { create: { url: 'https://cf.example/series/gamma', host: 'cf.example', type: 'FEED', feedUrl: 'https://cf.example/feed/' } },
+      },
+      include: { sources: true },
+    });
+    const sourceId = series.sources[0]!.id;
+
+    const res = await setApiDescriptor(sourceId, {
+      endpoint: 'https://api.cf.example/works/1/chapters',
+      map: {
+        urlField: 'permalink',
+        titleField: 'title',
+        isFreeField: 'locked',
+        isFreeWhen: 'falsy',
+        pagination: { pageParam: 'page', perPage: 200 },
+      },
+      render: true,
+    });
+    expect(res.updated).toBe(true);
+
+    const row = await db.source.findUniqueOrThrow({ where: { id: sourceId } });
+    expect(row.type).toBe('API');
+    expect(row.fetchMode).toBe('RENDER');
+    expect(row.apiMap).toMatchObject({ pagination: { pageParam: 'page', perPage: 200 } });
+  });
+
+  test('WP-45b: a paginated PLAIN API source unions every page through a real poll', async () => {
+    // Wired the same way as the WP-45/WP-20 case: a FEED-shaped source flipped to API via the
+    // CLI escape hatch, this time with a `pagination` descriptor. Page 1 comes back FULL
+    // (perPage items) so fetchApiPages must keep going; page 2 comes back SHORT so it must stop
+    // there — proving both the "keep paging" and "stop paging" halves of the loop, plus that the
+    // two pages' items are unioned into storage through the real pollAllSources seam (not just
+    // the pure fetchApiPages unit under test elsewhere).
+    const apiUrl = 'https://api.example/works/1/chapters?per_page=200';
+    const series = await db.series.create({
+      data: {
+        userId: getCurrentUserId(),
+        title: 'Delta',
+        sources: { create: { url: 'https://api.example/series/delta', host: 'api.example', type: 'FEED', feedUrl: 'https://api.example/feed/' } },
+      },
+      include: { sources: true },
+    });
+    const sourceId = series.sources[0]!.id;
+    await setApiDescriptor(sourceId, {
+      endpoint: apiUrl,
+      map: {
+        urlField: 'url',
+        titleField: 'title',
+        isFreeField: 'locked',
+        isFreeWhen: 'falsy',
+        pagination: { pageParam: 'page', perPage: 200 },
+      },
+    });
+
+    const chapter = (n: number) => ({ url: `https://api.example/read/${n}`, title: `Ch ${n}`, locked: false });
+    const page1 = Array.from({ length: 200 }, (_, i) => chapter(i + 1)); // full page → keep paging
+    const page2 = Array.from({ length: 18 }, (_, i) => chapter(200 + i + 1)); // short page → stop
+
+    // A hand-rolled fetch (not the fetchFrom(map) helper) keyed on the `page` query param via
+    // URL parsing — a substring/exact-string key would collide with `per_page=200` sharing the
+    // digits `200` and the literal text `page=`.
+    const fetch: FetchImpl = async (u) => {
+      const page = new URL(u).searchParams.get('page');
+      if (page === '1') return okRes(JSON.stringify(page1));
+      if (page === '2') return okRes(JSON.stringify(page2));
+      return { outcome: 'HTTP_4XX', status: 404 } as PoliteResult;
+    };
+
+    await pollAllSources(fetch, undefined, new Date('2026-07-29T12:00:00Z'));
+
+    const stored = await db.chapter.findMany({ where: { seriesId: series.id } });
+    expect(stored).toHaveLength(218);
+    // Spot-check a page-2-only chapter actually made it in, not just 200 from page 1 padded out.
+    expect(stored.some((c) => c.url === 'https://api.example/read/218')).toBe(true);
+  });
+
+  test('WP-45b/WP-20: a paginated API source observes a chapter unlock after a later poll', async () => {
+    // A tiny (perPage: 2) paginated fixture, mirroring the WP-45/WP-20 unlock test but proving
+    // the LOCKED→FREE persistence still fires when the chapter that unlocks lives on a page that
+    // pagination had to fetch + union — not just a single-page body.
+    const apiUrl = 'https://api.example/works/2/chapters?per_page=2';
+    const c1 = 'https://api.example/read/c1';
+    const c2 = 'https://api.example/read/c2';
+    const c3 = 'https://api.example/read/c3';
+    const series = await db.series.create({
+      data: {
+        userId: getCurrentUserId(),
+        title: 'Epsilon',
+        sources: { create: { url: 'https://api.example/series/epsilon', host: 'api.example', type: 'FEED', feedUrl: 'https://api.example/feed/' } },
+      },
+      include: { sources: true },
+    });
+    const sourceId = series.sources[0]!.id;
+    await setApiDescriptor(sourceId, {
+      endpoint: apiUrl,
+      map: {
+        urlField: 'url',
+        titleField: 'title',
+        isFreeField: 'locked',
+        isFreeWhen: 'falsy',
+        pagination: { pageParam: 'page', perPage: 2 },
+      },
+    });
+
+    // Poll 1: page 1 is FULL (2 items, c1 LOCKED) → keep paging; page 2 is SHORT (1 item) → stop.
+    const fetchLocked: FetchImpl = async (u) => {
+      const page = new URL(u).searchParams.get('page');
+      if (page === '1') {
+        return okRes(
+          JSON.stringify([
+            { url: c1, title: 'Ch 1', locked: true },
+            { url: c2, title: 'Ch 2', locked: false },
+          ]),
+        );
+      }
+      if (page === '2') return okRes(JSON.stringify([{ url: c3, title: 'Ch 3', locked: false }]));
+      return { outcome: 'HTTP_4XX', status: 404 } as PoliteResult;
+    };
+    const t0 = new Date('2026-07-29T12:00:00Z');
+    await pollAllSources(fetchLocked, undefined, t0);
+
+    const stored1 = await db.chapter.findMany({ where: { seriesId: series.id } });
+    expect(stored1).toHaveLength(3);
+    const locked = stored1.find((c) => c.url === c1)!;
+    expect(locked.access).toBe('LOCKED');
+    expect(locked.becameFreeAt).toBeNull();
+
+    // Poll 2, past the host min-poll-interval floor: page 1 now reports c1 unlocked. The real
+    // poll must union pages AND fire the WP-20 unlock diff on a chapter that came from page 1
+    // (not just a single-page body), persisted end-to-end through the real DB.
+    const fetchUnlocked: FetchImpl = async (u) => {
+      const page = new URL(u).searchParams.get('page');
+      if (page === '1') {
+        return okRes(
+          JSON.stringify([
+            { url: c1, title: 'Ch 1', locked: false },
+            { url: c2, title: 'Ch 2', locked: false },
+          ]),
+        );
+      }
+      if (page === '2') return okRes(JSON.stringify([{ url: c3, title: 'Ch 3', locked: false }]));
+      return { outcome: 'HTTP_4XX', status: 404 } as PoliteResult;
+    };
+    const t1 = new Date(t0.getTime() + 20 * 60_000); // 20 min later, past the 15-min floor
+    const effects = await pollAllSources(fetchUnlocked, undefined, t1);
+    expect(effects[0]!.becameFree.map((c) => c.url)).toEqual([c1]);
+
+    const stored2 = await db.chapter.findMany({ where: { seriesId: series.id } });
+    expect(stored2).toHaveLength(3); // still unioned across pages, not re-created
+    const unlocked = stored2.find((c) => c.url === c1)!;
+    expect(unlocked.access).toBe('FREE');
+    expect(unlocked.becameFreeAt).not.toBeNull();
+  });
 });
 
 describe('reclassifySource (real DB, WP-34)', () => {

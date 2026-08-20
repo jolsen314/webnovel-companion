@@ -1,4 +1,5 @@
 import type { PoliteResult } from './fetch';
+import type { PaginationSpec } from './apiAdapter';
 
 /**
  * Adapter to the headless renderer service (WP-17b). It POSTs a URL to the render
@@ -7,9 +8,11 @@ import type { PoliteResult } from './fetch';
  * call is injected (`RenderHttp`) so this unit-tests without a socket; the renderer does
  * no conditional GET, so validators are always null.
  *
- * Contract: `POST <endpoint> { url }` → 200 `{ status, finalUrl, html }`, where `status`
- * is the *target page's* HTTP status. A non-2xx from the service itself is the renderer
- * failing (auth/misconfig/crash) and maps to an HTTP failure.
+ * Contract: `POST <endpoint> { url, pagination? }` → 200 `{ status, finalUrl, html }`, where
+ * `status` is the *target page's* HTTP status. A non-2xx from the service itself is the
+ * renderer failing (auth/misconfig/crash) and maps to an HTTP failure. When `opts.pagination`
+ * (WP-45b) is passed, it rides along in the POST body so the render service can loop pages
+ * in-page within its single browser session; `html` is then the unioned root JSON array.
  */
 
 export interface RenderResponse {
@@ -41,8 +44,8 @@ function httpFailureOutcome(status: number): PoliteResult | null {
 export function makeRenderFetch(
   config: RenderFetchConfig,
   httpImpl: RenderHttp = globalThis.fetch as unknown as RenderHttp,
-): (url: string) => Promise<PoliteResult> {
-  return async (url) => {
+): (url: string, opts?: { pagination?: PaginationSpec }) => Promise<PoliteResult> {
+  return async (url, opts) => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), config.timeoutMs ?? DEFAULT_TIMEOUT_MS);
 
@@ -54,7 +57,7 @@ export function makeRenderFetch(
           'content-type': 'application/json',
           ...(config.secret ? { authorization: `Bearer ${config.secret}` } : {}),
         },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url, ...(opts?.pagination ? { pagination: opts.pagination } : {}) }),
         signal: controller.signal,
       });
     } catch {

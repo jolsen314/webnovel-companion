@@ -4,6 +4,7 @@
 // Without --apply, every mutating command prints the plan it would execute and makes
 // no writes. `list` is always read-only. Run via `tsx`; do NOT point this at prod —
 // see PLAN.md / the task brief for the local-test-DB verification workflow.
+import { fileURLToPath } from 'node:url';
 import { db } from '../src/server/db';
 import { getCurrentUserId } from '../src/server/user';
 import { chaptersToMove } from '../src/lib/chapters/merge';
@@ -21,7 +22,7 @@ import {
 } from '../src/server/services/index';
 import type { ApiDescriptor } from '../src/lib/feeds/apiAdapter';
 
-class UsageError extends Error {}
+export class UsageError extends Error {}
 
 function usage(): void {
   console.log(`Usage: npm run db:cleanup -- <command> [args] [--apply]
@@ -210,11 +211,14 @@ async function cmdSetApiDescriptor(args: string[], render: boolean, apply: boole
     throw new UsageError('--map must be valid JSON');
   }
   if (!map.urlField || !map.titleField) throw new UsageError('--map needs at least urlField and titleField');
+  if (map.pagination) {
+    const { pageParam, perPage } = map.pagination;
+    if (!(typeof pageParam === 'string' && typeof perPage === 'number' && perPage > 0)) {
+      throw new UsageError('--map pagination needs a string pageParam and a positive perPage');
+    }
+  }
   if (render) {
-    console.warn(
-      'warning: --render sets fetchMode=RENDER, but the CF-gated render-returns-JSON transport (WP-45b) is not ' +
-        'built yet; this source will not fetch until WP-45b lands.',
-    );
+    console.log('note: --render uses the headless renderer to clear Cloudflare and read the JSON API (WP-45b).');
   }
   if (!apply) {
     console.log(`[dry run] set-api-descriptor would set source ${sourceId} → API`);
@@ -244,8 +248,8 @@ async function cmdBackfill(seriesId: string | undefined, render: boolean, apply:
   console.log(`Backfill complete: added ${result.added} chapter(s), reconciled ${result.reconciled}.`);
 }
 
-async function main(): Promise<void> {
-  const [, , cmd, ...rest] = process.argv;
+export async function run(argv: string[]): Promise<void> {
+  const [, , cmd, ...rest] = argv;
   const apply = rest.includes('--apply');
   const render = rest.includes('--render');
   const args = rest.filter((a) => a !== '--apply' && a !== '--render');
@@ -274,16 +278,18 @@ async function main(): Promise<void> {
   }
 }
 
-main()
-  .catch((err) => {
-    if (err instanceof UsageError) {
-      console.error(err.message);
-      usage();
-    } else {
-      console.error(err instanceof Error ? err.message : String(err));
-    }
-    process.exitCode = 1;
-  })
-  .finally(() => {
-    void db.$disconnect();
-  });
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  run(process.argv)
+    .catch((err) => {
+      if (err instanceof UsageError) {
+        console.error(err.message);
+        usage();
+      } else {
+        console.error(err instanceof Error ? err.message : String(err));
+      }
+      process.exitCode = 1;
+    })
+    .finally(() => {
+      void db.$disconnect();
+    });
+}

@@ -1,25 +1,52 @@
 import chromium from '@sparticuz/chromium';
 import puppeteer from 'puppeteer-core';
 import { assertPublicUrl } from './ssrfGuard';
+import { collectJsonResult } from './renderJson';
+import type { PaginationSpec } from '../../lib/feeds/apiAdapter';
 
 /**
  * Headless render of a page (WP-17b) — the Vercel `@sparticuz/chromium` path. Launches
- * serverless Chromium, loads the URL, loop-clicks any generic "load more" control
- * (paginated TOCs), and returns the DOM as `{ status, finalUrl, html }` for `parseToc`.
- * Node-only (Puppeteer), so it lives under `server/render/`, not `lib/`. Interaction
- * selectors are generic (by visible text) — no per-site names in the repo; site-specific
- * overrides belong in data.
+ * serverless Chromium, loads the URL, and either (a) detects a JSON resource and returns its
+ * raw body — looping every page of a paginated JSON API in-page when `opts.pagination` (WP-45b)
+ * is given, all inside this one browser session — or (b) falls back to loop-clicking any
+ * generic "load more" control (paginated TOCs) and returns the DOM as `{ status, finalUrl,
+ * html }` for `parseToc`. Node-only (Puppeteer), so it lives under `server/render/`, not `lib/`.
+ * Interaction selectors are generic (by visible text) — no per-site names in the repo;
+ * site-specific overrides belong in data.
  *
- * SSRF: every request (navigation + subresource) is re-validated with the DNS-resolving
- * guard, so redirects/subresources can't reach an internal address. The caller is expected
- * to have already validated `url` itself before calling.
+ * The JSON page loop itself (union/stop condition) is `collectJsonResult` in `renderJson.ts` —
+ * pulled out and unit-tested there without Puppeteer; the only browser-dependent piece is
+ * `jsonPageFetch` below, one raw same-origin fetch per page.
+ *
+ * SSRF: every request (navigation + subresource, including the in-page JSON fetch(es)) is
+ * re-validated with the DNS-resolving guard, so redirects/subresources can't reach an internal
+ * address. The caller is expected to have already validated `url` itself before calling.
  */
 
 const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 const LOAD_MORE = 'load more|show more|more chapters';
 
-export async function renderPage(url: string): Promise<{ status: number; finalUrl: string; html: string }> {
+/**
+ * Runs INSIDE the browser via `page.evaluate` (Puppeteer serializes this via `toString()`), so
+ * it must stay self-contained — only its own parameter + browser globals (`fetch`), no closures
+ * over anything else in this module. `credentials: 'include'` carries the page's cf_clearance
+ * cookie (set by `goto` solving a CF challenge, if any) into the same-origin fetch.
+ */
+async function jsonPageFetch(u: string): Promise<{ status: number; body: string } | null> {
+  try {
+    const r = await fetch(u, { credentials: 'include' });
+    if (!/\bjson\b/i.test(r.headers.get('content-type') ?? '')) return null;
+    return { status: r.status, body: await r.text() };
+  } catch {
+    return null;
+  }
+}
+
+export async function renderPage(
+  url: string,
+  opts: { pagination?: PaginationSpec } = {},
+): Promise<{ status: number; finalUrl: string; html: string }> {
   let browser: Awaited<ReturnType<typeof puppeteer.launch>> | undefined;
   try {
     browser = await puppeteer.launch({
@@ -52,6 +79,21 @@ export async function renderPage(url: string): Promise<{ status: number; finalUr
 
     const resp = await page.goto(url, { waitUntil: 'networkidle2', timeout: 45_000 });
     await new Promise((r) => setTimeout(r, 2_000)); // let client-rendered lists settle
+
+    // WP-45b: JSON resource. `page.content()` on a JSON navigation is the browser's JSON-VIEWER
+    // HTML, not the raw body. Once `goto` has (for a CF-gated endpoint) triggered + solved the
+    // challenge and left us on the domain with the cf_clearance cookie, in-page same-origin
+    // fetch(es) (via `jsonPageFetch`) reuse that cookie and return raw JSON. When `pagination`
+    // is set, `collectJsonResult` drives N in-page fetches — still ONE browser session, never
+    // one render per page — and returns the unioned root array. Still SSRF-guarded via the
+    // request interception above.
+    const jsonResult = await collectJsonResult(url, opts.pagination, (u) => page.evaluate(jsonPageFetch, u));
+    if (jsonResult) {
+      // one browser, N in-page pages — the budget signal; flag cap-hit so a truncated list isn't
+      // mistaken for a series that naturally ended after N pages.
+      console.log(`[render] json pages=${jsonResult.pages}${jsonResult.capped ? ' (capped, may be truncated)' : ''}`);
+      return { status: jsonResult.status, finalUrl: page.url(), html: jsonResult.body };
+    }
 
     // Loop-click a "load more" control until it's gone (paginated TOCs).
     for (let i = 0; i < 60; i++) {
