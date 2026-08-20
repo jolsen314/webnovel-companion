@@ -121,8 +121,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 | ID | Work package | Status | Depends on |
 |----|--------------|--------|------------|
 | WP-NOTES | Detail-page notes UI — a notes textarea on the series detail page → the existing `PATCH /api/series/[id]` (`notes` is already validated + persisted; only the UI is missing). Pairs with link-only entries (manual tracking) | `NEXT` | WP-10 |
-| WP-52 | Poll-time hard-fail render escalation — when a **PLAIN** source's poll fetch fails with a **Cloudflare signature (403 / HTTP_4XX)** and a renderer is available, escalate that poll to **RENDER** and persist `fetchMode = RENDER`. The **poll-time analog of WP-46's add-time hard-fail escalation**, and the current poll escalation's blind spot: it handles *"rendered too few"* (under-fetch / regression) but **not** *"the fetch was blocked."* Affects **every** CF-guarded source that landed as PLAIN — those silently stop getting chapters until a manual backfill — not just the one seen in local testing. Test-first (the escalation decision + an integration test) | `TODO` | WP-46, WP-17b |
-| WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` + schema + cron wiring **done**; **editor UI + push delivery (WP-09) remain** (picking up later) | `TODO` | WP-07, WP-10 |
+| WP-52 | Poll-time hard-fail render escalation — when a **PLAIN** source's poll fetch fails with a **Cloudflare signature (403 / HTTP_4XX)** and a renderer is available, escalate that poll to **RENDER** and persist `fetchMode = RENDER`. The **poll-time analog of WP-46's add-time hard-fail escalation**, and the current poll escalation's blind spot: it handles *"rendered too few"* (under-fetch / regression) but **not** *"the fetch was blocked."* Affects **every** CF-guarded source that landed as PLAIN — those silently stop getting chapters until a manual backfill — not just the one seen in local testing. Test-first (the escalation decision + an integration test) | `TODO` | WP-46, WP-17b || WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` + schema + cron wiring **done**; **editor UI + push delivery (WP-09) remain** (picking up later) | `TODO` | WP-07, WP-10 |
 | WP-30b | `lib/feeds/title.ts` extraction fixes — **(1) consent/cookie-banner `<h1>` reject-list**: the sole `<h1>` on some sites is a CCPA/cookie banner, so it's grabbed as the title; treat a boilerplate/consent `<h1>` as not-a-title (small known-phrase reject-list and/or skip an `<h1>` inside a consent/cookie container) and fall through to `og:title` → `<title>`. **(2) HTML-entity decode at extraction**: `extractSeriesTitle` stores the page `<h1>`/`og:title`/`<title>` without decoding HTML entities (`&#8217;`/`&#8216;`/`&#8220;`/`&#038;`/`&nbsp;` bake into the DB as raw codes instead of glyphs); decode named + numeric entities at extraction so new adds are clean and WP-30's non-manual backfill self-heals existing rows (display-side decode fallback stays WP-28). Backend/pure `lib/feeds/title.ts` fix; TDD | `TODO` | WP-30 |
 | WP-28 | Frontend styling & theming — ordering, feed-page vs library split, theme system (night default + cultivation ancient-scroll, sci-fi holographic-panel), long-title readability (wrap/clamp vs ellipsis) | `TODO` | WP-10 |
 | WP-18 | Completed shelf + backfill + "Move to Completed?" | `TODO` | WP-10 |
@@ -140,6 +139,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 | WP-47 | *(low)* Client resubscribe on VAPID key mismatch — `resyncSubscription` re-posts a stale browser sub whose `applicationServerKey` ≠ current key, so a 403-pruned sub churns (prune→re-add) and the client shows "subscribed" while receiving nothing; detect the key mismatch on load and unsubscribe + re-subscribe under the new key. Makes key rotation self-healing on the client | `TODO` | WP-09 |
 | WP-APIZERO | *(low)* API-source parsed-zero regression signal — when an API source's fetch succeeds (200) but `parseApiChapters` yields fewer chapters than stored (or 0 while stored > 0) — a misconfigured descriptor or a drifted API shape — surface a health nudge / re-probe instead of failing silently. Today an API source has no escalation (render escalation is PAGE_WATCH-only), so a broken descriptor looks identical to a healthy-but-quiet source. Mirror PAGE_WATCH's `read < stored` regression signal (`poll.ts`). Non-destructive (`diffChapters` never deletes). Sibling to WP-16 (host health) / WP-45b | `TODO` | WP-45, WP-16 |
 | WP-PAGECOST | *(low)* Poll time-budget under-counts paginated PLAIN API groups — `groupCostMs` (`poll.ts`) charges a paginated PLAIN API source group a single flat `PLAIN_COST_MS`, but `fetchApiPages` may issue up to `maxPages` (default 20) sequential GETs for that one group. Low risk today (270s budget, few cadence-gated paginated API sources), but the guard's wall-clock estimate under-costs any group whose pagination actually spans multiple pages. Revisit by weighting a paginated PLAIN group's cost by an expected/observed page count instead of the flat constant. Sibling to WP-41 (poll time-budget guard) / WP-45b | `TODO` | WP-41, WP-45b |
+| WP-53 | *(low — convenience; the poll is generally sufficient)* Make backfill API-aware + re-enable its button on API sources — `backfillFromToc`/`backfillPorts` only page-watch `source.url`, so an **API source (WP-45) can't be backfilled** (CLI / route / `switchToPageWatch` seed no-op → `added 0`); only the **poll** populates it. Teach the backfill path the poll's `apiUrl ?? feedUrl ?? tocUrl ?? url` + `apiMap` + `fetchApiPages`/`parseApiChapters`, and un-hide the "Backfill from TOC" button for `type === 'API'` (gated off in `SeriesDetail.tsx` during WP-45) | `TODO` | WP-45, WP-33 |
 | WP-WORKID | *(low, future)* Map a source to a community novel-aggregator's canonical work ID (lists a work's alternative/translated titles) for automatic cross-translation identity — described generically here (no real aggregator name, anonymity rule) | `TODO` | WP-05, WP-17 |
 | WP-31 | *(low — see WP-45)* Renderer per-host interaction descriptor — clicks Free/Premium **tabs** (+ tab-membership access) **and client-side numbered pagination** ("Prev/Next" TOCs that replace ~50/page → click Next & union pages). **Only for interaction sites with NO data API** — where a source exposes a chapter API, **WP-45 supersedes this** (a probe found the main tab/pagination sources *do* have APIs → dropped in priority). | `TODO` | WP-17b, WP-20 |
 | WP-SIMPLIFY | *(low, ongoing — pick up opportunistically)* Behavior-preserving code simplification — the backlog of DRY/clarity/consistency refinements found by a read-only `code-simplifier` pass. **Details, ranked tiers, and the explicit "don't touch" list live in [SIMPLIFICATION-PLAN.md](SIMPLIFICATION-PLAN.md)** — not enumerated as WPs here. Both structural items landed (**A1** `backfill` pure-core extraction out of `services/index.ts`; **A2** Puppeteer out of `api/render/route.ts`) and the entire ranked backlog (Tiers B, C, D) is now worked through as of 2026-08-18 — the row stays open only to re-run the `code-simplifier` against future drift. Follow project rituals (TDD for `lib/`, `npm test` + `typecheck` before "done"). | `TODO` | — |
@@ -928,6 +928,32 @@ Pre-existing; deferred.
 - **CLI:** `set-api-descriptor --render` is functional; the `--map` JSON carries the `pagination` block (validated: string `pageParam` + positive `perPage`).
 - The union/stop logic is unit-tested (`collectJsonResult` with an injected page-fetch, `fetchApiPages` with fake ports); the one-browser guarantee is the call-count test; the real CF end-to-end is owner-validated on deploy (a `[render] json pages=N` log confirms one browser + N in-page pages).
 
+### WP-53 — Make backfill API-aware + re-enable the backfill button on API sources
+
+**Priority: low (convenience).** The **poll already populates API sources**; this only enables *on-demand*
+backfill/repair (CLI + button) instead of waiting for the next poll — nice-to-have, not blocking.
+
+**Motivation (owner testing, 2026-08-20):** after switching a CF-gated source to an **API descriptor** (WP-45/45b:
+`type=API`, `apiUrl`, `apiMap`, `fetchMode=RENDER`), a `db:cleanup backfill … --render` returned **`added 0`** — the
+backfill **doesn't use the API.** `backfillPorts.loadSeriesMeta` only surfaces `sourceUrl`/`tocUrl`, and `runBackfill`
+just fetches the page + `parseToc`s it, so for an API source it rendered the page **DOM** (the paginated TOC's first
+page = the chapters it already had) instead of paging the JSON API → found nothing new. The **poll** is API-aware
+(`pollSource` uses `apiUrl ?? feedUrl ?? tocUrl ?? url` + `apiMap` + `fetchApiPages`); the backfill path predates WP-45
+and was never taught the branch. So an API source can *only* be populated by a poll — the CLI `backfill`, the
+`/api/series/[id]/backfill` route, `backfillWithEscalation`, and `switchToPageWatch`'s seed are all dead ends for it.
+
+**Work:**
+1. **API-aware backfill.** Have `backfillPorts` load `apiUrl`/`apiMap`, and `runBackfill`/`backfillFromToc` branch on
+   `type === 'API'` to fetch via `fetchApiPages` (render, paginated) + `parseApiChapters` — mirroring the poll's
+   `apiUrl ?? feedUrl ?? tocUrl ?? url` precedence — so an API source seeds/repairs its full chapter list **with
+   `locked` access** from the backfill, same as the poll. Keep the existing plain→render escalation semantics.
+2. **Re-enable the button for API sources.** The in-app **"Backfill from TOC"** button is hidden for `type === 'API'`
+   (`SeriesDetail.tsx` `sourceType !== 'API'` gate, added during WP-45 because backfill didn't work for API). Un-hide it
+   once (1) lands.
+
+Test-first (the API branch in `runBackfill`; the button-visibility change). Small, self-contained. Unblocks
+one-shot population/repair of API sources (today they wait for the next poll).
+
 ### WP-48 — Blogger feed-path in `guessFeedUrls`
 
 **Motivation (owner testing, 2026-08-10):** a Blogger (`*.blogspot.com`) series can't be added — throws "couldn't
@@ -1032,6 +1058,13 @@ optionally `deactivate-source`) so WP-49-style recoveries are fully tool-support
 
 ## Changelog
 
+- **2026-08-20** — **Filed WP-53: make backfill API-aware + re-enable its button on API sources.** After switching a
+  CF-gated source to an API descriptor (WP-45) and running `db:cleanup backfill … --render`, it returned **`added 0`**:
+  `backfillFromToc`/`backfillPorts` page-watch `source.url` and never read `apiUrl`/`apiMap`, so an API source rendered
+  the page DOM (first TOC page = what it already had) instead of paging the JSON API. The **poll** is API-aware
+  (`apiUrl ?? feedUrl ?? tocUrl ?? url` + `fetchApiPages`); backfill predates WP-45. **WP-53:** teach the backfill path
+  the same branch, and **un-hide the "Backfill from TOC" button for `type === 'API'`** (gated off in `SeriesDetail`
+  during WP-45). So an API source can be populated/repaired on demand, not only by the next poll. `TODO`.
 - **2026-08-20** — **WP-45b DONE — CF-gated render transport + paginated API sources.** The renderer clears Cloudflare and returns clean JSON (in-page fetch reusing the cf_clearance cookie; spike-validated); API sources paginate + union every page across both transports — PLAIN loops Node-side, RENDER makes one render call that loops in-page (one browser per series per poll, proven by a call-count test), short-page stop + cap 20 + log, per-descriptor perPage. `set-api-descriptor --render` now functional; the latent WP-45 plain-pagination gap is closed too.
 - **2026-08-18** — **WP-45 follow-up: probe hardening (multi-candidate).** `probeForApi` now returns *all*
   `.json` `data-*` candidates on the page (deduped, document order, capped at 5) instead of only the first; add-time
