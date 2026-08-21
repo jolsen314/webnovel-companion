@@ -87,6 +87,27 @@ export async function updateSeries(id: string, patch: SeriesUpdate): Promise<{ i
     seriesData.title = patch.title;
     seriesData.titleIsManual = true;
   }
+  if (patch.releaseSchedule !== undefined) {
+    const s = patch.releaseSchedule;
+    if (s.kind === 'NONE') {
+      // Clear every schedule column, incl. the de-dupe stamp, so a re-added schedule starts fresh.
+      seriesData.releaseScheduleKind = null;
+      seriesData.releaseCadenceDays = null;
+      seriesData.releaseAnchoredOn = null;
+      seriesData.releaseWeekdays = [];
+      seriesData.releaseEventKind = 'NEW_CHAPTER';
+      seriesData.scheduleLastNotifiedAt = null;
+    } else {
+      seriesData.releaseScheduleKind = s.kind;
+      seriesData.releaseCadenceDays = s.kind === 'INTERVAL' ? s.cadenceDays : null;
+      seriesData.releaseAnchoredOn = s.kind === 'INTERVAL' ? s.anchoredOn : null;
+      seriesData.releaseWeekdays = s.kind === 'WEEKLY' ? s.weekdays : [];
+      seriesData.releaseEventKind = s.eventKind;
+      // Stamp "now" so the first notification is the NEXT predicted release, not a backfill ping
+      // for a release that already happened before the owner set the schedule up.
+      seriesData.scheduleLastNotifiedAt = new Date();
+    }
+  }
   if (Object.keys(seriesData).length > 0) ops.push(db.series.update({ where: { id }, data: seriesData }));
 
   if (patch.lastReadChapterId !== undefined) {

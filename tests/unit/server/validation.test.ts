@@ -82,6 +82,56 @@ describe('parseSeriesUpdate', () => {
   });
 });
 
+describe('parseSeriesUpdate — releaseSchedule (WP-29)', () => {
+  test('accepts an INTERVAL schedule and parses the anchor to a Date', () => {
+    const r = parseSeriesUpdate({
+      releaseSchedule: { kind: 'INTERVAL', cadenceDays: 3, anchoredOn: '2026-08-15', eventKind: 'NEW_CHAPTER' },
+    });
+    expect(r).toEqual({
+      ok: true,
+      value: { releaseSchedule: { kind: 'INTERVAL', cadenceDays: 3, anchoredOn: new Date('2026-08-15'), eventKind: 'NEW_CHAPTER' } },
+    });
+  });
+
+  test('accepts a WEEKLY schedule with unique weekdays', () => {
+    const r = parseSeriesUpdate({ releaseSchedule: { kind: 'WEEKLY', weekdays: [1, 3, 5], eventKind: 'UNLOCKED' } });
+    expect(r).toEqual({
+      ok: true,
+      value: { releaseSchedule: { kind: 'WEEKLY', weekdays: [1, 3, 5], eventKind: 'UNLOCKED' } },
+    });
+  });
+
+  test('accepts a NONE schedule (clear)', () => {
+    expect(parseSeriesUpdate({ releaseSchedule: { kind: 'NONE' } })).toEqual({
+      ok: true,
+      value: { releaseSchedule: { kind: 'NONE' } },
+    });
+  });
+
+  test('defaults eventKind to NEW_CHAPTER when omitted', () => {
+    const r = parseSeriesUpdate({ releaseSchedule: { kind: 'WEEKLY', weekdays: [0] } });
+    expect(r.ok && r.value.releaseSchedule).toEqual({ kind: 'WEEKLY', weekdays: [0], eventKind: 'NEW_CHAPTER' });
+  });
+
+  test.each([
+    [{ kind: 'INTERVAL', cadenceDays: 0, anchoredOn: '2026-08-15' }, 'cadence 0'],
+    [{ kind: 'INTERVAL', cadenceDays: 400, anchoredOn: '2026-08-15' }, 'cadence too large'],
+    [{ kind: 'INTERVAL', cadenceDays: 2.5, anchoredOn: '2026-08-15' }, 'non-integer cadence'],
+    [{ kind: 'INTERVAL', cadenceDays: 3, anchoredOn: 'not-a-date' }, 'bad anchor'],
+    [{ kind: 'INTERVAL', cadenceDays: 3 }, 'missing anchor'],
+    [{ kind: 'WEEKLY', weekdays: [] }, 'empty weekdays'],
+    [{ kind: 'WEEKLY', weekdays: [7] }, 'weekday out of range'],
+    [{ kind: 'WEEKLY', weekdays: [1.5] }, 'non-integer weekday'],
+    [{ kind: 'WEEKLY', weekdays: [1, 1] }, 'duplicate weekday'],
+    [{ kind: 'WEEKLY', weekdays: [1], eventKind: 'BOGUS' }, 'bad eventKind'],
+    [{ kind: 'BOGUS' }, 'unknown kind'],
+    [{ kind: 'INTERVAL', cadenceDays: 3, anchoredOn: '2026-08-15', eventKind: 'BOGUS' }, 'bad eventKind interval'],
+    ['not-an-object', 'non-object schedule'],
+  ])('rejects %j (%s)', (releaseSchedule, _why) => {
+    expect(parseSeriesUpdate({ releaseSchedule }).ok).toBe(false);
+  });
+});
+
 describe('parsePushSubscription', () => {
   test('accepts the web-push subscription shape', () => {
     const sub = { endpoint: 'https://push.example/xyz', keys: { p256dh: 'p', auth: 'a' } };

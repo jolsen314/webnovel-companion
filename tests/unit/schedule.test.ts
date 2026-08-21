@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { nextDueRelease, type ScheduleState } from '../../src/lib/schedule';
+import { nextDueRelease, describeSchedule, type ScheduleState } from '../../src/lib/schedule';
 
 const day = (iso: string) => new Date(`${iso}T00:00:00Z`);
 // July 2026 weekday reference: 13=Mon, 14=Tue, 15=Wed, 16=Thu, 17=Fri, 18=Sat, 19=Sun.
@@ -73,3 +73,19 @@ describe('nextDueRelease — no schedule', () => {
     expect(nextDueRelease({ schedule: null, lastNotifiedAt: null }, new Date('2026-07-16T09:00:00Z'))).toBeNull();
   });
 });
+
+describe('describeSchedule', () => {
+  test('INTERVAL every N days, with the event kind', () => {
+    expect(describeSchedule({ kind: 'INTERVAL', cadenceDays: 3, anchoredOn: day('2026-08-15') }, 'NEW_CHAPTER')).toBe(
+      'Every 3 days · new chapter',
+    );
+    expect(describeSchedule({ kind: 'INTERVAL', cadenceDays: 1, anchoredOn: day('2026-08-15') }, 'UNLOCKED')).toBe(
+      'Every day · now free',
+    );
+  });
+
+  test('WEEKLY lists weekdays in week order (Sun→Sat), with the event kind', () => {
+    expect(describeSchedule({ kind: 'WEEKLY', weekdays: [5, 1, 3] }, 'NEW_CHAPTER')).toBe('Mon, Wed, Fri · new chapter');
+    expect(describeSchedule({ kind: 'WEEKLY', weekdays: [0, 6] }, 'UNLOCKED')).toBe('Sun, Sat · now free');
+  });
+})

@@ -441,6 +441,47 @@ body {
   border-color: var(--color-glow);
   color: var(--color-ink);
 }
+.schedule__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.schedule__help {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-muted);
+  max-width: 42rem;
+}
+.schedule__interval {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.schedule__interval .control__label {
+  white-space: nowrap;
+}
+.schedule__num {
+  width: 4.5rem;
+}
+.schedule__body input[type='number'],
+.schedule__body input[type='date'] {
+  font: inherit;
+  color: var(--color-paper);
+  background: var(--color-ink);
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  padding: 0.4rem 0.55rem;
+}
+.schedule__body input:focus {
+  outline: none;
+  border-color: var(--color-glow);
+}
+.schedule__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
 .stars {
   display: flex;
   gap: 0.15rem;

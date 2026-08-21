@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { arrangeChapters, type ChapterDisplayMode } from '../../../../lib/reading';
 import { DeleteSeries } from './DeleteSeries';
+import { ScheduleEditor, type ScheduleInit } from './ScheduleEditor';
 import { SERIES_STATUSES, type SeriesStatus } from '../../../../lib/series';
 
 const DISPLAY_MODES: { mode: ChapterDisplayMode; label: string }[] = [
@@ -29,6 +30,8 @@ export function SeriesDetail(props: {
   chapters: ChapterLite[];
   lastReadChapterId: string | null;
   sourceType: 'FEED' | 'PAGE_WATCH' | 'API';
+  showSchedule: boolean;
+  scheduleInit: ScheduleInit;
 }) {
   const router = useRouter();
   const [status, setStatus] = useState<SeriesStatus>(props.status);
@@ -247,6 +250,8 @@ export function SeriesDetail(props: {
           </div>
         )}
       </section>
+
+      {props.showSchedule && <ScheduleEditor id={props.id} initial={props.scheduleInit} />}
 
       <DeleteSeries id={props.id} title={props.title} chapterCount={props.chapters.length} />
 

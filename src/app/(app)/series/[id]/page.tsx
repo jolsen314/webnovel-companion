@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { getSeries } from '../../../../server/services';
 import { EditableTitle } from './EditableTitle';
 import { SeriesDetail, type ChapterLite } from './SeriesDetail';
+import type { ScheduleInit } from './ScheduleEditor';
 import { SERIES_STATUSES } from '../../../../lib/series';
 
 export const dynamic = 'force-dynamic';
@@ -22,6 +23,15 @@ export default async function SeriesPage({ params }: { params: Promise<{ id: str
   const status = SERIES_STATUSES.includes(series.status as (typeof SERIES_STATUSES)[number])
     ? (series.status as (typeof SERIES_STATUSES)[number])
     : 'READING';
+
+  // Manual release schedule (WP-29): only offered for link-only sources (no fetch to notify from).
+  const scheduleInit: ScheduleInit = {
+    kind: series.releaseScheduleKind ?? 'NONE',
+    cadenceDays: series.releaseCadenceDays,
+    anchoredOn: series.releaseAnchoredOn ? series.releaseAnchoredOn.toISOString().slice(0, 10) : null,
+    weekdays: series.releaseWeekdays,
+    eventKind: series.releaseEventKind,
+  };
 
   return (
     <section className="detail">
@@ -54,6 +64,8 @@ export default async function SeriesPage({ params }: { params: Promise<{ id: str
         chapters={chapters}
         lastReadChapterId={series.progress?.lastReadChapterId ?? null}
         sourceType={active?.type ?? 'PAGE_WATCH'}
+        showSchedule={!!active?.linkOnly}
+        scheduleInit={scheduleInit}
       />
     </section>
   );

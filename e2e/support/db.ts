@@ -31,6 +31,8 @@ export interface SeedSeriesInput {
   sourceType?: 'FEED' | 'PAGE_WATCH';
   host?: string;
   chapters?: SeedChapter[];
+  /** Mark the source link-only (excluded from polling) — enables the WP-29 schedule editor. */
+  linkOnly?: boolean;
 }
 
 /** Seed one owned series with a source + chapters, directly via Prisma (no network add flow).
@@ -47,6 +49,7 @@ export async function seedSeries(input: SeedSeriesInput): Promise<{ id: string }
           url: `https://${host}/series/${encodeURIComponent(input.title)}/`,
           host,
           type,
+          ...(input.linkOnly ? { linkOnly: true } : {}),
           ...(type === 'FEED'
             ? { feedUrl: `https://${host}/feed/`, matchType: 'WHOLE_FEED', matchValue: null }
             : {}),
