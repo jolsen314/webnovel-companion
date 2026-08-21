@@ -138,37 +138,32 @@ export function ScheduleEditor(props: { id: string; initial: ScheduleInit }) {
           </label>
 
           {kind === 'INTERVAL' && (
-            <div className="schedule__row">
-              <label className="control">
-                <span className="control__label">Every</span>
-                <input
-                  type="number"
-                  className="schedule__num"
-                  min={1}
-                  max={365}
-                  value={cadenceDays}
-                  disabled={busy}
-                  aria-label="Cadence in days"
-                  onChange={(e) => {
-                    setCadenceDays(e.target.value);
-                    setHint(null);
-                  }}
-                />
-                <span className="control__label">days, from</span>
-              </label>
-              <label className="control">
-                <span className="control__label">A recent release</span>
-                <input
-                  type="date"
-                  value={anchoredOn}
-                  disabled={busy}
-                  aria-label="A recent release date"
-                  onChange={(e) => {
-                    setAnchoredOn(e.target.value);
-                    setHint(null);
-                  }}
-                />
-              </label>
+            <div className="schedule__interval">
+              <span className="control__label">Every</span>
+              <input
+                type="number"
+                className="schedule__num"
+                min={1}
+                max={365}
+                value={cadenceDays}
+                disabled={busy}
+                aria-label="Cadence in days"
+                onChange={(e) => {
+                  setCadenceDays(e.target.value);
+                  setHint(null);
+                }}
+              />
+              <span className="control__label">days, from a recent release</span>
+              <input
+                type="date"
+                value={anchoredOn}
+                disabled={busy}
+                aria-label="A recent release date"
+                onChange={(e) => {
+                  setAnchoredOn(e.target.value);
+                  setHint(null);
+                }}
+              />
             </div>
           )}
 

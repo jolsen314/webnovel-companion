@@ -452,10 +452,14 @@ body {
   color: var(--color-muted);
   max-width: 42rem;
 }
-.schedule__row {
+.schedule__interval {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 0.9rem;
+  gap: 0.5rem;
+}
+.schedule__interval .control__label {
+  white-space: nowrap;
 }
 .schedule__num {
   width: 4.5rem;
