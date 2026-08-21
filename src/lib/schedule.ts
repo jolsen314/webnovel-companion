@@ -17,6 +17,28 @@ export interface ScheduleState {
   lastNotifiedAt: Date | null;
 }
 
+/** Short weekday labels, indexed 0 = Sun … 6 = Sat (matches `weekdays`/`weekdayOf`). */
+const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
+
+/**
+ * A human one-liner for a schedule + its event kind (WP-29) — used for the editor's collapsed
+ * preview. Pure and presentation-only. WEEKLY days are listed in week order regardless of input
+ * order; INTERVAL reads "Every N days" (or "Every day" at cadence 1).
+ */
+export function describeSchedule(schedule: ReleaseSchedule, eventKind: ReleaseEventKind): string {
+  const event = eventKind === 'UNLOCKED' ? 'now free' : 'new chapter';
+  if (schedule.kind === 'INTERVAL') {
+    const cadence = schedule.cadenceDays === 1 ? 'Every day' : `Every ${schedule.cadenceDays} days`;
+    return `${cadence} · ${event}`;
+  }
+  const days = [...schedule.weekdays]
+    .filter((d) => d >= 0 && d <= 6)
+    .sort((a, b) => a - b)
+    .map((d) => WEEKDAY_LABELS[d])
+    .join(', ');
+  return `${days} · ${event}`;
+}
+
 const MS_PER_DAY = 86_400_000;
 const dayIndex = (d: Date): number => Math.floor(d.getTime() / MS_PER_DAY);
 const dayToDate = (idx: number): Date => new Date(idx * MS_PER_DAY);

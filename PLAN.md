@@ -46,11 +46,17 @@ uncommitted notes." Real names/URLs live only in those local notes and in scratc
 
 ## Current focus
 
-> **NEXT: WP-29 — Manual release schedule (no-fetch fallback for blocked sites).** `lib/schedule.ts` + schema +
-> cron wiring already done; the **editor UI + push delivery (WP-09)** remain. Full priority order = the **▶ Active
-> queue** table.
+> **NEXT: WP-28 — Frontend styling & theming.** Ordering, feed-page vs library split, a theme system (night default
+> + cultivation ancient-scroll, sci-fi holographic-panel), and long-title readability. Full priority order = the **▶
+> Active queue** table.
 >
-> **Recently landed (newest first):** WP-30b (`lib/feeds/title.ts` extraction fixes — **(1)** a consent/cookie-banner
+> **Recently landed (newest first):** WP-29 (manual release-schedule editor — the no-fetch fallback for blocked
+> sites, **completing WP-29**; backend [`lib/schedule.ts` + `evaluateSchedules` + cron] and push delivery
+> [kind-specific copy + `pushScheduled` pref] already landed with WP-09, so this was the **editor UI + its API seam**:
+> `parseSeriesUpdate` accepts a `releaseSchedule` union [NONE/INTERVAL/WEEKLY + `eventKind`], `updateSeries` maps it to
+> the six schedule columns and **stamps `scheduleLastNotifiedAt=now`** so predictions start from the *next* release [not
+> a backfill ping]; a collapsible `ScheduleEditor` on the detail page **gated to link-only sources** [`showSchedule`],
+> pure `describeSchedule` preview; TDD [validation unit + `updateSeries` integration + `describeSchedule` unit] + 2 Playwright specs) · WP-30b (`lib/feeds/title.ts` extraction fixes — **(1)** a consent/cookie-banner
 > `<h1>` reject-list [known-phrase substrings: "we value your privacy", CCPA opt-out, cookie-notice strings] so a
 > CCPA/cookie `<h1>` isn't grabbed as the title, falling through to `og:title` → `<title>`; **(2)** HTML-entity decode
 > at extraction via `entities.decodeHTML` inside `clean()` so `&#8217;`/`&#038;`/`&nbsp;` land as glyphs, not raw codes
@@ -131,8 +137,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 
 | ID | Work package | Status | Depends on |
 |----|--------------|--------|------------|
-| WP-29 | Manual release schedule (no-fetch fallback for blocked sites) — `lib/schedule.ts` + schema + cron wiring **done**; **editor UI + push delivery (WP-09) remain** | `NEXT` | WP-07, WP-10 |
-| WP-28 | Frontend styling & theming — ordering, feed-page vs library split, theme system (night default + cultivation ancient-scroll, sci-fi holographic-panel), long-title readability (wrap/clamp vs ellipsis) | `TODO` | WP-10 |
+| WP-28 | Frontend styling & theming — ordering, feed-page vs library split, theme system (night default + cultivation ancient-scroll, sci-fi holographic-panel), long-title readability (wrap/clamp vs ellipsis) | `NEXT` | WP-10 |
 | WP-18 | Completed shelf + backfill + "Move to Completed?" | `TODO` | WP-10 |
 | WP-19 | Non-destructive re-pointing + "find new source" helper (also: on a duplicate add (WP-39), optionally offer to attach the pasted URL as an **alternate source** on the existing series rather than only rejecting) | `TODO` | WP-16, WP-18 |
 | WP-CLEANUP-UI | In-app cleanup surfacing `db:cleanup` (**merge** series, delete/reset chapters, edit source/TOC URL) — **merge** doubles as the manual same-work/different-translation resolver, the target of the add-page "Merge" affordance from WP-39b's create-then-annotate flow. *(Series-**delete** split out to WP-51.)* | `TODO` | WP-10 |
@@ -155,7 +160,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 
 ### ✅ Completed
 
-WP-00, WP-GH, WP-CI, WP-12 (bootstrap / CI / docs) · WP-01, WP-03 (pure diff / health) · WP-04, WP-05, WP-FE (schema, feed parse/discover, fetcher) · WP-06, WP-07, WP-08 (Next shell, services, API) · WP-09, WP-10, WP-AUTH, WP-11 (Web Push, library/detail UI, auth gate, deploy) · WP-17, WP-17b (page-watch + headless renderer) · WP-20 (paid→free "now free") · WP-33 (full-TOC backfill + `accessReconciled`) · WP-35 (TOC-order chapters + display toggle) · WP-36 (`parseToc` content scoping) · WP-38 (contaminated-series recovery script) · WP-42 (poll-once-per-feed + politeness) · WP-41 (poll time-budget guard + rotation) · WP-43 (frequent PLAIN-tier polling) · WP-27a (status-gated + cadence polling) · WP-39 (add-time dedup) · WP-37 (per-series chapter-TOC URL) · WP-30b (title extraction: consent-`<h1>` reject-list + HTML-entity decode) ·
+WP-00, WP-GH, WP-CI, WP-12 (bootstrap / CI / docs) · WP-01, WP-03 (pure diff / health) · WP-04, WP-05, WP-FE (schema, feed parse/discover, fetcher) · WP-06, WP-07, WP-08 (Next shell, services, API) · WP-09, WP-10, WP-AUTH, WP-11 (Web Push, library/detail UI, auth gate, deploy) · WP-17, WP-17b (page-watch + headless renderer) · WP-20 (paid→free "now free") · WP-33 (full-TOC backfill + `accessReconciled`) · WP-35 (TOC-order chapters + display toggle) · WP-36 (`parseToc` content scoping) · WP-38 (contaminated-series recovery script) · WP-42 (poll-once-per-feed + politeness) · WP-41 (poll time-budget guard + rotation) · WP-43 (frequent PLAIN-tier polling) · WP-27a (status-gated + cadence polling) · WP-39 (add-time dedup) · WP-37 (per-series chapter-TOC URL) · WP-30b (title extraction: consent-`<h1>` reject-list + HTML-entity decode) · WP-29 (manual release-schedule editor — link-only-gated) ·
 WP-39b (deeper add-dedup, re-scoped: tocUrl page-watch keying + create-then-annotate) · WP-48 (Blogger feed-path in `guessFeedUrls`) · WP-46 (add-time render escalation + poll regression guard) · WP-49 (page-watch divert for un-isolable multi-novel advertised feeds) · WP-34 (feed→TOC switch to lock-monitoring) · WP-30 (series title backfill + manual title-edit UI) · WP-51 (client-side delete series — detail + shelf) · WP-PW (Playwright E2E harness + WP-10/30/34/51 coverage + CI job) · WP-50 (link-only add when chapters can't be read) ·
 WP-45 (API-first adapter, plain-REST slice) · WP-45b (CF-gated render transport + paginated API sources) ·
 WP-NOTES (detail-page notes UI — collapsible, save-on-blur, content-aware default + truncated preview) ·
@@ -1070,6 +1075,24 @@ optionally `deactivate-source`) so WP-49-style recoveries are fully tool-support
 
 ## Changelog
 
+- **2026-08-20** — **WP-29 DONE — manual release-schedule editor (no-fetch fallback for blocked sites).** The last
+  piece of WP-29: the editor UI + its API seam (the pure `lib/schedule.ts`, `evaluateSchedules`, cron wiring, **and**
+  push delivery with kind-specific copy + the `pushScheduled` pref had all landed earlier — push delivery came with the
+  WP-09 push work, so the PLAN's "push delivery remains" was stale). **API seam:** `parseSeriesUpdate`
+  ([validation.ts](src/server/api/validation.ts)) accepts an optional `releaseSchedule` discriminated union — `NONE`
+  (clear), `INTERVAL {cadenceDays 1–365, anchoredOn (ISO date→Date), eventKind}`, `WEEKLY {weekdays (unique 0–6),
+  eventKind}` — with `eventKind` defaulting to `NEW_CHAPTER`; `updateSeries` ([series.ts](src/server/services/series.ts))
+  maps it onto the six schedule columns, clearing all of them (incl. `scheduleLastNotifiedAt`) on `NONE` and **stamping
+  `scheduleLastNotifiedAt = now`** when setting one, so `evaluateSchedules` fires for the *next* predicted release
+  rather than a backfill ping for a release that already happened. **UI:** a collapsible `ScheduleEditor`
+  ([ScheduleEditor.tsx](src/app/(app)/series/[id]/ScheduleEditor.tsx)) mirroring the Notes block — kind select →
+  conditional cadence-days + anchor-date inputs or 7 weekday toggles, a Predicts (New chapter / Now free) select, an
+  explicit Save; **rendered only when the active source is link-only** (`showSchedule={!!active?.linkOnly}` in the
+  detail page), so a still-fetching series can't double-notify. A pure `describeSchedule` (in `lib/schedule.ts`) drives
+  the collapsed one-line preview. **TDD:** `parseSeriesUpdate` unit (each kind, bounds, rejects), `updateSeries`
+  integration (INTERVAL/WEEKLY persist + stamp, `NONE` clears all six), `describeSchedule` unit; 2 Playwright specs
+  (link-only sets+persists a weekly schedule; a fetching source shows no editor). **490 unit + 120 integration + 14
+  E2E green, typecheck clean.** Queue advances to **WP-28**.
 - **2026-08-20** — **WP-30b DONE — `lib/feeds/title.ts` extraction fixes (consent-`<h1>` reject-list + HTML-entity
   decode).** Two pure-`lib/` hardenings of `extractSeriesTitle` ([title.ts](src/lib/feeds/title.ts)), TDD (8 new unit
   tests in [title.test.ts](tests/unit/feeds/title.test.ts)). **(1) Consent/cookie-banner `<h1>` reject-list:** on some

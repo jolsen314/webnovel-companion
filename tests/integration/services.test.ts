@@ -580,6 +580,48 @@ describe('updateSeries (real DB)', () => {
     expect(await updateSeries('nonexistent-id', { status: 'DROPPED' })).toBeNull();
   });
 
+  test('WP-29: sets an INTERVAL release schedule and stamps lastNotified so it starts next release', async () => {
+    const seriesId = await addAlpha();
+    const before = new Date();
+    const result = await updateSeries(seriesId, {
+      releaseSchedule: { kind: 'INTERVAL', cadenceDays: 3, anchoredOn: new Date('2026-08-15T00:00:00Z'), eventKind: 'UNLOCKED' },
+    });
+    expect(result).not.toBeNull();
+
+    const s = await db.series.findUniqueOrThrow({ where: { id: seriesId } });
+    expect(s.releaseScheduleKind).toBe('INTERVAL');
+    expect(s.releaseCadenceDays).toBe(3);
+    expect(s.releaseAnchoredOn).toEqual(new Date('2026-08-15T00:00:00Z'));
+    expect(s.releaseEventKind).toBe('UNLOCKED');
+    // Stamped at ~now so evaluateSchedules only fires for the NEXT predicted release, not a backfill.
+    expect(s.scheduleLastNotifiedAt).not.toBeNull();
+    expect(s.scheduleLastNotifiedAt!.getTime()).toBeGreaterThanOrEqual(before.getTime());
+  });
+
+  test('WP-29: sets a WEEKLY release schedule (weekdays + eventKind)', async () => {
+    const seriesId = await addAlpha();
+    await updateSeries(seriesId, { releaseSchedule: { kind: 'WEEKLY', weekdays: [1, 3, 5], eventKind: 'NEW_CHAPTER' } });
+
+    const s = await db.series.findUniqueOrThrow({ where: { id: seriesId } });
+    expect(s.releaseScheduleKind).toBe('WEEKLY');
+    expect(s.releaseWeekdays).toEqual([1, 3, 5]);
+    expect(s.releaseEventKind).toBe('NEW_CHAPTER');
+  });
+
+  test('WP-29: NONE clears every schedule column', async () => {
+    const seriesId = await addAlpha();
+    await updateSeries(seriesId, { releaseSchedule: { kind: 'WEEKLY', weekdays: [1, 3], eventKind: 'UNLOCKED' } });
+
+    await updateSeries(seriesId, { releaseSchedule: { kind: 'NONE' } });
+    const s = await db.series.findUniqueOrThrow({ where: { id: seriesId } });
+    expect(s.releaseScheduleKind).toBeNull();
+    expect(s.releaseCadenceDays).toBeNull();
+    expect(s.releaseAnchoredOn).toBeNull();
+    expect(s.releaseWeekdays).toEqual([]);
+    expect(s.releaseEventKind).toBe('NEW_CHAPTER');
+    expect(s.scheduleLastNotifiedAt).toBeNull();
+  });
+
   test('WP-30: setting title pins titleIsManual, and backfill then leaves it alone', async () => {
     const LANDING = 'https://ut.example/series/omega/';
     const { seriesId } = await created(addSeries(

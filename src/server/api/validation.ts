@@ -46,12 +46,67 @@ export function parseAddSeriesBody(input: unknown): ParseResult<AddSeriesBody> {
   return ok(value);
 }
 
+/** Valid `ReleaseEventKind` values (mirrors the Prisma enum) for runtime validation. */
+export const RELEASE_EVENT_KINDS = ['NEW_CHAPTER', 'UNLOCKED'] as const;
+export type ReleaseEventKind = (typeof RELEASE_EVENT_KINDS)[number];
+
+/**
+ * A manual release-schedule edit (WP-29), as accepted from the client. `NONE` clears the
+ * schedule; INTERVAL/WEEKLY set it. `anchoredOn` arrives as an ISO date string and is parsed
+ * to a Date here so the service persists a `DateTime` directly.
+ */
+export type SeriesScheduleUpdate =
+  | { kind: 'NONE' }
+  | { kind: 'INTERVAL'; cadenceDays: number; anchoredOn: Date; eventKind: ReleaseEventKind }
+  | { kind: 'WEEKLY'; weekdays: number[]; eventKind: ReleaseEventKind };
+
+const MAX_CADENCE_DAYS = 365;
+
+function parseReleaseSchedule(input: unknown): ParseResult<SeriesScheduleUpdate> {
+  if (!isObject(input)) return err('"releaseSchedule" must be an object.');
+
+  if (input.kind === 'NONE') return ok({ kind: 'NONE' });
+
+  // eventKind is optional and defaults to NEW_CHAPTER; when present it must be a known value.
+  let eventKind: ReleaseEventKind = 'NEW_CHAPTER';
+  if (input.eventKind !== undefined) {
+    if (!RELEASE_EVENT_KINDS.includes(input.eventKind as ReleaseEventKind)) {
+      return err('Invalid schedule "eventKind".');
+    }
+    eventKind = input.eventKind as ReleaseEventKind;
+  }
+
+  if (input.kind === 'INTERVAL') {
+    const { cadenceDays, anchoredOn } = input;
+    if (typeof cadenceDays !== 'number' || !Number.isInteger(cadenceDays) || cadenceDays < 1 || cadenceDays > MAX_CADENCE_DAYS) {
+      return err(`"cadenceDays" must be a whole number from 1 to ${MAX_CADENCE_DAYS}.`);
+    }
+    if (typeof anchoredOn !== 'string') return err('"anchoredOn" (a date) is required.');
+    const anchor = new Date(anchoredOn);
+    if (Number.isNaN(anchor.getTime())) return err('"anchoredOn" is not a valid date.');
+    return ok({ kind: 'INTERVAL', cadenceDays, anchoredOn: anchor, eventKind });
+  }
+
+  if (input.kind === 'WEEKLY') {
+    const { weekdays } = input;
+    if (!Array.isArray(weekdays) || weekdays.length === 0) return err('"weekdays" must be a non-empty array.');
+    if (!weekdays.every((d) => typeof d === 'number' && Number.isInteger(d) && d >= 0 && d <= 6)) {
+      return err('Each weekday must be an integer from 0 (Sun) to 6 (Sat).');
+    }
+    if (new Set(weekdays).size !== weekdays.length) return err('"weekdays" must not contain duplicates.');
+    return ok({ kind: 'WEEKLY', weekdays: weekdays as number[], eventKind });
+  }
+
+  return err('"releaseSchedule.kind" must be NONE, INTERVAL, or WEEKLY.');
+}
+
 export interface SeriesUpdate {
   status?: SeriesStatus;
   rating?: number;
   notes?: string;
   title?: string;
   lastReadChapterId?: string | null;
+  releaseSchedule?: SeriesScheduleUpdate;
 }
 
 export function parseSeriesUpdate(input: unknown): ParseResult<SeriesUpdate> {
@@ -84,6 +139,11 @@ export function parseSeriesUpdate(input: unknown): ParseResult<SeriesUpdate> {
       return err('"lastReadChapterId" must be a string or null.');
     }
     value.lastReadChapterId = input.lastReadChapterId;
+  }
+  if (input.releaseSchedule !== undefined) {
+    const parsed = parseReleaseSchedule(input.releaseSchedule);
+    if (!parsed.ok) return parsed;
+    value.releaseSchedule = parsed.value;
   }
 
   if (Object.keys(value).length === 0) return err('No fields to update.');
