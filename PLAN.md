@@ -442,15 +442,14 @@ system** beyond the current "night reading" identity — pluggable themes such a
 (primary) + `ai-toolkit:design-workflow` for tokens; gets its own brainstorm → spec when prioritized. Depends on WP-10
 (done).
 
-**Long chapter titles must be fully readable (owner, 2026-07-28).** Today the chapter row (`[num] [title] [mark]`)
-truncates the title to a single line: `.chapter__title` is `overflow:hidden; text-overflow:ellipsis; white-space:nowrap`
-([`globals.css`](src/app/globals.css) ~L349), so a long title (e.g. split-chapter names like "…Part 2 Chapter 407:
-Night and Light (3)") is cut off with "…" and the reader can't see the rest. Give some way to read the whole title —
-decide the mechanism in the design pass: **wrap by default** (drop `nowrap`; let the row grow — simplest, and titles
-are the primary content), a **multi-line clamp** (`-webkit-line-clamp: 2` + full text on tap/hover), an
-**expand-on-tap** disclosure, or at minimum a **`title=`/tooltip** fallback (weak on touch). Leaning wrap-by-default
-unless the row rhythm suffers. Keep the num + mark-read control aligned to the top of a wrapped row, not vertically
-centered on a tall one.
+**Long chapter titles must be fully readable (owner, 2026-07-28) — DONE 2026-08-20.** Shipped **wrap-by-default** for
+the detail-page chapter rows: `.chapter__title` dropped `overflow/ellipsis/nowrap` (so long titles like "…Part 2
+Chapter 407: Night and Light (3)" wrap to as many lines as needed), and `.chapter` flipped `align-items:center →
+flex-start` so `#num` + `mark read` stay top-aligned on a tall wrapped row rather than vertically centered (a small
+`.chapter__num` `padding-top` cap-aligns the mono number with the title's first line). The shelf **series title**
+(`.card__title`) got a **2-line `-webkit-line-clamp`** (owner's call); the shelf **latest-chapter line**
+(`.card__latest`) was left one-line. CSS-only ([`globals.css`](src/app/globals.css)); verified in the running app with
+seeded long titles + Playwright. The other WP-28 facets (ordering, feed-vs-library split, theme system) remain.
 
 **Add-page "similar series" notice polish (WP-39b follow-up, 2026-08-10).** When the add page shows the non-blocking
 "looks similar to X" notice ([`add/page.tsx`](<src/app/(app)/add/page.tsx>)), the URL input + "Add series" form stays
@@ -1075,6 +1074,16 @@ optionally `deactivate-source`) so WP-49-style recoveries are fully tool-support
 
 ## Changelog
 
+- **2026-08-20** — **WP-28 (slice) — long chapter/series title readability.** First facet of WP-28 (WP stays open;
+  ordering, feed-vs-library split, and the theme system remain). CSS-only, [globals.css](src/app/globals.css):
+  detail-page chapter rows now **wrap** — `.chapter__title` drops `overflow/ellipsis/nowrap` (adds `line-height:1.4`),
+  and `.chapter` flips `align-items:center → flex-start` so `#num` + `mark read` sit at the **top** of a wrapped row
+  (a small `.chapter__num` `padding-top` cap-aligns the mono number with the title's first line). The shelf series
+  title `.card__title` swaps one-line truncation for a **2-line `-webkit-line-clamp`**; the shelf latest-chapter line
+  (`.card__latest`) is left one-line by owner's call. No `lib/` logic → no unit tests; verified by driving the running
+  app against `webnovel_e2e` (seeded long titles) + Playwright screenshots (wrap, top-alignment, and the 2-line clamp
+  all confirmed). Remaining WP-28 title item — display-time HTML-entity decode as a catch-all — is untouched (root-cause
+  extraction decode already shipped as WP-30b).
 - **2026-08-20** — **WP-29 DONE — manual release-schedule editor (no-fetch fallback for blocked sites).** The last
   piece of WP-29: the editor UI + its API seam (the pure `lib/schedule.ts`, `evaluateSchedules`, cron wiring, **and**
   push delivery with kind-specific copy + the `pushScheduled` pref had all landed earlier — push delivery came with the
