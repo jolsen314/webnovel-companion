@@ -19,6 +19,7 @@ export default async function SeriesPage({ params }: { params: Promise<{ id: str
     title: c.title,
     number: c.number,
     url: c.url,
+    access: c.access,
   }));
   const status = SERIES_STATUSES.includes(series.status as (typeof SERIES_STATUSES)[number])
     ? (series.status as (typeof SERIES_STATUSES)[number])

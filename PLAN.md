@@ -50,7 +50,9 @@ uncommitted notes." Real names/URLs live only in those local notes and in scratc
 > readability facet shipped; the three remaining facets are now **WP-28a** (shelf ordering, NEXT), **WP-28b** (theme
 > system), and **WP-28c** (feed vs library split) — priority = the **▶ Active queue** table, reorderable by the owner.
 >
-> **Recently landed (newest first):** WP-28 (long chapter/series title readability — first facet: detail chapter rows
+> **Recently landed (newest first):** WP-28d (locked-chapter display — lucide `Lock` marker on `LOCKED` detail rows +
+> a persisted, clutter-guarded "Hide locked" filter; marker-only + no-sort per owner, so `arrangeChapters` untouched;
+> E2E in `controls.spec.ts`; picked up out of order, WP-28a stays NEXT) · WP-28 (long chapter/series title readability — first facet: detail chapter rows
 > **wrap** with `#num`/`mark read` top-aligned, shelf series title **2-line clamp**, shelf latest-chapter line left
 > one-line; CSS-only in `globals.css`, verified in the running app + Playwright; PR #22 — WP-28 stays open for its
 > three split children) · WP-29 (manual release-schedule editor — the no-fetch fallback for blocked
@@ -143,7 +145,6 @@ later-tier tables are reference only. `⭐` = load-bearing.
 | WP-28a | Shelf ordering — user-selectable library sort (recent-activity / unread-first / alphabetical / manual) + a sort control; choice persisted | `NEXT` | WP-10 |
 | WP-28b | Theme system — pluggable themes + a picker (night default + cultivation ancient-scroll, sci-fi holographic-panel); FOUC/hydration-safe token architecture | `TODO` | WP-10 |
 | WP-28c | Feed page vs library split — a cross-series "what's new across everything" river vs the per-series grid (decide one view or two) | `TODO` | WP-10 |
-| WP-28d | Locked-chapter display — dim / lock-marker on `LOCKED` rows (data already on `Chapter.access` from WP-20); optional "hide locked" filter + sort-locked-to-bottom mode | `TODO` | WP-20, WP-10 |
 | WP-18 | Completed shelf + backfill + "Move to Completed?" | `TODO` | WP-10 |
 | WP-19 | Non-destructive re-pointing + "find new source" helper (also: on a duplicate add (WP-39), optionally offer to attach the pasted URL as an **alternate source** on the existing series rather than only rejecting) | `TODO` | WP-16, WP-18 |
 | WP-CLEANUP-UI | In-app cleanup surfacing `db:cleanup` (**merge** series, delete/reset chapters, edit source/TOC URL) — **merge** doubles as the manual same-work/different-translation resolver, the target of the add-page "Merge" affordance from WP-39b's create-then-annotate flow. *(Series-**delete** split out to WP-51.)* | `TODO` | WP-10 |
@@ -167,7 +168,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 
 ### ✅ Completed
 
-WP-00, WP-GH, WP-CI, WP-12 (bootstrap / CI / docs) · WP-01, WP-03 (pure diff / health) · WP-04, WP-05, WP-FE (schema, feed parse/discover, fetcher) · WP-06, WP-07, WP-08 (Next shell, services, API) · WP-09, WP-10, WP-AUTH, WP-11 (Web Push, library/detail UI, auth gate, deploy) · WP-17, WP-17b (page-watch + headless renderer) · WP-20 (paid→free "now free") · WP-33 (full-TOC backfill + `accessReconciled`) · WP-35 (TOC-order chapters + display toggle) · WP-36 (`parseToc` content scoping) · WP-38 (contaminated-series recovery script) · WP-42 (poll-once-per-feed + politeness) · WP-41 (poll time-budget guard + rotation) · WP-43 (frequent PLAIN-tier polling) · WP-27a (status-gated + cadence polling) · WP-39 (add-time dedup) · WP-37 (per-series chapter-TOC URL) · WP-30b (title extraction: consent-`<h1>` reject-list + HTML-entity decode) · WP-29 (manual release-schedule editor — link-only-gated) ·
+WP-00, WP-GH, WP-CI, WP-12 (bootstrap / CI / docs) · WP-01, WP-03 (pure diff / health) · WP-04, WP-05, WP-FE (schema, feed parse/discover, fetcher) · WP-06, WP-07, WP-08 (Next shell, services, API) · WP-09, WP-10, WP-AUTH, WP-11 (Web Push, library/detail UI, auth gate, deploy) · WP-17, WP-17b (page-watch + headless renderer) · WP-20 (paid→free "now free") · WP-33 (full-TOC backfill + `accessReconciled`) · WP-35 (TOC-order chapters + display toggle) · WP-36 (`parseToc` content scoping) · WP-38 (contaminated-series recovery script) · WP-42 (poll-once-per-feed + politeness) · WP-41 (poll time-budget guard + rotation) · WP-43 (frequent PLAIN-tier polling) · WP-27a (status-gated + cadence polling) · WP-39 (add-time dedup) · WP-37 (per-series chapter-TOC URL) · WP-30b (title extraction: consent-`<h1>` reject-list + HTML-entity decode) · WP-29 (manual release-schedule editor — link-only-gated) · WP-28d (locked-chapter marker + hide-locked filter on the detail page) ·
 WP-39b (deeper add-dedup, re-scoped: tocUrl page-watch keying + create-then-annotate) · WP-48 (Blogger feed-path in `guessFeedUrls`) · WP-46 (add-time render escalation + poll regression guard) · WP-49 (page-watch divert for un-isolable multi-novel advertised feeds) · WP-34 (feed→TOC switch to lock-monitoring) · WP-30 (series title backfill + manual title-edit UI) · WP-51 (client-side delete series — detail + shelf) · WP-PW (Playwright E2E harness + WP-10/30/34/51 coverage + CI job) · WP-50 (link-only add when chapters can't be read) ·
 WP-45 (API-first adapter, plain-REST slice) · WP-45b (CF-gated render transport + paginated API sources) ·
 WP-NOTES (detail-page notes UI — collapsible, save-on-blur, content-aware default + truncated preview) ·
@@ -532,7 +533,12 @@ chapter + unlock/now-free events from WP-20). Needs a **brainstorm on IA** up fr
 **Depends:** WP-10 (done). **DoD:** decided IA documented in its spec; the feed view (if built) lists cross-series new
 chapters in time order and links through to the chapter/detail.
 
-### WP-28d — Locked-chapter display (dim / marker) + filter/sort
+### WP-28d — Locked-chapter display (dim / marker) + filter/sort (DONE 2026-08-21)
+
+**Shipped (2026-08-21):** lucide `Lock` marker on `LOCKED` rows (accent glyph, no dim) + a persisted **"Hide locked"**
+checkbox, clutter-guarded to series that actually have a locked chapter. **Marker-only, no sort** (owner call), so
+`arrangeChapters` was left untouched — the filter is a component-level `.filter`. E2E-covered in `controls.spec.ts`.
+See the changelog entry for the full note. Original brief below.
 
 **Goal (owner, 2026-08-20):** surface which chapters are **locked** on the series detail page — dim them and/or show a
 lock marker — and optionally **filter them out** or **sort them to the bottom**.
@@ -1190,6 +1196,18 @@ optionally `deactivate-source`) so WP-49-style recoveries are fully tool-support
 
 ## Changelog
 
+- **2026-08-21** — **WP-28d DONE — locked-chapter display (marker + hide-locked filter).** Picked up out of order
+  (owner request; WP-28a stays NEXT). `LOCKED` chapters on the detail page now carry a lucide `Lock` glyph in the
+  `--color-glow` accent (distinct from the read/unread color dimming the row already has), and a persisted **"Hide
+  locked"** checkbox filters them out. Scope trimmed at owner's call: **marker only** (no row dimming) and **no
+  sort** — so `arrangeChapters`/`lib/reading.ts` is untouched (the filter is a one-line presentation-level `.filter`,
+  not a pure seam). Plumbing was one field: `access` added to `ChapterLite` + the `page.tsx` map (`getSeries` already
+  returns it). The toggle is **clutter-guarded** — only rendered when the series actually has a `LOCKED` chapter, so
+  feed-only / all-`UNKNOWN` series are byte-for-byte unchanged. Persisted like the display-mode toggle
+  (`chapterHideLocked` localStorage key, hydration-safe: off on server render, applied in a mount effect). E2E-covered
+  in `controls.spec.ts` (seed helper gained `SeedChapter.access`): marker present on locked / absent on free, toggle
+  filters + persists across reload, and a negative assertion that a no-locked series never shows the toggle. Verified
+  in the running app (both states screenshotted). `npm test` 490 pass · typecheck clean · 15 E2E pass. No schema change.
 - **2026-08-21** — **Filed WP-54: API-source auto-probe + human docs for the API switchover.** Converting a CF-gated
   data-API site to the API path is a manual render-and-watch-the-Network + hand-build-the-map dance (a gitignored
   `/local/` helper now scripts it for one site); the add-time `probeForApi` (WP-45) only auto-detects the static-JSON

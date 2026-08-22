@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Lock } from 'lucide-react';
 import { arrangeChapters, type ChapterDisplayMode } from '../../../../lib/reading';
 import { DeleteSeries } from './DeleteSeries';
 import { ScheduleEditor, type ScheduleInit } from './ScheduleEditor';
@@ -13,12 +14,14 @@ const DISPLAY_MODES: { mode: ChapterDisplayMode; label: string }[] = [
   { mode: 'unread', label: 'Unread-first' },
 ];
 const DISPLAY_MODE_STORAGE_KEY = 'chapterDisplayMode';
+const HIDE_LOCKED_STORAGE_KEY = 'chapterHideLocked';
 
 export interface ChapterLite {
   id: string;
   title: string;
   number: number | null;
   url: string;
+  access: 'FREE' | 'LOCKED' | 'UNKNOWN';
 }
 
 export function SeriesDetail(props: {
@@ -50,15 +53,24 @@ export function SeriesDetail(props: {
   // Initialized to 'oldest' to match the server render; the stored preference (if any) is
   // applied in an effect after mount, so there's no hydration mismatch.
   const [mode, setMode] = useState<ChapterDisplayMode>('oldest');
+  // Same hydration-safe pattern as `mode`: default off on the server render, apply the
+  // stored preference in a mount effect. Only surfaced when the series has locked chapters.
+  const [hideLocked, setHideLocked] = useState(false);
 
   useEffect(() => {
     const stored = window.localStorage.getItem(DISPLAY_MODE_STORAGE_KEY);
     if (stored === 'oldest' || stored === 'newest' || stored === 'unread') setMode(stored);
+    setHideLocked(window.localStorage.getItem(HIDE_LOCKED_STORAGE_KEY) === '1');
   }, []);
 
   function chooseMode(next: ChapterDisplayMode) {
     setMode(next);
     window.localStorage.setItem(DISPLAY_MODE_STORAGE_KEY, next);
+  }
+
+  function chooseHideLocked(next: boolean) {
+    setHideLocked(next);
+    window.localStorage.setItem(HIDE_LOCKED_STORAGE_KEY, next ? '1' : '0');
   }
 
   /** Persist notes on blur, but only when they differ from what's stored (empty is a valid
@@ -126,6 +138,11 @@ export function SeriesDetail(props: {
     );
 
   const arranged = arrangeChapters(props.chapters, lastRead, mode);
+  // Only offer the hide-locked control when this series actually has locked chapters —
+  // feed-only / all-UNKNOWN series are unaffected. The filter is a plain presentation
+  // step layered on the chosen display order (no reading-lib change).
+  const hasLocked = props.chapters.some((c) => c.access === 'LOCKED');
+  const visible = hideLocked ? arranged.filter((c) => c.access !== 'LOCKED') : arranged;
 
   return (
     <>
@@ -210,6 +227,20 @@ export function SeriesDetail(props: {
             ))}
           </div>
         </div>
+
+        {hasLocked && (
+          <div className="control">
+            <span className="control__label">Locked</span>
+            <label className="control__check">
+              <input
+                type="checkbox"
+                checked={hideLocked}
+                onChange={(e) => chooseHideLocked(e.target.checked)}
+              />
+              Hide locked
+            </label>
+          </div>
+        )}
       </div>
 
       <section className="notes">
@@ -256,12 +287,17 @@ export function SeriesDetail(props: {
       <DeleteSeries id={props.id} title={props.title} chapterCount={props.chapters.length} />
 
       <ol className="chapters">
-        {arranged.map((c) => (
+        {visible.map((c) => (
           <li key={c.id} className={`chapter ${c.read ? 'chapter--read' : ''}`}>
             {c.number != null && <span className="chapter__num">#{c.number}</span>}
             <a className="chapter__title" href={c.url} target="_blank" rel="noreferrer">
               {c.title}
             </a>
+            {c.access === 'LOCKED' && (
+              <span className="chapter__lock" title="Locked (advance/paid chapter)" aria-label="Locked">
+                <Lock size={13} aria-hidden="true" />
+              </span>
+            )}
             <button
               type="button"
               className="chapter__mark"

@@ -550,6 +550,31 @@ body {
   border-color: var(--color-glow);
   color: var(--color-glow);
 }
+/* Lock marker on advance/paid (LOCKED) chapter rows — a muted glyph, distinct from the
+   read/unread color dimming the row already carries. */
+.chapter__lock {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-glow);
+  /* Mirror the mark-read button's vertical box (same padding + a transparent border) so the
+     glyph centers with the button rather than cap-aligning to the title's first line. */
+  padding: 0.2rem 0;
+  border: 1px solid transparent;
+}
+/* Inline checkbox control (e.g. Hide locked), sitting beside the segmented order control. */
+.control__check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font: inherit;
+  color: var(--color-paper);
+  cursor: pointer;
+}
+.control__check input {
+  accent-color: var(--color-glow);
+  cursor: pointer;
+}
 
 /* ── Login gate ─────────────────────────────────────────────────────────── */
 .login {
