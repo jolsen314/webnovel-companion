@@ -46,11 +46,14 @@ uncommitted notes." Real names/URLs live only in those local notes and in scratc
 
 ## Current focus
 
-> **NEXT: WP-28 — Frontend styling & theming.** Ordering, feed-page vs library split, a theme system (night default
-> + cultivation ancient-scroll, sci-fi holographic-panel), and long-title readability. Full priority order = the **▶
-> Active queue** table.
+> **NEXT: WP-28a — Shelf ordering.** WP-28 was split into pickup-able children (2026-08-20) after its long-title
+> readability facet shipped; the three remaining facets are now **WP-28a** (shelf ordering, NEXT), **WP-28b** (theme
+> system), and **WP-28c** (feed vs library split) — priority = the **▶ Active queue** table, reorderable by the owner.
 >
-> **Recently landed (newest first):** WP-29 (manual release-schedule editor — the no-fetch fallback for blocked
+> **Recently landed (newest first):** WP-28 (long chapter/series title readability — first facet: detail chapter rows
+> **wrap** with `#num`/`mark read` top-aligned, shelf series title **2-line clamp**, shelf latest-chapter line left
+> one-line; CSS-only in `globals.css`, verified in the running app + Playwright; PR #22 — WP-28 stays open for its
+> three split children) · WP-29 (manual release-schedule editor — the no-fetch fallback for blocked
 > sites, **completing WP-29**; backend [`lib/schedule.ts` + `evaluateSchedules` + cron] and push delivery
 > [kind-specific copy + `pushScheduled` pref] already landed with WP-09, so this was the **editor UI + its API seam**:
 > `parseSeriesUpdate` accepts a `releaseSchedule` union [NONE/INTERVAL/WEEKLY + `eventKind`], `updateSeries` maps it to
@@ -137,7 +140,10 @@ later-tier tables are reference only. `⭐` = load-bearing.
 
 | ID | Work package | Status | Depends on |
 |----|--------------|--------|------------|
-| WP-28 | Frontend styling & theming — ordering, feed-page vs library split, theme system (night default + cultivation ancient-scroll, sci-fi holographic-panel), long-title readability (wrap/clamp vs ellipsis) | `NEXT` | WP-10 |
+| WP-28a | Shelf ordering — user-selectable library sort (recent-activity / unread-first / alphabetical / manual) + a sort control; choice persisted | `NEXT` | WP-10 |
+| WP-28b | Theme system — pluggable themes + a picker (night default + cultivation ancient-scroll, sci-fi holographic-panel); FOUC/hydration-safe token architecture | `TODO` | WP-10 |
+| WP-28c | Feed page vs library split — a cross-series "what's new across everything" river vs the per-series grid (decide one view or two) | `TODO` | WP-10 |
+| WP-28d | Locked-chapter display — dim / lock-marker on `LOCKED` rows (data already on `Chapter.access` from WP-20); optional "hide locked" filter + sort-locked-to-bottom mode | `TODO` | WP-20, WP-10 |
 | WP-18 | Completed shelf + backfill + "Move to Completed?" | `TODO` | WP-10 |
 | WP-19 | Non-destructive re-pointing + "find new source" helper (also: on a duplicate add (WP-39), optionally offer to attach the pasted URL as an **alternate source** on the existing series rather than only rejecting) | `TODO` | WP-16, WP-18 |
 | WP-CLEANUP-UI | In-app cleanup surfacing `db:cleanup` (**merge** series, delete/reset chapters, edit source/TOC URL) — **merge** doubles as the manual same-work/different-translation resolver, the target of the add-page "Merge" affordance from WP-39b's create-then-annotate flow. *(Series-**delete** split out to WP-51.)* | `TODO` | WP-10 |
@@ -432,25 +438,26 @@ a novel via its NovelUpdates feed instead.
 > Explicitly **not** doing: pruning stored chapters for COMPLETED. It saves negligible space (see backlog) and costs
 > reading position (`lastReadChapterId` → a real `Chapter` row), the chapter list, and re-diff ability. YAGNI.
 
-### WP-28 — Frontend styling & theming
+### WP-28 — Frontend styling & theming (umbrella)
 
-UX-polish pass on the shipped library/detail UI (WP-10). Scope to design when picked up: **ordering** (how the shelf
-sorts — recent-activity, unread-first, alphabetical, manual); **feed page vs library** (a separate "what's new across
-everything" river distinct from the per-series library grid — decide whether they're one view or two); a **theme
-system** beyond the current "night reading" identity — pluggable themes such as *cultivation ancient-scroll* and
-*sci-fi holographic-panel*, selectable by the user; and **long chapter titles** (below). Uses `frontend-design`
-(primary) + `ai-toolkit:design-workflow` for tokens; gets its own brainstorm → spec when prioritized. Depends on WP-10
-(done).
+UX-polish program on the shipped library/detail UI (WP-10). **Split into pickup-able children (2026-08-20)** so each
+facet can be taken cold in its own session: the **long-title readability** facet shipped (below, DONE); the three
+remaining facets are now distinct WPs — **[WP-28a](#wp-28a--shelf-ordering)** (shelf ordering),
+**[WP-28b](#wp-28b--theme-system)** (theme system), **[WP-28c](#wp-28c--feed-page-vs-library-split)** (feed vs library
+split) — plus a later add, **[WP-28d](#wp-28d--locked-chapter-display-dim--marker--filtersort)** (locked-chapter
+display / filter / sort). All use `frontend-design` (primary) + `ai-toolkit:design-workflow` for tokens, each gets its
+own brainstorm → spec, and all depend on WP-10 (done). Two small **residual polish items** — the add-page "similar series"
+notice and the HTML-entity display-decode catch-all — stay under this umbrella (below the readability note); they're
+minor and not blocking any child.
 
-**Long chapter titles must be fully readable (owner, 2026-07-28).** Today the chapter row (`[num] [title] [mark]`)
-truncates the title to a single line: `.chapter__title` is `overflow:hidden; text-overflow:ellipsis; white-space:nowrap`
-([`globals.css`](src/app/globals.css) ~L349), so a long title (e.g. split-chapter names like "…Part 2 Chapter 407:
-Night and Light (3)") is cut off with "…" and the reader can't see the rest. Give some way to read the whole title —
-decide the mechanism in the design pass: **wrap by default** (drop `nowrap`; let the row grow — simplest, and titles
-are the primary content), a **multi-line clamp** (`-webkit-line-clamp: 2` + full text on tap/hover), an
-**expand-on-tap** disclosure, or at minimum a **`title=`/tooltip** fallback (weak on touch). Leaning wrap-by-default
-unless the row rhythm suffers. Keep the num + mark-read control aligned to the top of a wrapped row, not vertically
-centered on a tall one.
+**Long chapter titles must be fully readable (owner, 2026-07-28) — DONE 2026-08-20.** Shipped **wrap-by-default** for
+the detail-page chapter rows: `.chapter__title` dropped `overflow/ellipsis/nowrap` (so long titles like "…Part 2
+Chapter 407: Night and Light (3)" wrap to as many lines as needed), and `.chapter` flipped `align-items:center →
+flex-start` so `#num` + `mark read` stay top-aligned on a tall wrapped row rather than vertically centered (a small
+`.chapter__num` `padding-top` cap-aligns the mono number with the title's first line). The shelf **series title**
+(`.card__title`) got a **2-line `-webkit-line-clamp`** (owner's call); the shelf **latest-chapter line**
+(`.card__latest`) was left one-line. CSS-only ([`globals.css`](src/app/globals.css)); verified in the running app with
+seeded long titles + Playwright. The other WP-28 facets (ordering, feed-vs-library split, theme system) remain.
 
 **Add-page "similar series" notice polish (WP-39b follow-up, 2026-08-10).** When the add page shows the non-blocking
 "looks similar to X" notice ([`add/page.tsx`](<src/app/(app)/add/page.tsx>)), the URL input + "Add series" form stays
@@ -476,7 +483,83 @@ title backfill self-heals existing rows on the next page read. **(Now tracked as
 fix — same file.**)** **(b) catch-all — decode at display** in the
 library/detail title render, which fixes rows already stored encoded without waiting for a re-extract. Belongs partly
 in the data layer, filed here because the visible symptom + the display-decode safety net are frontend; stays under
-WP-28.
+WP-28 (the residual display-decode half; root-cause extraction decode shipped as WP-30b).
+
+### WP-28a — Shelf ordering
+
+**Goal:** give the library shelf a **user-selectable sort**. Today [`(app)/page.tsx`](<src/app/(app)/page.tsx>) renders
+whatever order `listSeries()` ([`server/services`](src/server/services)) returns — no control, no choice.
+
+**Scope to design when picked up:** which orderings to offer — **recent-activity** (latest chapter time, the likely
+default), **unread-first**, **alphabetical**, and possibly **manual** (pin/drag, heavier — needs a stored per-series
+order). Add a sort control to the shelf head (near "Your shelf · N series"). **Persist the choice** — mirror the
+existing chapter display-mode toggle in [`SeriesDetail.tsx`](<src/app/(app)/series/[id]/SeriesDetail.tsx>) (localStorage
++ SSR-safe default to avoid hydration mismatch), unless a server-side pref is wanted.
+
+**Likely shape:** the comparison is pure → a `lib/shelf.ts` `sortSeries(rows, mode)` (or extend `lib/reading.ts`) with
+**TDD** (stable tie-breaks, nulls-last for series with no chapters, each mode's ordering asserted). The page/control
+wiring is thin UI on top. **Skills:** `frontend-design`. **Depends:** WP-10 (done). **DoD:** control renders + persists;
+sort is a tested pure function; empty/no-chapter series sort sanely.
+
+### WP-28b — Theme system
+
+**Goal:** turn the single baked-in **"night reading"** identity into a **pluggable theme system** with a user picker,
+keeping night as the default and adding **cultivation ancient-scroll** + **sci-fi holographic-panel**.
+
+**Current state:** theme tokens are hard-coded in one `@theme` block and `:root { color-scheme: dark }` in
+[`globals.css`](src/app/globals.css) — there's no switching machinery.
+
+**Scope to design when picked up:** the **token architecture** (per-theme CSS custom-property sets keyed off a
+`[data-theme="…"]` attribute on the root, so components keep referencing `var(--color-…)` unchanged); **persistence +
+no-flash** (store the choice, apply it **before first paint** — an inline pre-hydration script or cookie-driven SSR
+attribute — so there's no FOUC or hydration mismatch, the trap the chapter-display and notes toggles already navigate);
+the **picker UI** (settings page, [`(app)/settings/page.tsx`](<src/app/(app)/settings/page.tsx>)); and the two new
+palettes/type treatments themselves. Largest of the three — the architecture is the load-bearing part; the two extra
+themes are content on top. **Skills:** `frontend-design` (primary) + `ai-toolkit:design-workflow` (tokens). **Depends:**
+WP-10 (done). **DoD:** switching themes is instant + persistent with no flash on reload; night is default and unchanged;
+both new themes ship and cover the whole app (shelf, detail, add, settings, login).
+
+### WP-28c — Feed page vs library split
+
+**Goal:** decide and build a cross-series **"what's new across everything"** river, distinct from the per-series
+**library grid** — the most conceptual of the three (it's an information-architecture decision before it's a build).
+
+**Scope to design when picked up:** **one view or two?** — a chronological feed of newly-seen chapters across *all*
+series (grouped by day / by series?) versus the current per-series card shelf ([`(app)/page.tsx`](<src/app/(app)/page.tsx>)).
+Decide **navigation** (tabs vs separate routes), the **default landing** view, and what the feed row shows (series +
+chapter + unlock/now-free events from WP-20). Needs a **brainstorm on IA** up front. **Skills:** `frontend-design`.
+**Depends:** WP-10 (done). **DoD:** decided IA documented in its spec; the feed view (if built) lists cross-series new
+chapters in time order and links through to the chapter/detail.
+
+### WP-28d — Locked-chapter display (dim / marker) + filter/sort
+
+**Goal (owner, 2026-08-20):** surface which chapters are **locked** on the series detail page — dim them and/or show a
+lock marker — and optionally **filter them out** or **sort them to the bottom**.
+
+**Data is already there (no schema work).** `Chapter.access` is an `AccessState` enum (`FREE | LOCKED | UNKNOWN`) set by
+the WP-20 paid→free tracking, with `becameFreeAt` when a locked chapter unlocks. The detail page just doesn't carry it
+to the UI yet: [`page.tsx`](<src/app/(app)/series/[id]/page.tsx>) maps `series.chapters` → `ChapterLite`
+(id/title/number/url only), dropping `access`. So the gap is **presentation + one field of plumbing**, not persistence.
+
+**Scope to design when picked up:**
+- **Plumb** `access` (and maybe `becameFreeAt`) through `ChapterLite` + the page map into
+  [`SeriesDetail.tsx`](<src/app/(app)/series/[id]/SeriesDetail.tsx>).
+- **Display** — dim `LOCKED` rows (muted color / reduced opacity) and/or a lock glyph/badge in the row
+  (`[num] [title] [🔒] [mark]`). Decide dim vs marker vs both; keep it legible against the read/unread dimming the row
+  already does. `UNKNOWN`-access chapters (feed-only sources with no lock data) render normally — no marker.
+- **Filter** — an optional "hide locked" toggle, sibling to the existing Show: Oldest/Newest/Unread-first segmented
+  control, persisted in localStorage like the display-mode toggle.
+- **Sort** — optionally push `LOCKED` chapters to the bottom. Cleanest as an extension to `arrangeChapters`
+  ([`lib/reading.ts`](src/lib/reading.ts)) — a lock-aware reordering layered on the chosen display mode — under **TDD**
+  (the reading lib is pure + already test-covered; locked-to-bottom is a natural new property). Decide whether it's a
+  new mode, a modifier on existing modes, or coupled to the filter toggle.
+
+**Skills:** `frontend-design`. **Depends:** WP-20 (lock state — done), WP-10 (detail UI — done). Builds directly on the
+shipped WP-28 long-title readability facet — same `SeriesDetail` chapter rows + `globals.css` `.chapter*`. (Not related
+to WP-28a, which sorts the *series cards on the shelf* — a different surface; WP-28d sorts/filters *chapters within one
+series*.) **DoD:** locked chapters are visually distinguishable on the detail page; the filter and/or sort behavior
+ships with its persistence; any `arrangeChapters` change is a tested pure function; `UNKNOWN`-access sources are
+unaffected.
 
 ### WP-30 — Series title backfill from TOC + manual title edit
 
@@ -1075,6 +1158,29 @@ optionally `deactivate-source`) so WP-49-style recoveries are fully tool-support
 
 ## Changelog
 
+- **2026-08-20** — **WP-28d filed — locked-chapter display (dim / marker) + filter/sort.** New WP-28 child (owner
+  request): show which chapters are `LOCKED` on the detail page (dim and/or a lock marker) and optionally hide them or
+  sort them to the bottom. Lock state already exists — `Chapter.access` (`FREE/LOCKED/UNKNOWN` + `becameFreeAt`) from
+  WP-20 — but the detail page drops it when mapping `series.chapters` → `ChapterLite`, so the work is presentation + one
+  field of plumbing (+ an optional pure `arrangeChapters` locked-to-bottom extension under TDD). Depends WP-20/WP-10
+  (both done); no schema change.
+- **2026-08-20** — **WP-28 split into pickup-able children.** With the long-title readability facet shipped, the three
+  remaining WP-28 facets were split into distinct, self-contained WPs so each can be picked up cold in its own session:
+  **WP-28a** (shelf ordering — user-selectable library sort + persisted control), **WP-28b** (theme system — pluggable
+  themes + picker, FOUC-safe token architecture, adds cultivation ancient-scroll + sci-fi holographic-panel), **WP-28c**
+  (feed page vs library split — cross-series "what's new" river vs the per-series grid). WP-28 stays as a thin umbrella
+  holding the readability note + two residual minor polish items (add-page notice, display-decode catch-all). Active
+  queue + Current focus updated; NEXT = WP-28a.
+- **2026-08-20** — **WP-28 (slice) — long chapter/series title readability.** First facet of WP-28 (WP stays open;
+  ordering, feed-vs-library split, and the theme system remain). CSS-only, [globals.css](src/app/globals.css):
+  detail-page chapter rows now **wrap** — `.chapter__title` drops `overflow/ellipsis/nowrap` (adds `line-height:1.4`),
+  and `.chapter` flips `align-items:center → flex-start` so `#num` + `mark read` sit at the **top** of a wrapped row
+  (a small `.chapter__num` `padding-top` cap-aligns the mono number with the title's first line). The shelf series
+  title `.card__title` swaps one-line truncation for a **2-line `-webkit-line-clamp`**; the shelf latest-chapter line
+  (`.card__latest`) is left one-line by owner's call. No `lib/` logic → no unit tests; verified by driving the running
+  app against `webnovel_e2e` (seeded long titles) + Playwright screenshots (wrap, top-alignment, and the 2-line clamp
+  all confirmed). Remaining WP-28 title item — display-time HTML-entity decode as a catch-all — is untouched (root-cause
+  extraction decode already shipped as WP-30b).
 - **2026-08-20** — **WP-29 DONE — manual release-schedule editor (no-fetch fallback for blocked sites).** The last
   piece of WP-29: the editor UI + its API seam (the pure `lib/schedule.ts`, `evaluateSchedules`, cron wiring, **and**
   push delivery with kind-specific copy + the `pushScheduled` pref had all landed earlier — push delivery came with the
