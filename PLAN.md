@@ -154,6 +154,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 | WP-14 | `lib/dedup.ts` (pure) — "already read this?" | `TODO` | WP-00 |
 | WP-15 | `lib/search.ts` (pure) — filter/query building | `TODO` | WP-00 |
 | WP-EXPORT | One-click data export (`/api/export` → JSON) — own-your-data insurance | `TODO` | WP-AUTH |
+| WP-54 | **API-source auto-probe + human docs for the API switchover** — the add-time `probeForApi` (WP-45) auto-detects only the **static-JSON SPA** shape (`data-*` → `.json`), not an **XHR-fetched** REST chapters API behind CF (the `…/v1/chapters?category=<id>` shape — manual today: render, watch the network tab, hand-build `--map`, `set-api-descriptor`; a `/local/` helper now scripts it for one site). Add a **render/XHR API detector** (infer url/title/lock fields + pagination + per-series id) + a **`db:cleanup probe-api <sourceId>`** command, and a **human guide** (new `docs/` page linked from README): the CF taxonomy, how to spot a usable JSON chapter API, the field-map/pagination/`per_page` gotchas, and a "can this site leverage the API path?" checklist. *(Auto-probe is convenience; the docs are the priority.)* | `TODO` | WP-45, WP-53 |
 | WP-RETRY | *(low)* Retry / auto-upgrade a link-only source — a manual "retry fetching chapters" that re-runs resolution on a `linkOnly` source and upgrades it to a tracked FEED/PAGE_WATCH source when the site becomes reachable (renderer added, feed appears, URL fixed) | `TODO` | WP-50, WP-17b |
 | WP-32 | *(low)* `parseToc` robustness — follow split/paginated sibling TOCs (bounded "next chapters" hops) + **all non-chapter anchor filtering** (pagination + shortcut/CTA like "Last chapter"/"Read") + **URL-slug number authority** (trust a delimited `/chapter-<N>-` over a concatenated title number) | `TODO` | WP-17, WP-35 |
 | WP-47 | *(low)* Client resubscribe on VAPID key mismatch — `resyncSubscription` re-posts a stale browser sub whose `applicationServerKey` ≠ current key, so a 403-pruned sub churns (prune→re-add) and the client shows "subscribed" while receiving nothing; detect the key mismatch on load and unsubscribe + re-subscribe under the new key. Makes key rotation self-healing on the client | `TODO` | WP-09 |
@@ -1054,6 +1055,37 @@ and was never taught the branch. So an API source can *only* be populated by a p
 Test-first (the API branch in `runBackfill`; the button-visibility change). Small, self-contained. Unblocks
 one-shot population/repair of API sources (today they wait for the next poll).
 
+### WP-54 — API-source auto-probe + human docs for the API switchover
+
+**Motivation (owner, 2026-08-21):** converting a CF-gated data-API site to the API path is a manual dance — find the
+per-series id (`category=<id>`) by rendering the page and watching the Network tab, hand-build the `--map` JSON, then
+`set-api-descriptor` (a gitignored `/local/` helper now scripts it end-to-end for one site: it queries prod for
+not-yet-API sources, renders each to capture the chapters request + total, and runs the CLI). The add-time
+`probeForApi` (WP-45) only auto-detects the **static-JSON SPA** shape (a `data-*` attr → a `.json` file, the
+Cloudflare-Pages case); it can't see an API the page fetches via **XHR** (the WP-REST `…/v1/chapters?category=<id>`
+shape), because that only appears at runtime, behind CF.
+
+**Work:**
+1. **Render/XHR API detector.** A probe step that renders the page (clearing CF) and captures the chapter-list **XHR** —
+   endpoint, per-series id, and JSON shape — then **infers the `ApiDescriptor`**: url/title fields, a lock field (+
+   `isFreeWhen`), and pagination (`pageParam` + `perPage`, reading the total-count / `x-wp-totalpages` headers and
+   probing the site's per-page cap). Host-agnostic (no site names), returns candidate hits like the existing detector.
+2. **`db:cleanup probe-api <sourceId> [--render] [--apply]`** — render, detect, print the inferred descriptor + a
+   chapter-count sanity check, and on `--apply` `set-api-descriptor`. Productizes the `/local/` helper (which stays as
+   the interim tool). Idempotent (skips already-API sources).
+3. **Human guide (docs) — the priority half.** A new human-facing page (e.g. `docs/api-sources.md`, linked from the
+   README) for a person evaluating a new site: the **CF taxonomy** (plain-static / render-clearable / anti-headless —
+   render can't beat a managed challenge); **how to tell if a site has a usable JSON chapter API** and find its
+   endpoint / per-series id / fields (DevTools Network → the chapters request); the **field-map + pagination +
+   `per_page`-in-two-places + `isFreeWhen:falsy`** gotchas (deep operator detail stays in `docs/db-cleanup-cli.md`);
+   and a short **"can this site leverage the API path?" checklist** (JSON chapter-list endpoint? carries lock state?
+   CF render-clearable? per-series id findable?). Anonymized — placeholders only (no-real-site-names).
+
+**Why:** the API path is the best source when it exists (complete list + native WP-20 lock state, cheaper than DOM
+scraping), but spotting and wiring it is expert-only today. This makes it discoverable/repeatable and lets a human
+triage a new site without reverse-engineering the pipeline. *(Auto-probe is convenience — the manual flow + `/local/`
+helper work today; the docs are the real deliverable. Priority owner's call.)*
+
 ### WP-48 — Blogger feed-path in `guessFeedUrls`
 
 **Motivation (owner testing, 2026-08-10):** a Blogger (`*.blogspot.com`) series can't be added — throws "couldn't
@@ -1158,6 +1190,14 @@ optionally `deactivate-source`) so WP-49-style recoveries are fully tool-support
 
 ## Changelog
 
+- **2026-08-21** — **Filed WP-54: API-source auto-probe + human docs for the API switchover.** Converting a CF-gated
+  data-API site to the API path is a manual render-and-watch-the-Network + hand-build-the-map dance (a gitignored
+  `/local/` helper now scripts it for one site); the add-time `probeForApi` (WP-45) only auto-detects the static-JSON
+  SPA shape, not an XHR-fetched REST API behind CF. WP-54: a render/XHR API detector (infer fields + pagination +
+  per-series id) + a `db:cleanup probe-api` command, **plus the priority half — a human guide** (new docs page linked
+  from README) on the switchover: CF taxonomy, how to spot a usable JSON chapter API, the field-map/pagination/`per_page`
+  gotchas, and a "can this site leverage the API path?" checklist. Filed as a regular TODO (docs value beyond the
+  convenience). `TODO`.
 - **2026-08-20** — **WP-28d filed — locked-chapter display (dim / marker) + filter/sort.** New WP-28 child (owner
   request): show which chapters are `LOCKED` on the detail page (dim and/or a lock marker) and optionally hide them or
   sort them to the bottom. Lock state already exists — `Chapter.access` (`FREE/LOCKED/UNKNOWN` + `becameFreeAt`) from
