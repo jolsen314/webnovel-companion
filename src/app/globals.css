@@ -557,8 +557,10 @@ body {
   display: inline-flex;
   align-items: center;
   color: var(--color-glow);
-  /* Cap-align the small glyph with the title's first line in a wrapped row. */
-  padding-top: 0.2rem;
+  /* Mirror the mark-read button's vertical box (same padding + a transparent border) so the
+     glyph centers with the button rather than cap-aligning to the title's first line. */
+  padding: 0.2rem 0;
+  border: 1px solid transparent;
 }
 /* Inline checkbox control (e.g. Hide locked), sitting beside the segmented order control. */
 .control__check {
