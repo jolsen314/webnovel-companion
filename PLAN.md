@@ -146,6 +146,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 | WP-28b | Theme system — pluggable themes + a picker (night default + cultivation ancient-scroll, sci-fi holographic-panel); FOUC/hydration-safe token architecture | `TODO` | WP-10 |
 | WP-28c | Feed page vs library split — a cross-series "what's new across everything" river vs the per-series grid (decide one view or two) | `TODO` | WP-10 |
 | WP-55 | Decode HTML entities in **API-source** chapter titles — `decodeHTML` in `parseApiChapters` (feed/TOC paths already decode) + a one-off script to fix stored API-source rows | `TODO` | WP-45 |
+| WP-56 | Fix `parseToc` lock-detection false positives — **`LOCK_CLASS` matches "lock" inside "b`lock`"** so *every WordPress block-theme source* (`wp-block-*` classes) marks **all** chapters `LOCKED`; also `LOCK_TEXT` matches generic title words ("coin"/"premium" in a chapter title) and the lock **scope** is a whole shared content `<div>` (bare-anchor TOCs) that taints every row. Use class-**token boundaries** (not substring), gate lock state on markers not free text, and don't treat a giant shared container as a per-chapter row. **Data-correctness** (a real source had 556 free chapters all shown locked; fixed in prod by hand) | `TODO` | WP-17, WP-20 |
 | WP-18 | Completed shelf + backfill + "Move to Completed?" | `TODO` | WP-10 |
 | WP-19 | Non-destructive re-pointing + "find new source" helper (also: on a duplicate add (WP-39), optionally offer to attach the pasted URL as an **alternate source** on the existing series rather than only rejecting) | `TODO` | WP-16, WP-18 |
 | WP-CLEANUP-UI | In-app cleanup surfacing `db:cleanup` (**merge** series, delete/reset chapters, edit source/TOC URL) — **merge** doubles as the manual same-work/different-translation resolver, the target of the add-page "Merge" affordance from WP-39b's create-then-annotate flow. *(Series-**delete** split out to WP-51.)* | `TODO` | WP-10 |
@@ -1198,6 +1199,39 @@ recovery had to do it as a **manual one-row DB update** (`type=PAGE_WATCH`, `fee
 `etag`/`lastModified`). Add a **`reclassify-source`** command (set `type`, clear `feedUrl`, reset validators — and
 optionally `deactivate-source`) so WP-49-style recoveries are fully tool-supported instead of hand-edited on prod.
 
+### WP-56 — `parseToc` lock-detection false positives
+
+**Motivation (owner testing, 2026-08-22):** a source showed **all 556 chapters as LOCKED** though every chapter is
+free. Root cause is a stack of false positives in `parseToc`'s access heuristics ([`pageWatch.ts`](src/lib/feeds/pageWatch.ts)):
+
+1. **`LOCK_CLASS` matches "lock" inside "b`lock`" (the serious one).** `LOCK_CLASS = /class="[^"]*(?:lock|premium|
+   vip|coin)[^"]*"…/` does a **substring** test, so `class="wp-block-post-content"` (and *every* `wp-block-*` class a
+   Gutenberg **block theme** emits) matches on the `lock` in `block`. → **every chapter on any WordPress block theme is
+   marked LOCKED.** That's the default WP theme family since 2022, so this is broad, not a one-off.
+2. **`LOCK_TEXT` matches generic words in titles.** `\bcoins?\b`/`premium`/`vip` legitimately appear in *chapter
+   titles* (here: "Chapter 182 – Tossed coin (1)") — that's not a lock signal.
+3. **The lock scope is a whole shared container.** The TOC was **559 bare `<a>` links inside one `entry-content`
+   `<div>`** (no per-chapter `<li>`/`<tr>`), so `$el.closest('li, tr, article, div')` makes that **64 KB div the "row"
+   for *every* chapter** — any lock-ish token anywhere in it taints all 559. (So even a legit single locked chapter
+   would mislabel the whole list.)
+
+**Fix:**
+- **Class match by token, not substring:** treat a class as a lock marker only when a whole class *token* qualifies
+  (e.g. `locked`, `is-locked`, `chapter--premium`, `fa-lock`), never `lock` inside `block`/`blockchain`/etc. (split on
+  whitespace, or require a `[\s"'-]` boundary).
+- **Don't infer lock state from free text** (titles) — gate on a **marker** (a lock icon/badge/🔒, a dedicated
+  lock/premium class or element), not `LOCK_TEXT` over `scope.text()`.
+- **Scope the check per chapter, not to a giant shared ancestor:** if the resolved "row" is a large content wrapper
+  shared by many chapters (same element for N anchors), the lock signal isn't per-chapter → default **FREE**; prefer a
+  tight per-anchor neighborhood.
+- Add fixtures: a WP block-theme TOC (all-free), a bare-anchor `entry-content` TOC, and a real per-row locked TOC — so
+  the heuristics are pinned both ways.
+
+**Interacts with WP-20** (paid→free depends on correct lock state) and **WP-28d** (locked marker/hide-locked filter —
+which is only meaningful once lock state is trustworthy). Pure `pageWatch.ts` change, test-first. *(Prod already
+corrected by hand: the affected series' 556 rows set FREE; hold off re-backfilling any block-theme source until this
+lands, or it re-locks — and could fire a "now free" storm.)*
+
 ## Backlog / open questions
 
 - **Notification privacy** *(implemented 2026-07-26)* — the work's name is kept out of the always-visible notification
@@ -1227,6 +1261,14 @@ optionally `deactivate-source`) so WP-49-style recoveries are fully tool-support
 
 ## Changelog
 
+- **2026-08-22** — **Filed WP-56: `parseToc` lock-detection false positives (from owner testing).** A source showed
+  **all 556 chapters LOCKED** despite being entirely free. Root cause: `LOCK_CLASS` does a **substring** test, so it
+  matches the `lock` in **`block`** → *every WordPress block-theme source* (`wp-block-*` classes) marks all chapters
+  locked. Compounded by `LOCK_TEXT` matching generic title words (a chapter titled "Tossed coin") and the lock scope
+  being a **single shared `entry-content` div** (559 bare-anchor chapters, no per-row `<li>`/`<tr>`) that taints the
+  whole list. Fix (WP-56): class match by **token** not substring, gate lock on a marker not free text, and scope
+  per-chapter not to a giant shared ancestor. **Prod corrected by hand** (the 556 rows set FREE). (Real-site detail in
+  local, uncommitted notes.)
 - **2026-08-22** — **Filed WP-55: decode HTML entities in API-source chapter titles.** Found while testing WP-28d:
   chapter titles on an advance-chapter (API) source render raw entity codes (`&#8217;`, `&mdash;`) instead of glyphs.
   Root-caused (systematic-debugging): the bug is **API-path-only** — feed titles (rss-parser) and page-watch TOC titles
