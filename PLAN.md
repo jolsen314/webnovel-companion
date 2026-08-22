@@ -554,10 +554,12 @@ to the UI yet: [`page.tsx`](<src/app/(app)/series/[id]/page.tsx>) maps `series.c
   (the reading lib is pure + already test-covered; locked-to-bottom is a natural new property). Decide whether it's a
   new mode, a modifier on existing modes, or coupled to the filter toggle.
 
-**Skills:** `frontend-design`. **Depends:** WP-20 (lock state — done), WP-10 (detail UI — done). Same `SeriesDetail`
-rows + `globals.css` `.chapter*` as the WP-28 chapter-row work, so it can share a session with WP-28a if convenient.
-**DoD:** locked chapters are visually distinguishable on the detail page; the filter and/or sort behavior ships with its
-persistence; any `arrangeChapters` change is a tested pure function; `UNKNOWN`-access sources are unaffected.
+**Skills:** `frontend-design`. **Depends:** WP-20 (lock state — done), WP-10 (detail UI — done). Builds directly on the
+shipped WP-28 long-title readability facet — same `SeriesDetail` chapter rows + `globals.css` `.chapter*`. (Not related
+to WP-28a, which sorts the *series cards on the shelf* — a different surface; WP-28d sorts/filters *chapters within one
+series*.) **DoD:** locked chapters are visually distinguishable on the detail page; the filter and/or sort behavior
+ships with its persistence; any `arrangeChapters` change is a tested pure function; `UNKNOWN`-access sources are
+unaffected.
 
 ### WP-30 — Series title backfill from TOC + manual title edit
 
