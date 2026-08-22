@@ -143,6 +143,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 | WP-28a | Shelf ordering — user-selectable library sort (recent-activity / unread-first / alphabetical / manual) + a sort control; choice persisted | `NEXT` | WP-10 |
 | WP-28b | Theme system — pluggable themes + a picker (night default + cultivation ancient-scroll, sci-fi holographic-panel); FOUC/hydration-safe token architecture | `TODO` | WP-10 |
 | WP-28c | Feed page vs library split — a cross-series "what's new across everything" river vs the per-series grid (decide one view or two) | `TODO` | WP-10 |
+| WP-28d | Locked-chapter display — dim / lock-marker on `LOCKED` rows (data already on `Chapter.access` from WP-20); optional "hide locked" filter + sort-locked-to-bottom mode | `TODO` | WP-20, WP-10 |
 | WP-18 | Completed shelf + backfill + "Move to Completed?" | `TODO` | WP-10 |
 | WP-19 | Non-destructive re-pointing + "find new source" helper (also: on a duplicate add (WP-39), optionally offer to attach the pasted URL as an **alternate source** on the existing series rather than only rejecting) | `TODO` | WP-16, WP-18 |
 | WP-CLEANUP-UI | In-app cleanup surfacing `db:cleanup` (**merge** series, delete/reset chapters, edit source/TOC URL) — **merge** doubles as the manual same-work/different-translation resolver, the target of the add-page "Merge" affordance from WP-39b's create-then-annotate flow. *(Series-**delete** split out to WP-51.)* | `TODO` | WP-10 |
@@ -443,8 +444,9 @@ UX-polish program on the shipped library/detail UI (WP-10). **Split into pickup-
 facet can be taken cold in its own session: the **long-title readability** facet shipped (below, DONE); the three
 remaining facets are now distinct WPs — **[WP-28a](#wp-28a--shelf-ordering)** (shelf ordering),
 **[WP-28b](#wp-28b--theme-system)** (theme system), **[WP-28c](#wp-28c--feed-page-vs-library-split)** (feed vs library
-split). All three use `frontend-design` (primary) + `ai-toolkit:design-workflow` for tokens, each gets its own
-brainstorm → spec, and all depend on WP-10 (done). Two small **residual polish items** — the add-page "similar series"
+split) — plus a later add, **[WP-28d](#wp-28d--locked-chapter-display-dim--marker--filtersort)** (locked-chapter
+display / filter / sort). All use `frontend-design` (primary) + `ai-toolkit:design-workflow` for tokens, each gets its
+own brainstorm → spec, and all depend on WP-10 (done). Two small **residual polish items** — the add-page "similar series"
 notice and the HTML-entity display-decode catch-all — stay under this umbrella (below the readability note); they're
 minor and not blocking any child.
 
@@ -528,6 +530,34 @@ Decide **navigation** (tabs vs separate routes), the **default landing** view, a
 chapter + unlock/now-free events from WP-20). Needs a **brainstorm on IA** up front. **Skills:** `frontend-design`.
 **Depends:** WP-10 (done). **DoD:** decided IA documented in its spec; the feed view (if built) lists cross-series new
 chapters in time order and links through to the chapter/detail.
+
+### WP-28d — Locked-chapter display (dim / marker) + filter/sort
+
+**Goal (owner, 2026-08-20):** surface which chapters are **locked** on the series detail page — dim them and/or show a
+lock marker — and optionally **filter them out** or **sort them to the bottom**.
+
+**Data is already there (no schema work).** `Chapter.access` is an `AccessState` enum (`FREE | LOCKED | UNKNOWN`) set by
+the WP-20 paid→free tracking, with `becameFreeAt` when a locked chapter unlocks. The detail page just doesn't carry it
+to the UI yet: [`page.tsx`](<src/app/(app)/series/[id]/page.tsx>) maps `series.chapters` → `ChapterLite`
+(id/title/number/url only), dropping `access`. So the gap is **presentation + one field of plumbing**, not persistence.
+
+**Scope to design when picked up:**
+- **Plumb** `access` (and maybe `becameFreeAt`) through `ChapterLite` + the page map into
+  [`SeriesDetail.tsx`](<src/app/(app)/series/[id]/SeriesDetail.tsx>).
+- **Display** — dim `LOCKED` rows (muted color / reduced opacity) and/or a lock glyph/badge in the row
+  (`[num] [title] [🔒] [mark]`). Decide dim vs marker vs both; keep it legible against the read/unread dimming the row
+  already does. `UNKNOWN`-access chapters (feed-only sources with no lock data) render normally — no marker.
+- **Filter** — an optional "hide locked" toggle, sibling to the existing Show: Oldest/Newest/Unread-first segmented
+  control, persisted in localStorage like the display-mode toggle.
+- **Sort** — optionally push `LOCKED` chapters to the bottom. Cleanest as an extension to `arrangeChapters`
+  ([`lib/reading.ts`](src/lib/reading.ts)) — a lock-aware reordering layered on the chosen display mode — under **TDD**
+  (the reading lib is pure + already test-covered; locked-to-bottom is a natural new property). Decide whether it's a
+  new mode, a modifier on existing modes, or coupled to the filter toggle.
+
+**Skills:** `frontend-design`. **Depends:** WP-20 (lock state — done), WP-10 (detail UI — done). Same `SeriesDetail`
+rows + `globals.css` `.chapter*` as the WP-28 chapter-row work, so it can share a session with WP-28a if convenient.
+**DoD:** locked chapters are visually distinguishable on the detail page; the filter and/or sort behavior ships with its
+persistence; any `arrangeChapters` change is a tested pure function; `UNKNOWN`-access sources are unaffected.
 
 ### WP-30 — Series title backfill from TOC + manual title edit
 
@@ -1126,6 +1156,12 @@ optionally `deactivate-source`) so WP-49-style recoveries are fully tool-support
 
 ## Changelog
 
+- **2026-08-20** — **WP-28d filed — locked-chapter display (dim / marker) + filter/sort.** New WP-28 child (owner
+  request): show which chapters are `LOCKED` on the detail page (dim and/or a lock marker) and optionally hide them or
+  sort them to the bottom. Lock state already exists — `Chapter.access` (`FREE/LOCKED/UNKNOWN` + `becameFreeAt`) from
+  WP-20 — but the detail page drops it when mapping `series.chapters` → `ChapterLite`, so the work is presentation + one
+  field of plumbing (+ an optional pure `arrangeChapters` locked-to-bottom extension under TDD). Depends WP-20/WP-10
+  (both done); no schema change.
 - **2026-08-20** — **WP-28 split into pickup-able children.** With the long-title readability facet shipped, the three
   remaining WP-28 facets were split into distinct, self-contained WPs so each can be picked up cold in its own session:
   **WP-28a** (shelf ordering — user-selectable library sort + persisted control), **WP-28b** (theme system — pluggable
