@@ -25,6 +25,9 @@ test('library grid renders and detail controls persist', async ({ page }) => {
     'https://translator.example/cs/c2',
   );
 
+  // No chapter is locked here, so the WP-28d hide-locked toggle isn't offered (clutter guard).
+  await expect(page.getByRole('checkbox', { name: 'Hide locked' })).toHaveCount(0);
+
   // Detail controls: status, rating, mark-read. Each fires a fire-and-forget PATCH with an
   // optimistic UI update, so wait for the server to persist each one before reloading —
   // otherwise the reload can race the last write and read the pre-write row.
@@ -36,4 +39,37 @@ test('library grid renders and detail controls persist', async ({ page }) => {
   await expect(page.getByLabel('Status')).toHaveValue('COMPLETED');
   await expect(page.getByRole('button', { name: '3 stars' })).toHaveClass(/star--on/);
   await expect(page.getByRole('button', { name: 'current' })).toBeVisible();
+});
+
+test('WP-28d: locked chapters show a lock marker and the hide-locked toggle filters + persists', async ({
+  page,
+}) => {
+  const { id } = await seedSeries({
+    title: 'Locked Series',
+    chapters: [
+      { title: 'Free Chapter', url: 'https://translator.example/ls/c1', access: 'FREE' },
+      { title: 'Locked Chapter', url: 'https://translator.example/ls/c2', access: 'LOCKED' },
+    ],
+  });
+
+  await page.goto(`/series/${id}`);
+
+  const lockedRow = page.locator('.chapter', { hasText: 'Locked Chapter' });
+  const freeRow = page.locator('.chapter', { hasText: 'Free Chapter' });
+
+  // The locked chapter carries a lock marker; the free one does not.
+  await expect(lockedRow.locator('.chapter__lock')).toBeVisible();
+  await expect(freeRow.locator('.chapter__lock')).toHaveCount(0);
+
+  // Hide-locked toggle is offered (there's a locked chapter) and filters the row out.
+  const hideLocked = page.getByRole('checkbox', { name: 'Hide locked' });
+  await expect(hideLocked).not.toBeChecked();
+  await hideLocked.check();
+  await expect(lockedRow).toHaveCount(0);
+  await expect(freeRow).toBeVisible();
+
+  // Preference persists across reloads (localStorage), like the display-mode toggle.
+  await page.reload();
+  await expect(page.getByRole('checkbox', { name: 'Hide locked' })).toBeChecked();
+  await expect(page.locator('.chapter', { hasText: 'Locked Chapter' })).toHaveCount(0);
 });

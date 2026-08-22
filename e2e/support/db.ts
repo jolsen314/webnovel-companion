@@ -25,6 +25,8 @@ export interface SeedChapter {
   title: string;
   url: string;
   guid?: string;
+  /** Paid→free access state (WP-28d). Defaults to the schema default (UNKNOWN) when omitted. */
+  access?: 'FREE' | 'LOCKED' | 'UNKNOWN';
 }
 export interface SeedSeriesInput {
   title: string;
@@ -62,6 +64,7 @@ export async function seedSeries(input: SeedSeriesInput): Promise<{ id: string }
                 title: c.title,
                 url: c.url,
                 guid: c.guid ?? `g${i + 1}`,
+                ...(c.access ? { access: c.access } : {}),
               })),
             },
           }
