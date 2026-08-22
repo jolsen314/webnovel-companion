@@ -145,6 +145,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 | WP-28a | Shelf ordering — user-selectable library sort (recent-activity / unread-first / alphabetical / manual) + a sort control; choice persisted | `NEXT` | WP-10 |
 | WP-28b | Theme system — pluggable themes + a picker (night default + cultivation ancient-scroll, sci-fi holographic-panel); FOUC/hydration-safe token architecture | `TODO` | WP-10 |
 | WP-28c | Feed page vs library split — a cross-series "what's new across everything" river vs the per-series grid (decide one view or two) | `TODO` | WP-10 |
+| WP-55 | Decode HTML entities in **API-source** chapter titles — `decodeHTML` in `parseApiChapters` (feed/TOC paths already decode) + a one-off script to fix stored API-source rows | `TODO` | WP-45 |
 | WP-18 | Completed shelf + backfill + "Move to Completed?" | `TODO` | WP-10 |
 | WP-19 | Non-destructive re-pointing + "find new source" helper (also: on a duplicate add (WP-39), optionally offer to attach the pasted URL as an **alternate source** on the existing series rather than only rejecting) | `TODO` | WP-16, WP-18 |
 | WP-CLEANUP-UI | In-app cleanup surfacing `db:cleanup` (**merge** series, delete/reset chapters, edit source/TOC URL) — **merge** doubles as the manual same-work/different-translation resolver, the target of the add-page "Merge" affordance from WP-39b's create-then-annotate flow. *(Series-**delete** split out to WP-51.)* | `TODO` | WP-10 |
@@ -1092,6 +1093,36 @@ scraping), but spotting and wiring it is expert-only today. This makes it discov
 triage a new site without reverse-engineering the pipeline. *(Auto-probe is convenience — the manual flow + `/local/`
 helper work today; the docs are the real deliverable. Priority owner's call.)*
 
+### WP-55 — Decode HTML entities in API-source chapter titles
+
+**Bug (found while testing WP-28d, 2026-08-22):** chapter titles on an advance-chapter **API** source render raw entity
+codes (`&#8217;`, `&mdash;`) instead of glyphs.
+
+**Root cause (API path only).** Chapter titles enter from three parsers; two already decode, one doesn't:
+- **Feed** (rss-parser) — decodes named + numeric entities. ✅ (verified empirically)
+- **Page-watch TOC** (cheerio) — `.text()` and `.attr('title')` both decode on parse. ✅
+- **API source** ([`parseApiChapters`](src/lib/feeds/apiAdapter.ts)) — maps the JSON `titleField` with only
+  `.replace(/\s+/g,' ').trim()`; `JSON.parse` doesn't touch HTML entities → literal codes stored. ❌
+
+This is the chapter-title analog of the **series-title** gap WP-30b fixed (`decodeHTML` from `entities` in
+[`title.ts`](src/lib/feeds/title.ts)), and the concrete root cause behind the vague WP-28 "display-side entity-decode
+catch-all" residual — so it supersedes that residual for chapters (root-cause decode, not a display band-aid).
+
+**Fix (small, TDD):**
+1. **`decodeHTML` in `parseApiChapters`** — one line at the title map, unit-tested with an entity-laden title. This is
+   the single choke point every API consumer routes through — add-time
+   ([`addSeries`](src/server/services/addSeries.ts#L145)), [`poll`](src/server/services/poll.ts#L305), and the future
+   **WP-53** API-aware backfill — so future chapters land decoded everywhere (satisfies "backfill must trigger the
+   decode" without extra wiring).
+2. **Prod remediation — throwaway one-off script**, scoped to **`type === 'API'` source chapters only.** Poll never
+   rewrites an existing chapter's title (it only inserts `new` + reconciles `access`), so historical rows won't
+   self-heal; a one-off `decodeHTML` pass fixes them. No permanent `db:cleanup` command — WP-53's API-aware backfill
+   will route through the fixed parser for any future repair. Script deleted after the run.
+
+**DoD:** API-source chapters with HTML entities in their titles display decoded glyphs; `parseApiChapters` decodes
+under a unit test; feed/TOC paths unchanged; existing prod API-source titles fixed by the one-off. **Depends:** WP-45
+(API path — done). Small PR, queued after the WP-28 items.
+
 ### WP-48 — Blogger feed-path in `guessFeedUrls`
 
 **Motivation (owner testing, 2026-08-10):** a Blogger (`*.blogspot.com`) series can't be added — throws "couldn't
@@ -1196,6 +1227,20 @@ optionally `deactivate-source`) so WP-49-style recoveries are fully tool-support
 
 ## Changelog
 
+- **2026-08-22** — **Filed WP-55: decode HTML entities in API-source chapter titles.** Found while testing WP-28d:
+  chapter titles on an advance-chapter (API) source render raw entity codes (`&#8217;`, `&mdash;`) instead of glyphs.
+  Root-caused (systematic-debugging): the bug is **API-path-only** — feed titles (rss-parser) and page-watch TOC titles
+  (cheerio `.text()`/`.attr`) are both already decoded, but [`parseApiChapters`](src/lib/feeds/apiAdapter.ts) maps the
+  JSON `titleField` with only `.replace(/\s+/g,' ').trim()`, and `JSON.parse` doesn't touch HTML entities — so API
+  sources store literal codes. It's the chapter-title analog of the series-title gap WP-30b fixed with `decodeHTML`
+  (from `entities`) in [`title.ts`](src/lib/feeds/title.ts); this is the concrete, non-display root cause behind the
+  vague WP-28 "display-side entity-decode catch-all" residual (which it supersedes for chapters). **Fix:** one-line
+  `decodeHTML` in `parseApiChapters` (TDD) — the single choke point every API consumer routes through (add-time
+  [`addSeries`](src/server/services/addSeries.ts#L145), [`poll`](src/server/services/poll.ts#L305), and the future
+  WP-53 API-aware backfill), so future chapters land clean everywhere. **Prod remediation:** a throwaway one-off script
+  decoding stored chapter titles **on API-type sources only** (poll never rewrites existing chapter titles, so it won't
+  self-heal historical rows; a permanent CLI command is unnecessary because WP-53 backfill will route through the fixed
+  parser). Small PR, queued after the WP-28 items. Depends: none (WP-45 API path exists). `TODO`.
 - **2026-08-21** — **WP-28d DONE — locked-chapter display (marker + hide-locked filter).** Picked up out of order
   (owner request; WP-28a stays NEXT). `LOCKED` chapters on the detail page now carry a lucide `Lock` glyph in the
   `--color-glow` accent (distinct from the read/unread color dimming the row already has), and a persisted **"Hide
