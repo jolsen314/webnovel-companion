@@ -1073,6 +1073,21 @@ not-yet-API sources, renders each to capture the chapters request + total, and r
 Cloudflare-Pages case); it can't see an API the page fetches via **XHR** (the WP-REST `…/v1/chapters?category=<id>`
 shape), because that only appears at runtime, behind CF.
 
+**Update (owner testing, 2026-08-22) — two refinements from a new driver (a JS-SPA source whose chapters load via XHR):**
+- **The XHR variant isn't always CF-gated.** This source fetches its chapter list via a **plain** XHR (a bare
+  authenticated-optional `GET` to a per-series chapters endpoint — no CF, no auth). So render is needed only to
+  *discover* the endpoint, not to *fetch* it; the detector must **not assume CF**, and the add-flow should prefer a
+  plain API fetch when the discovered endpoint is un-gated. (Taxonomy: static-JSON auto-detected · **XHR-plain** ·
+  XHR-CF-gated.) With no auto-detect + no CF signal, the add just fell through to render+parseToc — which scraped the
+  page's **"recommendations" widget** (other-novel cards whose "Chapters: N" text trips `CHAPTER_TEXT`) as the
+  chapters, and took the **widget `<h1>`** as the title.
+- **Blocking descriptor gap → bare-slug URLs (a WP-45 adapter enhancement, prerequisite).** This API returns only a
+  **bare chapter slug/id**, not a full `permalink` like the earlier API sites — and `ApiDescriptor.urlField` merely
+  resolves a field *value* via `new URL(value, endpoint)`, so there's **no way to build the real chapter-page URL**
+  (a different path prefix than the API endpoint). Needs a **`urlTemplate`** on the descriptor (e.g.
+  `/<prefix>/{slugField}`, resolved against origin) before such a source can be wired **at all** — manual
+  `set-api-descriptor` or auto-probe. Until then these sources can't use the API path; deactivate them.
+
 **Work:**
 1. **Render/XHR API detector.** A probe step that renders the page (clearing CF) and captures the chapter-list **XHR** —
    endpoint, per-series id, and JSON shape — then **infers the `ApiDescriptor`**: url/title fields, a lock field (+
@@ -1087,7 +1102,16 @@ shape), because that only appears at runtime, behind CF.
    endpoint / per-series id / fields (DevTools Network → the chapters request); the **field-map + pagination +
    `per_page`-in-two-places + `isFreeWhen:falsy`** gotchas (deep operator detail stays in `docs/db-cleanup-cli.md`);
    and a short **"can this site leverage the API path?" checklist** (JSON chapter-list endpoint? carries lock state?
-   CF render-clearable? per-series id findable?). Anonymized — placeholders only (no-real-site-names).
+   CF render-clearable? per-series id findable?). **Two durable gotchas (from the 2026-08-22 driver):**
+   - **Determining the chapter-page URL for the field-map.** The API's endpoint path and its item fields don't
+     necessarily give you the reader URL — an item may carry a **bare slug/id** and the chapter page may live under a
+     **different path than the API**. So **open one real chapter and confirm its URL pattern**, and beware
+     **"200-but-wrong" pages** (a valid 200 that isn't the chapter — e.g. an SPA route that renders "undefined"). True
+     whether the descriptor uses `urlField` or `urlTemplate`.
+   - **Not all data-APIs are HTML-advertised or CF-gated.** Some are a plain **runtime XHR** (no `.json` in the HTML,
+     no CF) — the DevTools → Network → **Fetch/XHR** → reload discovery step is the same either way.
+
+   Anonymized — placeholders only (no-real-site-names).
 
 **Why:** the API path is the best source when it exists (complete list + native WP-20 lock state, cheaper than DOM
 scraping), but spotting and wiring it is expert-only today. This makes it discoverable/repeatable and lets a human
@@ -1261,6 +1285,14 @@ lands, or it re-locks — and could fire a "now free" storm.)*
 
 ## Changelog
 
+- **2026-08-22** — **WP-54 refined by a new API driver (XHR-*plain* variant + a bare-slug descriptor gap).** A JS-SPA
+  source added wrong (title = a "recommendations" widget heading; "chapters" = other-novel recommendation cards whose
+  "Chapters: N" text trips `CHAPTER_TEXT`) because its chapters load via **XHR** and WP-45's probe only auto-detects the
+  **static-JSON** shape → fell through to render+parseToc. Two refinements to **WP-54**: (1) the XHR variant **isn't
+  always CF-gated** — this one is a **plain** un-gated `GET` (render needed only to *discover* the endpoint, not fetch
+  it) → detector must not assume CF; (2) a **prerequisite WP-45 descriptor gap** — its API returns a **bare chapter
+  slug**, not a full permalink, and `urlField` can't build the real chapter URL → needs a **`urlTemplate`** on
+  `ApiDescriptor`. Until that lands the source can't use the API path (deactivate). (Real-site detail in local notes.)
 - **2026-08-22** — **Filed WP-56: `parseToc` lock-detection false positives (from owner testing).** A source showed
   **all 556 chapters LOCKED** despite being entirely free. Root cause: `LOCK_CLASS` does a **substring** test, so it
   matches the `lock` in **`block`** → *every WordPress block-theme source* (`wp-block-*` classes) marks all chapters
