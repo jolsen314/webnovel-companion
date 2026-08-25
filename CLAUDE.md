@@ -2,7 +2,8 @@
 
 This file auto-loads into every context window. It's the **operating manual**. The other two docs:
 - **[README.md](README.md)** — the design doc (what & why, data model, roadmap tiers).
-- **[PLAN.md](PLAN.md)** — the living build tracker (work packages WP-00…WP-26, status, priority order, changelog).
+- **[PLAN.md](PLAN.md)** — the living build tracker (work packages, status, priority order). Kept lean: the append-only
+  changelog lives in **[docs/CHANGELOG.md](docs/CHANGELOG.md)** and shipped-WP detail in **[docs/PLAN-archive.md](docs/PLAN-archive.md)**.
 
 Read PLAN.md's "Current focus" first to see what's active.
 
@@ -19,7 +20,11 @@ Read PLAN.md's "Current focus" first to see what's active.
 4. **Stop at every WP boundary and check in** with the user before picking up the next work package. Don't chain WPs.
 5. **Keep `lib/` pure and Next-free** — no `next`/`prisma`/`fs`/network imports in `src/lib/**`; route handlers stay
    thin and call `server/services`. (Design rule from the README.)
-6. **Update PLAN.md as work lands** — flip WP status, add a changelog line, set the next `NEXT`.
+6. **Update PLAN.md as work lands** — flip WP status, set the next `NEXT`, and add the changelog line to
+   **[docs/CHANGELOG.md](docs/CHANGELOG.md)** (not PLAN.md). **Archive on DONE:** when a WP flips to `DONE`, move its
+   `### WP-NN` detail section out of PLAN.md into **[docs/PLAN-archive.md](docs/PLAN-archive.md)**, leaving only its
+   ✅ Completed-table one-liner — this keeps PLAN.md from growing without bound. Same for a **hard-blocked / abandoned
+   parked** WP that won't be picked up: archive its detail, keep the 🚫 Parked one-liner.
 
 ---
 
