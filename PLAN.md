@@ -46,11 +46,20 @@ uncommitted notes." Real names/URLs live only in those local notes and in scratc
 
 ## Current focus
 
-> **NEXT: WP-28a — Shelf ordering.** WP-28 was split into pickup-able children (2026-08-20) after its long-title
-> readability facet shipped; the three remaining facets are now **WP-28a** (shelf ordering, NEXT), **WP-28b** (theme
-> system), and **WP-28c** (feed vs library split) — priority = the **▶ Active queue** table, reorderable by the owner.
+> **NEXT: WP-28b — Theme system.** WP-28 was split into pickup-able children (2026-08-20) after its long-title
+> readability facet shipped; the shelf-ordering facet (WP-28a) has now landed **expanded** into full shelf **sort +
+> filter**, leaving **WP-28b** (theme system, NEXT) and **WP-28c** (feed vs library split) — priority = the **▶ Active
+> queue** table, reorderable by the owner.
 >
-> **Recently landed (newest first):** WP-28d (locked-chapter display — lucide `Lock` marker on `LOCKED` detail rows +
+> **Recently landed (newest first):** WP-28a (shelf **sort + filter** — a pure [`lib/shelf.ts`](src/lib/shelf.ts):
+> `sortSeries` with four modes [recent-activity / unread-first / A–Z / rating, title as the final tie-break, no-chapter
+> + unrated rows sorted last] and `filterSeries` on status / title-substring / min-rating, both order-independent and
+> non-mutating; driven by a client [`Shelf.tsx`](<src/app/(app)/Shelf.tsx>) control bar [sort + status + rating selects
+> + a **transient** search box] that the server `page.tsx` now delegates to; the sort/status/rating choices are
+> localStorage-persisted with the SSR-safe default pattern [server renders `recent`, an effect applies stored prefs
+> post-mount → no hydration mismatch], search deliberately not persisted; **scope expanded past the original "ordering"
+> card to fold in filtering, which subsumes WP-15** [`lib/search.ts`]; caught a real `-Infinity − -Infinity = NaN`
+> comparator bug via TDD; 12 unit tests + 2 Playwright specs) · WP-28d (locked-chapter display — lucide `Lock` marker on `LOCKED` detail rows +
 > a persisted, clutter-guarded "Hide locked" filter; marker-only + no-sort per owner, so `arrangeChapters` untouched;
 > E2E in `controls.spec.ts`; picked up out of order, WP-28a stays NEXT) · WP-28 (long chapter/series title readability — first facet: detail chapter rows
 > **wrap** with `#num`/`mark read` top-aligned, shelf series title **2-line clamp**, shelf latest-chapter line left
@@ -142,8 +151,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 
 | ID | Work package | Status | Depends on |
 |----|--------------|--------|------------|
-| WP-28a | Shelf ordering — user-selectable library sort (recent-activity / unread-first / alphabetical / manual) + a sort control; choice persisted | `NEXT` | WP-10 |
-| WP-28b | Theme system — pluggable themes + a picker (night default + cultivation ancient-scroll, sci-fi holographic-panel); FOUC/hydration-safe token architecture | `TODO` | WP-10 |
+| WP-28b | Theme system — pluggable themes + a picker (night default + cultivation ancient-scroll, sci-fi holographic-panel); FOUC/hydration-safe token architecture | `NEXT` | WP-10 |
 | WP-28c | Feed page vs library split — a cross-series "what's new across everything" river vs the per-series grid (decide one view or two) | `TODO` | WP-10 |
 | WP-55 | Decode HTML entities in **API-source** chapter titles — `decodeHTML` in `parseApiChapters` (feed/TOC paths already decode) + a one-off script to fix stored API-source rows | `TODO` | WP-45 |
 | WP-56 | Fix `parseToc` lock-detection false positives — **`LOCK_CLASS` matches "lock" inside "b`lock`"** so *every WordPress block-theme source* (`wp-block-*` classes) marks **all** chapters `LOCKED`; also `LOCK_TEXT` matches generic title words ("coin"/"premium" in a chapter title) and the lock **scope** is a whole shared content `<div>` (bare-anchor TOCs) that taints every row. Use class-**token boundaries** (not substring), gate lock state on markers not free text, and don't treat a giant shared container as a per-chapter row. **Data-correctness** (a real source had 556 free chapters all shown locked; fixed in prod by hand) | `TODO` | WP-17, WP-20 |
@@ -155,7 +163,6 @@ later-tier tables are reference only. `⭐` = load-bearing.
 | WP-21 | Plan-to-read completion watch (wire WP-13 + notify) — compare **max chapter number** vs target, not post count | `TODO` | WP-13, WP-07 |
 | WP-27b | Per-status positive notify rules — PLANNED paid → fire at 0 LOCKED; PLANNED free → fire at targetChapterCount; wire with WP-20/WP-21 | `TODO` | WP-20, WP-21, WP-13 |
 | WP-14 | `lib/dedup.ts` (pure) — "already read this?" | `TODO` | WP-00 |
-| WP-15 | `lib/search.ts` (pure) — filter/query building | `TODO` | WP-00 |
 | WP-EXPORT | One-click data export (`/api/export` → JSON) — own-your-data insurance | `TODO` | WP-AUTH |
 | WP-54 | **API-source auto-probe + human docs for the API switchover** — the add-time `probeForApi` (WP-45) auto-detects only the **static-JSON SPA** shape (`data-*` → `.json`), not an **XHR-fetched** REST chapters API behind CF (the `…/v1/chapters?category=<id>` shape — manual today: render, watch the network tab, hand-build `--map`, `set-api-descriptor`; a `/local/` helper now scripts it for one site). Add a **render/XHR API detector** (infer url/title/lock fields + pagination + per-series id) + a **`db:cleanup probe-api <sourceId>`** command, and a **human guide** (new `docs/` page linked from README): the CF taxonomy, how to spot a usable JSON chapter API, the field-map/pagination/`per_page` gotchas, and a "can this site leverage the API path?" checklist. *(Auto-probe is convenience; the docs are the priority.)* | `TODO` | WP-45, WP-53 |
 | WP-RETRY | *(low)* Retry / auto-upgrade a link-only source — a manual "retry fetching chapters" that re-runs resolution on a `linkOnly` source and upgrades it to a tracked FEED/PAGE_WATCH source when the site becomes reachable (renderer added, feed appears, URL fixed) | `TODO` | WP-50, WP-17b |
@@ -174,7 +181,8 @@ WP-00, WP-GH, WP-CI, WP-12 (bootstrap / CI / docs) · WP-01, WP-03 (pure diff / 
 WP-39b (deeper add-dedup, re-scoped: tocUrl page-watch keying + create-then-annotate) · WP-48 (Blogger feed-path in `guessFeedUrls`) · WP-46 (add-time render escalation + poll regression guard) · WP-49 (page-watch divert for un-isolable multi-novel advertised feeds) · WP-34 (feed→TOC switch to lock-monitoring) · WP-30 (series title backfill + manual title-edit UI) · WP-51 (client-side delete series — detail + shelf) · WP-PW (Playwright E2E harness + WP-10/30/34/51 coverage + CI job) · WP-50 (link-only add when chapters can't be read) ·
 WP-45 (API-first adapter, plain-REST slice) · WP-45b (CF-gated render transport + paginated API sources) ·
 WP-NOTES (detail-page notes UI — collapsible, save-on-blur, content-aware default + truncated preview) ·
-WP-52 (poll-time hard-fail render escalation — PAGE_WATCH PLAIN + Cloudflare 403 → persist RENDER).
+WP-52 (poll-time hard-fail render escalation — PAGE_WATCH PLAIN + Cloudflare 403 → persist RENDER) ·
+WP-28a (shelf sort + filter — pure `lib/shelf.ts` [4 sort modes + status/title/min-rating filter] behind a client control bar, localStorage-persisted; **subsumes WP-15** `lib/search.ts`).
 
 ### ⏭ Later tiers (M2–M4)
 
@@ -221,6 +229,7 @@ every UI-only WP appends its flow(s) to the checklist below at completion, so de
       card disappears, tapping trash does NOT open the card; Cancel guards on both surfaces.
 - [x] WP-50 — link-only add: no-chapters → confirm panel → Add anyway → link-only series on the shelf (stubbed).
 - [x] WP-NOTES — notes: collapsed-when-empty, save on blur → persists, defaults open when present, collapsed preview truncates.
+- [x] WP-28a — shelf sort reorders the grid + persists across reload; status / rating / search filters narrow the grid, update the count, and show the no-match message.
 
 ### WP-GH — Git + private GitHub repo, first push
 
@@ -445,12 +454,12 @@ a novel via its NovelUpdates feed instead.
 ### WP-28 — Frontend styling & theming (umbrella)
 
 UX-polish program on the shipped library/detail UI (WP-10). **Split into pickup-able children (2026-08-20)** so each
-facet can be taken cold in its own session: the **long-title readability** facet shipped (below, DONE); the three
-remaining facets are now distinct WPs — **[WP-28a](#wp-28a--shelf-ordering)** (shelf ordering),
-**[WP-28b](#wp-28b--theme-system)** (theme system), **[WP-28c](#wp-28c--feed-page-vs-library-split)** (feed vs library
-split) — plus a later add, **[WP-28d](#wp-28d--locked-chapter-display-dim--marker--filtersort)** (locked-chapter
-display / filter / sort). All use `frontend-design` (primary) + `ai-toolkit:design-workflow` for tokens, each gets its
-own brainstorm → spec, and all depend on WP-10 (done). Two small **residual polish items** — the add-page "similar series"
+facet can be taken cold in its own session: the **long-title readability** facet shipped (below, DONE), and
+**[WP-28a](#wp-28a--shelf-sort--filter-done-2026-08-25)** (shelf sort + filter) has now shipped too; the remaining
+facets are **[WP-28b](#wp-28b--theme-system)** (theme system, NEXT) and **[WP-28c](#wp-28c--feed-page-vs-library-split)**
+(feed vs library split) — plus a later add, **[WP-28d](#wp-28d--locked-chapter-display-dim--marker--filtersort)**
+(locked-chapter display / filter / sort, DONE). All use `frontend-design` (primary) + `ai-toolkit:design-workflow` for
+tokens, each gets its own brainstorm → spec, and all depend on WP-10 (done). Two small **residual polish items** — the add-page "similar series"
 notice and the HTML-entity display-decode catch-all — stay under this umbrella (below the readability note); they're
 minor and not blocking any child.
 
@@ -489,21 +498,24 @@ library/detail title render, which fixes rows already stored encoded without wai
 in the data layer, filed here because the visible symptom + the display-decode safety net are frontend; stays under
 WP-28 (the residual display-decode half; root-cause extraction decode shipped as WP-30b).
 
-### WP-28a — Shelf ordering
+### WP-28a — Shelf sort + filter (DONE 2026-08-25)
 
-**Goal:** give the library shelf a **user-selectable sort**. Today [`(app)/page.tsx`](<src/app/(app)/page.tsx>) renders
-whatever order `listSeries()` ([`server/services`](src/server/services)) returns — no control, no choice.
-
-**Scope to design when picked up:** which orderings to offer — **recent-activity** (latest chapter time, the likely
-default), **unread-first**, **alphabetical**, and possibly **manual** (pin/drag, heavier — needs a stored per-series
-order). Add a sort control to the shelf head (near "Your shelf · N series"). **Persist the choice** — mirror the
-existing chapter display-mode toggle in [`SeriesDetail.tsx`](<src/app/(app)/series/[id]/SeriesDetail.tsx>) (localStorage
-+ SSR-safe default to avoid hydration mismatch), unless a server-side pref is wanted.
-
-**Likely shape:** the comparison is pure → a `lib/shelf.ts` `sortSeries(rows, mode)` (or extend `lib/reading.ts`) with
-**TDD** (stable tie-breaks, nulls-last for series with no chapters, each mode's ordering asserted). The page/control
-wiring is thin UI on top. **Skills:** `frontend-design`. **Depends:** WP-10 (done). **DoD:** control renders + persists;
-sort is a tested pure function; empty/no-chapter series sort sanely.
+**DONE — shipped expanded from "ordering" to full sort + filter** (owner expanded scope at pickup: the three pure sort
+modes **plus sort-by-rating**, and **filtering** on reading status / title / rating). Pure core in
+[`lib/shelf.ts`](src/lib/shelf.ts): **`sortSeries(rows, mode)`** with four modes — `recent` (latest-chapter time desc,
+no-chapter rows last), `unread` (unread desc, activity tie-break), `title` (case-insensitive codepoint compare,
+deliberately not `localeCompare` — matches the `reading.ts` determinism rule), `rating` (desc, unrated last) — title as
+the final tie-break throughout; and **`filterSeries(rows, filter)`** on `status` (exact or `ALL`), `query`
+(case-insensitive title substring), `minRating` (≥ N, unrated excluded when set). Both pure/order-independent/non-mutating,
+**12 unit tests** (TDD caught a real `-Infinity − -Infinity = NaN` comparator bug in the no-chapter tie-break). The server
+[`page.tsx`](<src/app/(app)/page.tsx>) now delegates the non-empty case to a client [`Shelf.tsx`](<src/app/(app)/Shelf.tsx>)
+that owns the control bar (sort + status + rating `<select>`s + a **transient** search box) and the card render; the
+count line switches to "showing N of M series" while filtering, with a no-match message distinct from the empty-shelf
+hero. **Persistence** mirrors the chapter display-mode toggle: sort / status / min-rating in localStorage with the
+SSR-safe default pattern (server renders `recent`/unfiltered, a mount effect applies stored prefs → no hydration
+mismatch); the search box is intentionally not persisted. **Subsumes WP-15** (`lib/search.ts`). 2 Playwright specs
+([`e2e/shelf.spec.ts`](e2e/shelf.spec.ts)); `seedSeries` gained optional `status`/`rating`. **Manual pin/drag ordering
+deliberately deferred** (would need a persisted per-series order column + drag UI — re-file if wanted).
 
 ### WP-28b — Theme system
 
@@ -1285,6 +1297,16 @@ lands, or it re-locks — and could fire a "now free" storm.)*
 
 ## Changelog
 
+- **2026-08-25** — **WP-28a shipped, expanded from shelf *ordering* to shelf *sort + filter*.** Owner widened scope at
+  pickup: the three pure sort modes **plus sort-by-rating**, and **filtering** on reading status / title / rating. Pure
+  [`lib/shelf.ts`](src/lib/shelf.ts) — `sortSeries` (recent / unread / A–Z / rating, title tie-break, no-chapter +
+  unrated rows last) and `filterSeries` (status exact-or-ALL, case-insensitive title substring, min-rating) — both
+  order-independent and non-mutating, 12 unit tests (TDD caught a `-Infinity − -Infinity = NaN` comparator bug in the
+  no-chapter tie-break). Server `page.tsx` delegates to a client [`Shelf.tsx`](<src/app/(app)/Shelf.tsx>) control bar
+  (sort + status + rating selects + a transient search); sort/status/rating persisted in localStorage with the SSR-safe
+  default pattern (no hydration mismatch), search not persisted. **Subsumes WP-15** (`lib/search.ts`, removed from the
+  queue). 2 Playwright specs; `seedSeries` gained `status`/`rating`. Manual pin/drag ordering deferred. **NEXT → WP-28b**
+  (theme system).
 - **2026-08-22** — **WP-54 refined by a new API driver (XHR-*plain* variant + a bare-slug descriptor gap).** A JS-SPA
   source added wrong (title = a "recommendations" widget heading; "chapters" = other-novel recommendation cards whose
   "Chapters: N" text trips `CHAPTER_TEXT`) because its chapters load via **XHR** and WP-45's probe only auto-detects the
