@@ -35,6 +35,10 @@ export interface SeedSeriesInput {
   chapters?: SeedChapter[];
   /** Mark the source link-only (excluded from polling) — enables the WP-29 schedule editor. */
   linkOnly?: boolean;
+  /** Shelf status (WP-28a filtering). Defaults to the schema default (READING). */
+  status?: 'READING' | 'COMPLETED' | 'PAUSED' | 'DROPPED' | 'PLANNED';
+  /** 1–5 star rating (WP-28a sort/filter). Defaults to null (unrated). */
+  rating?: number;
 }
 
 /** Seed one owned series with a source + chapters, directly via Prisma (no network add flow).
@@ -46,6 +50,8 @@ export async function seedSeries(input: SeedSeriesInput): Promise<{ id: string }
     data: {
       userId: 'local',
       title: input.title,
+      ...(input.status ? { status: input.status } : {}),
+      ...(input.rating != null ? { rating: input.rating } : {}),
       sources: {
         create: {
           url: `https://${host}/series/${encodeURIComponent(input.title)}/`,
