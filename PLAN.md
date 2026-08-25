@@ -153,6 +153,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 |----|--------------|--------|------------|
 | WP-28b | Theme system — pluggable themes + a picker (night default + cultivation ancient-scroll, sci-fi holographic-panel); FOUC/hydration-safe token architecture | `NEXT` | WP-10 |
 | WP-28c | Feed page vs library split — a cross-series "what's new across everything" river vs the per-series grid (decide one view or two) | `TODO` | WP-10 |
+| WP-28e | Shelf delete affordance — hide the always-visible per-card delete (WP-51) by default and expose it two ways (**both** wanted): (1) an iOS-Mail-style **swipe-left-to-reveal-Delete** on touch, and (2) an **"Edit" mode toggle** on the shelf head that reveals the per-card delete buttons (also the non-touch / keyboard / a11y path). Keep the confirm + the tap-through guard on both | `TODO` | WP-10, WP-51, WP-28a |
 | WP-55 | Decode HTML entities in **API-source** chapter titles — `decodeHTML` in `parseApiChapters` (feed/TOC paths already decode) + a one-off script to fix stored API-source rows | `TODO` | WP-45 |
 | WP-56 | Fix `parseToc` lock-detection false positives — **`LOCK_CLASS` matches "lock" inside "b`lock`"** so *every WordPress block-theme source* (`wp-block-*` classes) marks **all** chapters `LOCKED`; also `LOCK_TEXT` matches generic title words ("coin"/"premium" in a chapter title) and the lock **scope** is a whole shared content `<div>` (bare-anchor TOCs) that taints every row. Use class-**token boundaries** (not substring), gate lock state on markers not free text, and don't treat a giant shared container as a per-chapter row. **Data-correctness** (a real source had 556 free chapters all shown locked; fixed in prod by hand) | `TODO` | WP-17, WP-20 |
 | WP-18 | Completed shelf + backfill + "Move to Completed?" | `TODO` | WP-10 |
@@ -456,8 +457,9 @@ a novel via its NovelUpdates feed instead.
 UX-polish program on the shipped library/detail UI (WP-10). **Split into pickup-able children (2026-08-20)** so each
 facet can be taken cold in its own session: the **long-title readability** facet shipped (below, DONE), and
 **[WP-28a](#wp-28a--shelf-sort--filter-done-2026-08-25)** (shelf sort + filter) has now shipped too; the remaining
-facets are **[WP-28b](#wp-28b--theme-system)** (theme system, NEXT) and **[WP-28c](#wp-28c--feed-page-vs-library-split)**
-(feed vs library split) — plus a later add, **[WP-28d](#wp-28d--locked-chapter-display-dim--marker--filtersort)**
+facets are **[WP-28b](#wp-28b--theme-system)** (theme system, NEXT), **[WP-28c](#wp-28c--feed-page-vs-library-split)**
+(feed vs library split), and **[WP-28e](#wp-28e--shelf-delete-affordance-swipe-to-delete--edit-mode)** (shelf delete
+affordance — swipe-to-delete + edit mode) — plus a later add, **[WP-28d](#wp-28d--locked-chapter-display-dim--marker--filtersort)**
 (locked-chapter display / filter / sort, DONE). All use `frontend-design` (primary) + `ai-toolkit:design-workflow` for
 tokens, each gets its own brainstorm → spec, and all depend on WP-10 (done). Two small **residual polish items** — the add-page "similar series"
 notice and the HTML-entity display-decode catch-all — stay under this umbrella (below the readability note); they're
@@ -546,6 +548,40 @@ Decide **navigation** (tabs vs separate routes), the **default landing** view, a
 chapter + unlock/now-free events from WP-20). Needs a **brainstorm on IA** up front. **Skills:** `frontend-design`.
 **Depends:** WP-10 (done). **DoD:** decided IA documented in its spec; the feed view (if built) lists cross-series new
 chapters in time order and links through to the chapter/detail.
+
+### WP-28e — Shelf delete affordance (swipe-to-delete + edit mode)
+
+**Goal (owner, 2026-08-25):** replace the **always-visible mobile** delete trash with better-hidden affordances —
+**both** wanted, not either/or:
+1. **Swipe-to-delete (touch):** drag a series card left to reveal a red **Delete** action on the right, iOS-Mail style;
+   tapping it deletes (still confirm-gated).
+2. **Edit mode (all inputs):** an **"Edit"** toggle on the shelf head (near the sort/filter controls) that reveals the
+   per-card delete buttons; off by default. This is also the **keyboard / a11y path**, since a swipe gesture isn't
+   reachable without a pointer.
+
+**Current state (`.card__delete` in [`globals.css`](src/app/globals.css)):** the trash is `opacity: 0` by default and
+revealed on **`.card-wrap:hover` / `:focus-visible`** — so on **desktop it already shows on hover** (fine), and it's
+*not* always visible there. The always-visible behavior the owner wants gone is the **`@media (hover: none)`** override,
+which forces the trash to `opacity: 1` on touch devices (so it's reachable without hover). So WP-28e's real target is the
+**touch/no-hover** experience: drop that always-on override in favor of swipe, and add the explicit Edit toggle as the
+non-pointer reveal. Since WP-28a the shelf render lives in the client [`Shelf.tsx`](<src/app/(app)/Shelf.tsx>), the
+natural seam for an edit-mode flag and per-card gesture state; the trash itself is WP-51's `DeleteSeriesButton`, a
+`Link`-sibling inside `.card-wrap`.
+
+**Scope to design when picked up:**
+- **Swipe:** pointer/touch handling (pointer events, avoid a heavy dep if possible), a reveal-behind-the-card layout,
+  open/closed snap + a trigger threshold, and closing an open row when another opens or on scroll. Preserve the WP-51
+  **tap-through guard** (revealing/deleting must not navigate into the card's `Link`).
+- **Edit mode:** a toggle (likely transient per-visit) that reveals the per-card delete buttons; reuse the existing
+  `DeleteSeries` confirm flow.
+- **Confirm on both paths** — keep the delete confirmation (no accidental swipe-deletes).
+- Decide the desktop story: keep the existing **hover reveal** as-is, or also route desktop through Edit mode for
+  consistency (and whether swipe should also work as a pointer-drag on desktop).
+
+**Skills:** `frontend-design` (primary). **Depends:** WP-10 (done), WP-51 (delete, done), WP-28a (Shelf.tsx client shell,
+done). **DoD:** touch no longer shows an always-on per-card trash; swipe-left reveals Delete and (after confirm) removes
+the card; the Edit toggle reveals/hides the per-card deletes and works without a pointer; the desktop hover reveal still
+works; the tap-through guard holds on every path. Append the flow to the WP-PW E2E checklist at completion.
 
 ### WP-28d — Locked-chapter display (dim / marker) + filter/sort (DONE 2026-08-21)
 
