@@ -17,6 +17,13 @@ test.beforeAll(() => mkdirSync(OUT, { recursive: true }));
 
 for (const theme of THEMES) {
   test(`capture empty-state screens — ${theme}`, async ({ page }) => {
+    // `.themeCard` animates border-color over 180ms (globals.css), so a screenshot taken the
+    // instant aria-checked flips can catch the picker mid-transition (stale card still fading
+    // out, correct card still fading in). Force reduced motion so the app's own
+    // `@media (prefers-reduced-motion: reduce)` rule (globals.css) zeroes that transition and
+    // the capture reflects the settled, correct state.
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+
     // Set the theme before first paint via the same localStorage key the pre-paint script reads.
     await page.addInitScript((t) => window.localStorage.setItem('theme', t), theme);
 
