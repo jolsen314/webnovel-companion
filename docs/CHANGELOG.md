@@ -15,7 +15,9 @@ Append-only history, moved out of [PLAN.md](../PLAN.md). Newest first.
   spec). **Filed from the design pass:** WP-28f (bookshelf theme — gothic/Victorian palette + book-stack layout;
   feasibility spiked, both a horizontal "pile" and vertical "spines" treatment work as pure scoped CSS with zero
   markup changes), and two low-priority owner-requested extensions, WP-28g (header quick-switch) and WP-THEMESYNC
-  (cross-device theme persistence). **NEXT → WP-28c** (feed vs library split).
+  (cross-device theme persistence). **Post-review polish:** the picker gained WAI-ARIA arrow-key roving-tabindex
+  navigation (keyboard-selectable radiogroup), and a minor `theme-color`-meta reversion on client-side soft navigation
+  was noted for follow-up under WP-28g. **NEXT → WP-28c** (feed vs library split).
 - **2026-08-25** — **Docs split to stop PLAN.md's unbounded growth.** PLAN.md had reached ~2,250 lines / ~58k tokens
   and is read every session, ~half of it append-only history. Moved this **Changelog** here (105 entries) and the
   **detail sections for the 21 DONE work packages** (plus the hard-blocked parked **WP-40**) to

@@ -18,3 +18,18 @@ test('WP-28b: picking a theme applies live and persists (no flash) across reload
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'sci-fi');
   await expect(page.getByRole('radio', { name: /Holo panel/ })).toHaveAttribute('aria-checked', 'true');
 });
+
+test('WP-28b: arrow keys move theme selection within the radiogroup (roving, wraps)', async ({ page }) => {
+  await page.goto('/settings');
+  // Default night is the tabbable radio; ArrowRight advances to the next theme (scroll) and applies it.
+  await page.getByRole('radio', { name: /Night reading/ }).focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'scroll');
+  await expect(page.getByRole('radio', { name: /Ancient scroll/ })).toHaveAttribute('aria-checked', 'true');
+
+  // ArrowLeft from the first option wraps to the last (sci-fi).
+  await page.getByRole('radio', { name: /Night reading/ }).focus();
+  await page.keyboard.press('ArrowLeft');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'sci-fi');
+  await expect(page.getByRole('radio', { name: /Holo panel/ })).toHaveAttribute('aria-checked', 'true');
+});

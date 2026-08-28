@@ -18,9 +18,10 @@ export const THEMES: readonly ThemeMeta[] = [
 ];
 
 const THEME_IDS: readonly ThemeId[] = THEMES.map((t) => t.id);
+const THEME_ID_SET: ReadonlySet<string> = new Set(THEME_IDS);
 
 export function isThemeId(v: unknown): v is ThemeId {
-  return typeof v === 'string' && (THEME_IDS as readonly string[]).includes(v);
+  return typeof v === 'string' && THEME_ID_SET.has(v);
 }
 
 export function resolveTheme(v: string | null | undefined): ThemeId {
