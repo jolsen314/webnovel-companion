@@ -46,10 +46,12 @@ uncommitted notes." Real names/URLs live only in those local notes and in scratc
 
 ## Current focus
 
-> **NEXT: WP-28b — Theme system.** WP-28 was split into pickup-able children (2026-08-20) after its long-title
-> readability facet shipped; the shelf-ordering facet (WP-28a) has now landed **expanded** into full shelf **sort +
-> filter**, leaving **WP-28b** (theme system, NEXT) and **WP-28c** (feed vs library split) — priority = the **▶ Active
-> queue** table, reorderable by the owner.
+> **NEXT: WP-28c — Feed page vs library split.** WP-28 was split into pickup-able children (2026-08-20) after its
+> long-title readability facet shipped; the shelf-ordering facet (WP-28a) landed **expanded** into full shelf **sort +
+> filter**, and **WP-28b** (theme system) has now shipped too — leaving **WP-28c** (feed vs library split, NEXT) and
+> **WP-28e** (shelf delete affordance) — priority = the **▶ Active queue** table, reorderable by the owner.
+> WP-28b's spike also surfaced a fourth theme candidate + two low-pri extensions, filed as **WP-28f** (bookshelf
+> theme), **WP-28g** (header quick-switch), and **WP-THEMESYNC** (cross-device persistence).
 >
 > **Recently landed:** see **[docs/CHANGELOG.md](docs/CHANGELOG.md)** (newest first) and the ✅ Completed table below.
 >
@@ -90,9 +92,9 @@ later-tier tables are reference only. `⭐` = load-bearing.
 
 | ID | Work package | Status | Depends on |
 |----|--------------|--------|------------|
-| WP-28b | Theme system — pluggable themes + a picker (night default + cultivation ancient-scroll, sci-fi holographic-panel); FOUC/hydration-safe token architecture | `NEXT` | WP-10 |
-| WP-28c | Feed page vs library split — a cross-series "what's new across everything" river vs the per-series grid (decide one view or two) | `TODO` | WP-10 |
+| WP-28c | Feed page vs library split — a cross-series "what's new across everything" river vs the per-series grid (decide one view or two) | `NEXT` | WP-10 |
 | WP-28e | Shelf delete affordance — hide the always-visible per-card delete (WP-51) by default and expose it two ways (**both** wanted): (1) an iOS-Mail-style **swipe-left-to-reveal-Delete** on touch, and (2) an **"Edit" mode toggle** on the shelf head that reveals the per-card delete buttons (also the non-touch / keyboard / a11y path). Keep the confirm + the tap-through guard on both | `TODO` | WP-10, WP-51, WP-28a |
+| WP-28f | Bookshelf theme — gothic/Victorian palette + book-stack shelf layout | `TODO` | WP-28b, WP-28a, WP-28e |
 | WP-55 | Decode HTML entities in **API-source** chapter titles — `decodeHTML` in `parseApiChapters` (feed/TOC paths already decode) + a one-off script to fix stored API-source rows | `TODO` | WP-45 |
 | WP-56 | Fix `parseToc` lock-detection false positives — **`LOCK_CLASS` matches "lock" inside "b`lock`"** so *every WordPress block-theme source* (`wp-block-*` classes) marks **all** chapters `LOCKED`; also `LOCK_TEXT` matches generic title words ("coin"/"premium" in a chapter title) and the lock **scope** is a whole shared content `<div>` (bare-anchor TOCs) that taints every row. Use class-**token boundaries** (not substring), gate lock state on markers not free text, and don't treat a giant shared container as a per-chapter row. **Data-correctness** (a real source had 556 free chapters all shown locked; fixed in prod by hand). **Drivers (local IDs):** block→lock confirmed on B01 (×5 series) + B02 (`wp-block` classes, 0 real lock markers); B03 is a **non-block variant** (0 `wp-block` — a shared big scope + a stray `LOCK_TEXT` token elsewhere on the page taints all rows) | `TODO` | WP-17, WP-20 |
 | WP-57 | `parseToc` must exclude **recommendation / "other novels" widgets** and **series-scope** to the novel's own chapter links — "you-may-also-like" / "popular" / "site-latest" cards are `/novel/<other-slug>` links whose "… Chapters: N" text trips `CHAPTER_TEXT`, so a JS/SPA source whose render captured only the shell scrapes the widget as chapters (and its `<h1>` as the title). Extends WP-36 (region scoping) with a **cross-series-card** exclusion + slug-family scoping to the series' own chapters. **Data-correctness** (wrong series' chapters ingested). **Drivers (local IDs):** B07 (×2), B08; also the 2026-08-22 XHR-SPA source (16 recommendation cards as "chapters") | `TODO` | WP-36, WP-17 |
@@ -111,6 +113,8 @@ later-tier tables are reference only. `⭐` = load-bearing.
 | WP-EXPORT | One-click data export (`/api/export` → JSON) — own-your-data insurance | `TODO` | WP-AUTH |
 | WP-54 | **API-source auto-probe + human docs for the API switchover** — the add-time `probeForApi` (WP-45) auto-detects only the **static-JSON SPA** shape (`data-*` → `.json`), not an **XHR-fetched** REST chapters API behind CF (the `…/v1/chapters?category=<id>` shape — manual today: render, watch the network tab, hand-build `--map`, `set-api-descriptor`; a `/local/` helper now scripts it for one site). Add a **render/XHR API detector** (infer url/title/lock fields + pagination + per-series id) + a **`db:cleanup probe-api <sourceId>`** command, and a **human guide** (new `docs/` page linked from README): the CF taxonomy, how to spot a usable JSON chapter API, the field-map/pagination/`per_page` gotchas, and a "can this site leverage the API path?" checklist. *(Auto-probe is convenience; the docs are the priority.)* | `TODO` | WP-45, WP-53 |
 | WP-RETRY | *(low)* Retry / auto-upgrade a link-only source — a manual "retry fetching chapters" that re-runs resolution on a `linkOnly` source and upgrades it to a tracked FEED/PAGE_WATCH source when the site becomes reachable (renderer added, feed appears, URL fixed) | `TODO` | WP-50, WP-17b |
+| WP-28g | *(low)* Theme header quick-switch — a header control to cycle/menu themes from anywhere, instead of only via the settings page. Owner-requested extension | `TODO` | WP-28b |
+| WP-THEMESYNC | *(low)* Cross-device theme persistence — persist the theme choice server-side (e.g. alongside notification prefs) so it follows the user across devices instead of per-origin localStorage. Owner-requested extension | `TODO` | WP-28b, WP-AUTH |
 | WP-32 | *(low)* `parseToc` **chapter-list** robustness — follow split/paginated sibling TOCs (bounded "next chapters" hops) + **all non-chapter anchor filtering** (pagination anchors + shortcut/CTA anchors: "Last chapter"/"Read"/"Start reading"/"New/First Chapter"/"Chapter list"→`javascript:;`/empty — drivers local IDs B03, B05, B07, B08, B10, B12, B14, B15). *Chapter title/number **extraction** cleaning moved out to **WP-58***. | `TODO` | WP-17, WP-35 |
 | WP-47 | *(low)* Client resubscribe on VAPID key mismatch — `resyncSubscription` re-posts a stale browser sub whose `applicationServerKey` ≠ current key, so a 403-pruned sub churns (prune→re-add) and the client shows "subscribed" while receiving nothing; detect the key mismatch on load and unsubscribe + re-subscribe under the new key. Makes key rotation self-healing on the client | `TODO` | WP-09 |
 | WP-APIZERO | *(low)* API-source parsed-zero regression signal — when an API source's fetch succeeds (200) but `parseApiChapters` yields fewer chapters than stored (or 0 while stored > 0) — a misconfigured descriptor or a drifted API shape — surface a health nudge / re-probe instead of failing silently. Today an API source has no escalation (render escalation is PAGE_WATCH-only), so a broken descriptor looks identical to a healthy-but-quiet source. Mirror PAGE_WATCH's `read < stored` regression signal (`poll.ts`). Non-destructive (`diffChapters` never deletes). Sibling to WP-16 (host health) / WP-45b | `TODO` | WP-45, WP-16 |
@@ -127,7 +131,8 @@ WP-39b (deeper add-dedup, re-scoped: tocUrl page-watch keying + create-then-anno
 WP-45 (API-first adapter, plain-REST slice) · WP-45b (CF-gated render transport + paginated API sources) ·
 WP-NOTES (detail-page notes UI — collapsible, save-on-blur, content-aware default + truncated preview) ·
 WP-52 (poll-time hard-fail render escalation — PAGE_WATCH PLAIN + Cloudflare 403 → persist RENDER) ·
-WP-28a (shelf sort + filter — pure `lib/shelf.ts` [4 sort modes + status/title/min-rating filter] behind a client control bar, localStorage-persisted; **subsumes WP-15** `lib/search.ts`).
+WP-28a (shelf sort + filter — pure `lib/shelf.ts` [4 sort modes + status/title/min-rating filter] behind a client control bar, localStorage-persisted; **subsumes WP-15** `lib/search.ts`) ·
+WP-28b (theme system — `[data-theme]` token architecture + pre-paint inline-script/localStorage no-flash + settings picker; night/scroll/sci-fi; `--color-on-glow` tokenized).
 
 ### ⏭ Later tiers (M2–M4)
 
@@ -273,11 +278,14 @@ a novel via its NovelUpdates feed instead.
 
 UX-polish program on the shipped library/detail UI (WP-10). **Split into pickup-able children (2026-08-20)** so each
 facet can be taken cold in its own session: the **long-title readability** facet shipped (below, DONE), and
-**[WP-28a](docs/PLAN-archive.md#wp-28a--shelf-sort--filter-done-2026-08-25)** (shelf sort + filter) has now shipped too;
-the remaining facets are **[WP-28b](#wp-28b--theme-system)** (theme system, NEXT), **[WP-28c](#wp-28c--feed-page-vs-library-split)**
-(feed vs library split), and **[WP-28e](#wp-28e--shelf-delete-affordance-swipe-to-delete--edit-mode)** (shelf delete
-affordance — swipe-to-delete + edit mode) — plus a later add, **[WP-28d](docs/PLAN-archive.md#wp-28d--locked-chapter-display-dim--marker--filtersort-done-2026-08-21)**
-(locked-chapter display / filter / sort, DONE). All use `frontend-design` (primary) + `ai-toolkit:design-workflow` for
+**[WP-28a](docs/PLAN-archive.md#wp-28a--shelf-sort--filter-done-2026-08-25)** (shelf sort + filter) and
+**[WP-28b](docs/PLAN-archive.md#wp-28b--theme-system-done-2026-08-28)** (theme system) have now shipped too; the
+remaining facets are **[WP-28c](#wp-28c--feed-page-vs-library-split)** (feed vs library split, NEXT) and
+**[WP-28e](#wp-28e--shelf-delete-affordance-swipe-to-delete--edit-mode)** (shelf delete affordance — swipe-to-delete +
+edit mode) — plus a later add, **[WP-28d](docs/PLAN-archive.md#wp-28d--locked-chapter-display-dim--marker--filtersort-done-2026-08-21)**
+(locked-chapter display / filter / sort, DONE). WP-28b's design pass also spawned **[WP-28f](#wp-28f--bookshelf-theme)**
+(bookshelf theme, spiked feasible) and two low-priority owner-requested extensions, **WP-28g** (header quick-switch) and
+**WP-THEMESYNC** (cross-device theme persistence). All use `frontend-design` (primary) + `ai-toolkit:design-workflow` for
 tokens, each gets its own brainstorm → spec, and all depend on WP-10 (done). Two small **residual polish items** — the add-page "similar series"
 notice and the HTML-entity display-decode catch-all — stay under this umbrella (below the readability note); they're
 minor and not blocking any child.
@@ -316,24 +324,6 @@ fix — same file.**)** **(b) catch-all — decode at display** in the
 library/detail title render, which fixes rows already stored encoded without waiting for a re-extract. Belongs partly
 in the data layer, filed here because the visible symptom + the display-decode safety net are frontend; stays under
 WP-28 (the residual display-decode half; root-cause extraction decode shipped as WP-30b).
-
-### WP-28b — Theme system
-
-**Goal:** turn the single baked-in **"night reading"** identity into a **pluggable theme system** with a user picker,
-keeping night as the default and adding **cultivation ancient-scroll** + **sci-fi holographic-panel**.
-
-**Current state:** theme tokens are hard-coded in one `@theme` block and `:root { color-scheme: dark }` in
-[`globals.css`](src/app/globals.css) — there's no switching machinery.
-
-**Scope to design when picked up:** the **token architecture** (per-theme CSS custom-property sets keyed off a
-`[data-theme="…"]` attribute on the root, so components keep referencing `var(--color-…)` unchanged); **persistence +
-no-flash** (store the choice, apply it **before first paint** — an inline pre-hydration script or cookie-driven SSR
-attribute — so there's no FOUC or hydration mismatch, the trap the chapter-display and notes toggles already navigate);
-the **picker UI** (settings page, [`(app)/settings/page.tsx`](<src/app/(app)/settings/page.tsx>)); and the two new
-palettes/type treatments themselves. Largest of the three — the architecture is the load-bearing part; the two extra
-themes are content on top. **Skills:** `frontend-design` (primary) + `ai-toolkit:design-workflow` (tokens). **Depends:**
-WP-10 (done). **DoD:** switching themes is instant + persistent with no flash on reload; night is default and unchanged;
-both new themes ship and cover the whole app (shelf, detail, add, settings, login).
 
 ### WP-28c — Feed page vs library split
 
@@ -380,6 +370,26 @@ natural seam for an edit-mode flag and per-card gesture state; the trash itself 
 done). **DoD:** touch no longer shows an always-on per-card trash; swipe-left reveals Delete and (after confirm) removes
 the card; the Edit toggle reveals/hides the per-card deletes and works without a pointer; the desktop hover reveal still
 works; the tap-through guard holds on every path. Append the flow to the WP-PW E2E checklist at completion.
+
+### WP-28f — Bookshelf theme
+
+**Goal:** a fourth theme — a **gothic/Victorian palette** paired with a **book-stack shelf layout**, replacing the
+plain card grid with something that reads as an actual bookshelf.
+
+**Spike result (2026-08-28, folded out of WP-28b's design pass):** both a horizontal **"pile of books"** and a
+vertical **"spines on a shelf"** treatment are feasible as **pure scoped CSS on the existing card markup, with zero
+markup changes**. Tradeoff to resolve in this WP's own brainstorm: **vertical spines** are denser and the stronger
+"real bookshelf" look but **truncate long titles** (fixed book height) — mitigable via hover-reveal/tooltip; the
+**horizontal pile** keeps full titles on one line but shows fewer per screen. **Both hide `.card__latest`/`.card__meta`**
+(a spine can't carry them) — the pile-vs-spine call is an info-density decision for this WP, not pre-decided.
+*(The throwaway spike HTML/screenshots lived in the session scratchpad and were ephemeral — this note is the durable
+record of the finding; nothing depends on those files persisting.)*
+
+**Skills:** `frontend-design` (primary). **Depends:** WP-28b (theme architecture, done), WP-28a (shelf sort/filter
+control bar — needs gothic styling, done), WP-28e (delete affordance must work on book rows). **DoD:** a `bookshelf`
+theme option ships in the picker; the shelf renders as book pile or spines (per the brainstorm's call) with a
+gothic/Victorian palette; the rest of the app (detail, add, settings, login) gets matching typography/motifs; existing
+shelf interactions (sort/filter, delete) still work on the new layout.
 
 ### WP-31 — Tab-structured premium TOCs (renderer tab capture + tab-membership access)
 

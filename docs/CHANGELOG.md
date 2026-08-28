@@ -2,6 +2,20 @@
 
 Append-only history, moved out of [PLAN.md](../PLAN.md). Newest first.
 
+- **2026-08-28** — **WP-28b shipped: pluggable theme system.** Replaced the single baked-in "night reading" identity
+  with a `[data-theme]` token architecture — per-theme CSS custom-property sets keyed off `data-theme` on `<html>`, so
+  components keep referencing `var(--color-…)` unchanged — plus a new shared `--color-on-glow` token (tokenized
+  per-theme foreground for text on the accent glow, previously hard-coded). Persistence + no-flash via an inline
+  **pre-paint script** (`buildThemeScript`, derived from the pure `src/lib/theme.ts` registry) injected in
+  `layout.tsx`: reads `localStorage`, validates the stored value, and sets `data-theme` (+ the `theme-color` meta)
+  before first paint — no FOUC, no hydration mismatch. Settings-page **`ThemePicker`** swaps + persists instantly.
+  Two new themes ship alongside the unchanged default **night**: **scroll** (ancient-scroll parchment) and **sci-fi**
+  (holo-panel), each with its own palette, font, and motif, covering the whole app (shelf, detail, add, settings,
+  login). Unit-tested (`tests/unit/theme.test.ts`) + Playwright-covered (persistence e2e + a themed-screenshot review
+  spec). **Filed from the design pass:** WP-28f (bookshelf theme — gothic/Victorian palette + book-stack layout;
+  feasibility spiked, both a horizontal "pile" and vertical "spines" treatment work as pure scoped CSS with zero
+  markup changes), and two low-priority owner-requested extensions, WP-28g (header quick-switch) and WP-THEMESYNC
+  (cross-device theme persistence). **NEXT → WP-28c** (feed vs library split).
 - **2026-08-25** — **Docs split to stop PLAN.md's unbounded growth.** PLAN.md had reached ~2,250 lines / ~58k tokens
   and is read every session, ~half of it append-only history. Moved this **Changelog** here (105 entries) and the
   **detail sections for the 21 DONE work packages** (plus the hard-blocked parked **WP-40**) to
