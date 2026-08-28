@@ -157,6 +157,24 @@ mismatch); the search box is intentionally not persisted. **Subsumes WP-15** (`l
 ([`e2e/shelf.spec.ts`](e2e/shelf.spec.ts)); `seedSeries` gained optional `status`/`rating`. **Manual pin/drag ordering
 deliberately deferred** (would need a persisted per-series order column + drag UI — re-file if wanted).
 
+### WP-28b — Theme system (DONE 2026-08-28)
+
+**Shipped:** a pluggable **`[data-theme]` token architecture** replacing the single baked-in "night reading" identity —
+per-theme CSS custom-property sets keyed off `data-theme` on `<html>` (components keep referencing `var(--color-…)`
+unchanged), plus a new shared `--color-on-glow` token (foreground for text sitting on the accent glow, tokenized per
+theme rather than hard-coded). Pure `src/lib/theme.ts` (unit-tested) is the single source of truth for the theme
+registry (`night` default, `scroll` ancient-scroll, `sci-fi` holo-panel — each with its own palette, `next/font/google`
+family, and motif) and `buildThemeScript()`, which derives an **inline pre-paint script** injected in `layout.tsx`: it
+reads `localStorage`, validates against the known theme IDs, and sets `data-theme` (+ the `theme-color` meta) **before
+first paint**, so there's no FOUC and no hydration mismatch. The settings-page **`ThemePicker`** (client component)
+swaps the attribute + persists to `localStorage` instantly, with a mount-sync fix for its own hydration edge case
+(default vs. stored value). Covered by unit tests (`tests/unit/theme.test.ts`), Playwright theme-persistence e2e
+(`e2e/theme.spec.ts`), and a themed-screenshot review spec (`e2e/theme-screens.spec.ts`, gitignored output). **Scope
+held per the spec's non-goals:** no OS `prefers-color-scheme` auto-follow (explicit choice only), no header
+quick-switch (settings-page only — filed as **WP-28g**), no cross-device sync (per-origin localStorage only — filed as
+**WP-THEMESYNC**), no per-theme mono font (shared Plex Mono). A fourth theme, **bookshelf** (gothic/Victorian palette +
+book-stack shelf layout), was spiked but scoped out to its own WP — filed as **WP-28f** with the spike findings.
+
 ### WP-28d — Locked-chapter display (dim / marker) + filter/sort (DONE 2026-08-21)
 
 **Shipped (2026-08-21):** lucide `Lock` marker on `LOCKED` rows (accent glyph, no dim) + a persisted **"Hide locked"**

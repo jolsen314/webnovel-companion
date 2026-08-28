@@ -13,6 +13,7 @@
   --color-glow: #e7b15c;
   --color-glow-dim: #b9884400;
   --color-down: #cf7a6f;
+  --color-on-glow: #241a09; /* foreground for text sitting on the --color-glow accent */
 
   --font-display: var(--font-fraunces), Georgia, "Times New Roman", serif;
   --font-sans: var(--font-plex-sans), system-ui, -apple-system, sans-serif;
@@ -21,6 +22,60 @@
 
 :root {
   color-scheme: dark;
+}
+
+/* ── Theme: cultivation ancient-scroll (light parchment) ─────────────────── */
+:root[data-theme="scroll"] {
+  --color-ink: #e4d8bc;
+  --color-ink-2: #dccfae;
+  --color-surface: #efe4c9;
+  --color-surface-2: #f5ecd6;
+  --color-line: #cbb98f;
+  --color-paper: #372a18;      /* primary text = sepia ink */
+  --color-muted: #8a765a;
+  --color-glow: #9e2b25;       /* cinnabar wax-seal */
+  --color-glow-dim: #9e2b2500;
+  --color-down: #b23b2f;
+  --color-on-glow: #f5ecd6;    /* light text on the seal red */
+  --font-display: var(--font-cinzel), Georgia, "Times New Roman", serif;
+  --font-sans: var(--font-eb-garamond), Georgia, serif;
+  color-scheme: light;
+}
+
+/* ── Theme: sci-fi holographic-panel (dark slate + cyan) ─────────────────── */
+:root[data-theme="sci-fi"] {
+  --color-ink: #070b12;
+  --color-ink-2: #05080e;
+  --color-surface: #0e1826;
+  --color-surface-2: #152234;
+  --color-line: #21354f;
+  --color-paper: #d6e8f2;
+  --color-muted: #7189a4;
+  --color-glow: #37e0d8;       /* cyan panel-glow */
+  --color-glow-dim: #37e0d800;
+  --color-down: #ff6b8a;
+  --color-on-glow: #06141a;    /* dark text on cyan */
+  --font-display: var(--font-chakra), system-ui, sans-serif;
+  --font-sans: var(--font-space-grotesk), system-ui, sans-serif;
+  color-scheme: dark;
+}
+
+/* scroll: a faint parchment grain + a soft seal bloom, pure CSS (no bitmap) */
+:root[data-theme="scroll"] body {
+  background-image:
+    radial-gradient(60% 40% at 15% 0%, color-mix(in oklab, var(--color-glow) 6%, transparent), transparent 60%),
+    repeating-linear-gradient(0deg, rgba(120, 90, 50, 0.035) 0 2px, transparent 2px 4px);
+}
+/* sci-fi: the amber lamp radial becomes a cyan panel-glow (follows --color-glow automatically);
+   add a faint scanline within the isolated hero/login decorative layer (z-index -1, non-interactive) */
+:root[data-theme="sci-fi"] .hero::after,
+:root[data-theme="sci-fi"] .login::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: repeating-linear-gradient(0deg, color-mix(in oklab, var(--color-glow) 5%, transparent) 0 1px, transparent 1px 3px);
 }
 
 body {
@@ -119,7 +174,7 @@ body {
 }
 .btn--primary {
   --btn-bg: var(--color-glow);
-  --btn-fg: #241a09;
+  --btn-fg: var(--color-on-glow);
   border-color: transparent;
   font-weight: 600;
   box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-glow) 60%, transparent);
@@ -841,7 +896,7 @@ body {
   font-family: var(--font-mono);
   font-size: 0.72rem;
   font-weight: 600;
-  color: #241a09;
+  color: var(--color-on-glow);
   background: var(--color-glow);
   padding: 0.12rem 0.45rem;
   border-radius: 999px;
@@ -1074,4 +1129,54 @@ body {
 }
 .settings__test .settings__rowHint {
   margin: 0;
+}
+
+.themeGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.6rem;
+}
+.themeCard {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  text-align: left;
+  padding: 0.6rem 0.7rem;
+  background: var(--color-ink);
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+  cursor: pointer;
+  color: var(--color-paper);
+  transition: border-color 0.18s ease, transform 0.12s ease;
+}
+.themeCard:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in oklab, var(--color-glow) 45%, var(--color-line));
+}
+.themeCard--on {
+  border-color: var(--color-glow);
+}
+.themeCard__swatch {
+  display: inline-flex;
+  flex: none;
+  border-radius: 5px;
+  overflow: hidden;
+  border: 1px solid var(--color-line);
+}
+.themeCard__swatch span {
+  width: 14px;
+  height: 26px;
+}
+.themeCard__text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.themeCard__label {
+  font-size: 0.92rem;
+}
+.themeCard__blurb {
+  font-size: 0.74rem;
+  color: var(--color-muted);
 }

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
-import { Fraunces, IBM_Plex_Sans, IBM_Plex_Mono } from 'next/font/google';
+import { Fraunces, IBM_Plex_Sans, IBM_Plex_Mono, Cinzel, EB_Garamond, Chakra_Petch, Space_Grotesk } from 'next/font/google';
 import { ServiceWorkerRegister } from './ServiceWorkerRegister';
+import { buildThemeScript } from '../lib/theme';
 import './globals.css';
 
 const fraunces = Fraunces({
@@ -22,6 +23,10 @@ const plexMono = IBM_Plex_Mono({
   display: 'swap',
   weight: ['400', '500'],
 });
+const cinzel = Cinzel({ subsets: ['latin'], variable: '--font-cinzel', display: 'swap', weight: ['400', '600', '700'] });
+const ebGaramond = EB_Garamond({ subsets: ['latin'], variable: '--font-eb-garamond', display: 'swap', weight: ['400', '500'], style: ['normal', 'italic'] });
+const chakra = Chakra_Petch({ subsets: ['latin'], variable: '--font-chakra', display: 'swap', weight: ['400', '600', '700'] });
+const spaceGrotesk = Space_Grotesk({ subsets: ['latin'], variable: '--font-space-grotesk', display: 'swap', weight: ['400', '500', '600'] });
 
 export const metadata: Metadata = {
   title: 'Webnovel Companion',
@@ -39,8 +44,15 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${fraunces.variable} ${plexSans.variable} ${plexMono.variable}`}>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${fraunces.variable} ${plexSans.variable} ${plexMono.variable} ${cinzel.variable} ${ebGaramond.variable} ${chakra.variable} ${spaceGrotesk.variable}`}
+    >
       <body>
+        {/* Applies the saved theme before first paint (no FOUC). suppressHydrationWarning on <html>
+            because this script sets data-theme, which the server does not render. */}
+        <script dangerouslySetInnerHTML={{ __html: buildThemeScript() }} />
         {children}
         <ServiceWorkerRegister />
       </body>

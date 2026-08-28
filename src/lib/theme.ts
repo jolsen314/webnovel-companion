@@ -1,0 +1,45 @@
+export type ThemeId = 'night' | 'scroll' | 'sci-fi';
+
+export const DEFAULT_THEME: ThemeId = 'night';
+export const THEME_STORAGE_KEY = 'theme';
+
+export interface ThemeMeta {
+  id: ThemeId;
+  label: string;
+  blurb: string;
+  themeColor: string; // drives <meta name="theme-color">
+  swatch: string[]; // palette chips for the picker
+}
+
+export const THEMES: readonly ThemeMeta[] = [
+  { id: 'night', label: 'Night reading', blurb: 'Warm ink, a single amber lamp.', themeColor: '#15131a', swatch: ['#15131a', '#ece4d6', '#e7b15c'] },
+  { id: 'scroll', label: 'Ancient scroll', blurb: 'Aged parchment and a cinnabar seal.', themeColor: '#ded2b4', swatch: ['#e4d8bc', '#372a18', '#9e2b25'] },
+  { id: 'sci-fi', label: 'Holo panel', blurb: 'Deep slate and a cyan glow.', themeColor: '#070b12', swatch: ['#070b12', '#d6e8f2', '#37e0d8'] },
+];
+
+const THEME_IDS: readonly ThemeId[] = THEMES.map((t) => t.id);
+const THEME_ID_SET: ReadonlySet<string> = new Set(THEME_IDS);
+
+export function isThemeId(v: unknown): v is ThemeId {
+  return typeof v === 'string' && THEME_ID_SET.has(v);
+}
+
+export function resolveTheme(v: string | null | undefined): ThemeId {
+  return isThemeId(v) ? v : DEFAULT_THEME;
+}
+
+export function buildThemeScript(): string {
+  const ids = JSON.stringify(THEME_IDS);
+  const colors = JSON.stringify(Object.fromEntries(THEMES.map((t) => [t.id, t.themeColor])));
+  const key = JSON.stringify(THEME_STORAGE_KEY);
+  const def = JSON.stringify(DEFAULT_THEME);
+  return (
+    `(function(){try{` +
+    `var v=${ids},c=${colors},t=localStorage.getItem(${key});` +
+    `if(v.indexOf(t)===-1)t=${def};` +
+    `document.documentElement.setAttribute("data-theme",t);` +
+    `var m=document.querySelector('meta[name="theme-color"]');` +
+    `if(m)m.setAttribute("content",c[t]);` +
+    `}catch(e){}})();`
+  );
+}
