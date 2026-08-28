@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getPushState, enablePush, disablePush, type PushState } from '../../pushClient';
+import { ThemePicker } from './ThemePicker';
 
 interface Prefs {
   pushNewChapter: boolean;
@@ -145,6 +146,8 @@ export default function SettingsPage() {
           <p className="settings__foot">These take effect once push notifications are on.</p>
         )}
       </div>
+
+      <ThemePicker />
     </section>
   );
 }

@@ -1130,3 +1130,53 @@ body {
 .settings__test .settings__rowHint {
   margin: 0;
 }
+
+.themeGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.6rem;
+}
+.themeCard {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  text-align: left;
+  padding: 0.6rem 0.7rem;
+  background: var(--color-ink);
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+  cursor: pointer;
+  color: var(--color-paper);
+  transition: border-color 0.18s ease, transform 0.12s ease;
+}
+.themeCard:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in oklab, var(--color-glow) 45%, var(--color-line));
+}
+.themeCard--on {
+  border-color: var(--color-glow);
+}
+.themeCard__swatch {
+  display: inline-flex;
+  flex: none;
+  border-radius: 5px;
+  overflow: hidden;
+  border: 1px solid var(--color-line);
+}
+.themeCard__swatch span {
+  width: 14px;
+  height: 26px;
+}
+.themeCard__text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.themeCard__label {
+  font-size: 0.92rem;
+}
+.themeCard__blurb {
+  font-size: 0.74rem;
+  color: var(--color-muted);
+}
