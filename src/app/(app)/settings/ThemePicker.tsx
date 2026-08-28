@@ -1,16 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { THEMES, DEFAULT_THEME, THEME_STORAGE_KEY, isThemeId, type ThemeId } from '../../../lib/theme';
 
-function currentTheme(): ThemeId {
-  if (typeof document === 'undefined') return DEFAULT_THEME;
-  const attr = document.documentElement.getAttribute('data-theme');
-  return isThemeId(attr) ? attr : DEFAULT_THEME;
-}
-
 export function ThemePicker() {
-  const [theme, setTheme] = useState<ThemeId>(currentTheme);
+  const [theme, setTheme] = useState<ThemeId>(DEFAULT_THEME);
+
+  useEffect(() => {
+    const attr = document.documentElement.getAttribute('data-theme');
+    if (isThemeId(attr)) setTheme(attr);
+  }, []);
 
   function choose(id: ThemeId) {
     setTheme(id);
