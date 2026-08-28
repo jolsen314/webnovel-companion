@@ -24,6 +24,7 @@ run unless the DB name contains `e2e`/`test`, so it can never truncate dev or pr
 - `source-actions.spec.ts` — WP-34: Backfill / Track-unlocks buttons fire and surface their result. These two
   routes fetch the real network server-side, so the browser→API call is **stubbed** (`page.route()`); the
   server-side add/reconcile logic is owned by the integration tests.
+- `theme.spec.ts` — WP-28b: default is night; picking a theme applies live and persists (pre-paint, no flash) on reload.
 
 ## Switching to auth-aware later
 
