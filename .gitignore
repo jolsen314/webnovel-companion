@@ -33,3 +33,6 @@ next-env.d.ts
 
 # SDD subagent workspace (git-ignored scratch)
 .superpowers/
+
+# Local WP-28b theme review screenshots (not committed)
+screenshots/
