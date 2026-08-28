@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { THEMES, DEFAULT_THEME, isThemeId, resolveTheme } from '../../src/lib/theme';
+import { THEMES, DEFAULT_THEME, isThemeId, resolveTheme, buildThemeScript } from '../../src/lib/theme';
 
 describe('theme registry', () => {
   test('ships exactly the three themes, night first', () => {
@@ -27,5 +27,37 @@ describe('resolveTheme', () => {
     expect(resolveTheme(null)).toBe('night');
     expect(resolveTheme(undefined)).toBe('night');
     expect(resolveTheme('bogus')).toBe('night');
+  });
+});
+
+// Run the produced IIFE against minimal document/localStorage stubs. The script references
+// `localStorage` and `document` as free identifiers, so a Function with those params shadows globals.
+function runScript(stored: string | null) {
+  const attrs: Record<string, string> = {};
+  let metaColor = '';
+  const document = {
+    documentElement: { setAttribute: (k: string, v: string) => { attrs[k] = v; } },
+    querySelector: (sel: string) =>
+      sel.includes('theme-color') ? { setAttribute: (_k: string, v: string) => { metaColor = v; } } : null,
+  };
+  const localStorage = { getItem: (_k: string) => stored };
+  // eslint-disable-next-line no-new-func
+  new Function('localStorage', 'document', buildThemeScript())(localStorage, document);
+  return { theme: attrs['data-theme'], metaColor };
+}
+
+describe('buildThemeScript', () => {
+  test('applies a stored valid theme + its themeColor', () => {
+    expect(runScript('scroll')).toEqual({ theme: 'scroll', metaColor: '#ded2b4' });
+    expect(runScript('sci-fi')).toEqual({ theme: 'sci-fi', metaColor: '#070b12' });
+  });
+  test('falls back to night for missing or garbage', () => {
+    expect(runScript(null).theme).toBe('night');
+    expect(runScript('bogus').theme).toBe('night');
+    expect(runScript(null).metaColor).toBe('#15131a');
+  });
+  test('never throws even with no meta tag present', () => {
+    // querySelector returns null for a non-theme-color selector; script guards `if(m)`.
+    expect(() => runScript('night')).not.toThrow();
   });
 });

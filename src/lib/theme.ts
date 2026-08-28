@@ -26,3 +26,19 @@ export function isThemeId(v: unknown): v is ThemeId {
 export function resolveTheme(v: string | null | undefined): ThemeId {
   return isThemeId(v) ? v : DEFAULT_THEME;
 }
+
+export function buildThemeScript(): string {
+  const ids = JSON.stringify(THEME_IDS);
+  const colors = JSON.stringify(Object.fromEntries(THEMES.map((t) => [t.id, t.themeColor])));
+  const key = JSON.stringify(THEME_STORAGE_KEY);
+  const def = JSON.stringify(DEFAULT_THEME);
+  return (
+    `(function(){try{` +
+    `var v=${ids},c=${colors},t=localStorage.getItem(${key});` +
+    `if(v.indexOf(t)===-1)t=${def};` +
+    `document.documentElement.setAttribute("data-theme",t);` +
+    `var m=document.querySelector('meta[name="theme-color"]');` +
+    `if(m)m.setAttribute("content",c[t]);` +
+    `}catch(e){}})();`
+  );
+}
