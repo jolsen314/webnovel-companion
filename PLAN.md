@@ -51,7 +51,9 @@ uncommitted notes." Real names/URLs live only in those local notes and in scratc
 > filter**, and **WP-28b** (theme system) has now shipped too — leaving **WP-28c** (feed vs library split, NEXT) and
 > **WP-28e** (shelf delete affordance) — priority = the **▶ Active queue** table, reorderable by the owner.
 > WP-28b's spike also surfaced a fourth theme candidate + two low-pri extensions, filed as **WP-28f** (bookshelf
-> theme), **WP-28g** (header quick-switch), and **WP-THEMESYNC** (cross-device persistence).
+> theme), **WP-28g** (header quick-switch), and **WP-THEMESYNC** (cross-device persistence). **WP-28h** (per-theme
+> scenes/cards/detail — scroll's ink-tree+petals+rolled-scroll+wax-seal, sci-fi's holo env) has now shipped too, a
+> side effort alongside WP-28b that doesn't change the queue above.
 >
 > **Recently landed:** see **[docs/CHANGELOG.md](docs/CHANGELOG.md)** (newest first) and the ✅ Completed table below.
 >
@@ -132,7 +134,8 @@ WP-45 (API-first adapter, plain-REST slice) · WP-45b (CF-gated render transport
 WP-NOTES (detail-page notes UI — collapsible, save-on-blur, content-aware default + truncated preview) ·
 WP-52 (poll-time hard-fail render escalation — PAGE_WATCH PLAIN + Cloudflare 403 → persist RENDER) ·
 WP-28a (shelf sort + filter — pure `lib/shelf.ts` [4 sort modes + status/title/min-rating filter] behind a client control bar, localStorage-persisted; **subsumes WP-15** `lib/search.ts`) ·
-WP-28b (theme system — `[data-theme]` token architecture + pre-paint inline-script/localStorage no-flash + settings picker; night/scroll/sci-fi; `--color-on-glow` tokenized).
+WP-28b (theme system — `[data-theme]` token architecture + pre-paint inline-script/localStorage no-flash + settings picker; night/scroll/sci-fi; `--color-on-glow` tokenized) ·
+WP-28h (per-theme scenes/cards/detail — scroll ink-tree+petals+rolled-scroll cards+wax-seal badge+opened-scroll detail; sci-fi holo env: glassy chrome + grid/binary-flicker/glitch/shimmer + HUD glass cards/detail; hydration-safe deterministic scatter; reduced-motion-gated; licensed assets via Vercel Blob with tree-hidden/red-circle onError fallback; hero "here" de-emphasized — the one night-visible change).
 
 ### ⏭ Later tiers (M2–M4)
 
@@ -279,7 +282,13 @@ a novel via its NovelUpdates feed instead.
 UX-polish program on the shipped library/detail UI (WP-10). **Split into pickup-able children (2026-08-20)** so each
 facet can be taken cold in its own session: the **long-title readability** facet shipped (below, DONE), and
 **[WP-28a](docs/PLAN-archive.md#wp-28a--shelf-sort--filter-done-2026-08-25)** (shelf sort + filter) and
-**[WP-28b](docs/PLAN-archive.md#wp-28b--theme-system-done-2026-08-28)** (theme system) have now shipped too; the
+**[WP-28b](docs/PLAN-archive.md#wp-28b--theme-system-done-2026-08-28)** (theme system) have now shipped too, alongside
+a follow-on side effort, **WP-28h** (per-theme scenes/cards/detail — scroll's ink-tree+petals+rolled-scroll cards+
+wax-seal badge+opened-scroll detail, sci-fi's full holo env of glassy chrome + grid/binary-flicker/glitch/shimmer +
+HUD glass cards/detail; hydration-safe deterministic scatter, reduced-motion-gated, licensed assets served via Vercel
+Blob with a tree-hidden/red-circle `onError` fallback, and the one night-visible change — the hero "here" no longer
+emphasized; detail in [docs/superpowers/plans/2026-08-28-wp28h-theme-scenes.md](docs/superpowers/plans/2026-08-28-wp28h-theme-scenes.md),
+no `### WP-28h` PLAN section since it didn't reorder the active queue); the
 remaining facets are **[WP-28c](#wp-28c--feed-page-vs-library-split)** (feed vs library split, NEXT) and
 **[WP-28e](#wp-28e--shelf-delete-affordance-swipe-to-delete--edit-mode)** (shelf delete affordance — swipe-to-delete +
 edit mode) — plus a later add, **[WP-28d](docs/PLAN-archive.md#wp-28d--locked-chapter-display-dim--marker--filtersort-done-2026-08-21)**
