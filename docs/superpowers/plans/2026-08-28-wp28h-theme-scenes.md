@@ -385,7 +385,7 @@ Add CSS (Task 6 Step 5): `.card__unread-img` hidden by default; the seal look + 
 
 **Files:** Create `e2e/theme-scenes-screens.spec.ts` (`screenshots/` already gitignored).
 
-- [ ] **Step 1: Spec** — for `['scroll','sci-fi']` × screens (`/` empty hero, `/settings`, `/login`, a seeded `/series/[id]`, `/add`): `addInitScript` sets `localStorage.theme`, assert `html[data-theme]`, screenshot to `screenshots/wp28h/<theme>-<screen>.png`. Add a **fallback** capture: run once with an unreachable base (`page.addInitScript` won't set env; instead run this spec/project with `NEXT_PUBLIC_THEME_ASSET_BASE` unset) → capture scroll hero (no tree) + a card (red-circle wax). Wait on assertions, not sleeps.
+- [ ] **Step 1: Spec** — for `['scroll','sci-fi']` × screens, capturing each **real surface separately** (the spikes are composite — see "Surface mapping"): the **empty hero** `/` (0 series → scene, no cards), the **populated shelf** `/` (seed 2–3 series → cards over the app-wide backdrop, no hero), `/settings`, `/login`, a seeded `/series/[id]` **detail**, `/add`. `addInitScript` sets `localStorage.theme`, assert `html[data-theme]`, screenshot to `screenshots/wp28h/<theme>-<screen>.png`. Add a **fallback** capture: run once with an unreachable base (`page.addInitScript` won't set env; instead run this spec/project with `NEXT_PUBLIC_THEME_ASSET_BASE` unset) → capture scroll hero (no tree) + a card (red-circle wax). Wait on assertions, not sleeps.
 - [ ] **Step 2: Run + report** — e2e DB (per `e2e/README.md`) with `NEXT_PUBLIC_THEME_ASSET_BASE=/themes` for the main pass; a second run with it unset for the fallback shot. Report the absolute `screenshots/wp28h/` path + that they're real-app screenshots (not AI-generated). Pause for owner review.
 - [ ] **Step 3: Commit** the spec only — `git add e2e/theme-scenes-screens.spec.ts && git commit -m "WP-28h: owner-review screenshot spec (scenes + fallback)"`
 
@@ -441,6 +441,20 @@ console.log('\nSet NEXT_PUBLIC_THEME_ASSET_BASE to the common base (…/themes) 
 - [ ] **Step 6: Stop at the WP boundary** — report with fresh `npm test` + `npm run typecheck` output + `screenshots/wp28h/` paths; leave the branch, present push/PR as the owner's call.
 
 ---
+
+## Surface mapping (the spikes are COMPOSITE reference — don't reproduce their layout)
+
+The spike files stack several surfaces into one view for review convenience. In the **real app** each piece lives on its own surface — never reproduce the spike's combined page:
+
+| Spike piece | Real surface | Notes |
+|-------------|--------------|-------|
+| Hero scene (tree/petals · grid/binary/glitch + eyebrow/title/lede/button) | `EmptyState` in `(app)/page.tsx` (`.hero`) | Renders **only when there are 0 series** |
+| Shelf **cards** (rolled scroll / HUD glass + wax badge) | `Shelf.tsx` `SeriesCard` (`/`, ≥1 series) | The populated shelf, over the **app-wide toned backdrop** |
+| Detail (opened scroll / holo panel) | `SeriesDetail` (`.detail`) | Its own route |
+| Login/add scene | `.login` container (login + add pages) | Same scene as hero |
+| Glassy chrome (sci-fi) | `(app)/layout.tsx` header + buttons/inputs | App-wide chrome |
+
+**Mutually exclusive:** the empty hero and the shelf **cards** are two states of the same `/` route (hero at 0 series, cards at ≥1) — they **never co-render**. Cards do **not** appear on the empty hero. What sits behind the populated shelf/detail is the **toned-down app-wide backdrop** (`ThemeScene variant="appwide"`: faint petals / faint binary, no tree/grid/glitch), not the full hero scene. Verify each surface **separately** against its spike piece (Task 7 captures them separately, incl. a populated shelf).
 
 ## Notes for the executor
 
