@@ -256,6 +256,13 @@ body {
   margin: 0 auto;
   padding: clamp(1.5rem, 5vh, 3rem) clamp(1rem, 4vw, 2rem) 5rem;
 }
+/* Sci-fi detail corner-bracket overlay markup (.detail__hud) is
+   theme-agnostic in the DOM; hidden off sci-fi (its .br spans are empty
+   so this is defensive, matching the .hud pattern above). Re-shown by the
+   sci-fi rule near the other .detail__hud rules. */
+.detail__hud {
+  display: none;
+}
 .detail__back {
   font-family: var(--font-mono);
   font-size: 0.78rem;
@@ -805,6 +812,13 @@ body {
 .card-wrap {
   position: relative;
 }
+/* Sci-fi HUD overlay markup (.hud) is theme-agnostic in the DOM but only
+   meant to render under sci-fi — off sci-fi it must stay fully hidden
+   (its .chev span carries literal text "//" that would otherwise leak
+   into night/scroll below every card). Re-shown by the sci-fi rule below. */
+.hud {
+  display: none;
+}
 .card__delete {
   position: absolute;
   bottom: 0.5rem;
@@ -1185,7 +1199,8 @@ body {
    Every rule below is scoped under its theme attribute — night is untouched. */
 
 /* ── Theme: scroll — rolled-scroll card (Step 1) ──────────────────────────
-   .roll markup is added in Task 6; these rules forward-declare its look. */
+   Styling for the scroll-roll card edges (.roll spans are empty; invisible
+   off-scroll since they carry no content of their own). */
 :root[data-theme="scroll"] .card {
   position: relative;
   background: linear-gradient(180deg, var(--color-surface), #e9dcbb);
@@ -1250,7 +1265,8 @@ body {
 }
 
 /* ── Theme: sci-fi — HUD glass card (Step 2) ──────────────────────────────
-   .hud markup is added in Task 6; these rules forward-declare its look. */
+   Decoration for the sci-fi HUD card overlay (accent bar, corner brackets,
+   chevron, hatch, flare). Hidden off sci-fi by the default .hud rule above. */
 :root[data-theme="sci-fi"] .card-wrap {
   filter: drop-shadow(0 0 12px rgba(70, 150, 255, 0.35));
 }
@@ -1307,6 +1323,7 @@ body {
   box-shadow: 0 0 10px -1px rgba(90, 166, 255, 0.8);
 }
 :root[data-theme="sci-fi"] .hud {
+  display: block;
   position: absolute;
   inset: 0;
   z-index: 3;
@@ -1428,7 +1445,8 @@ body {
 }
 
 /* ── Theme: sci-fi — holographic detail (Step 4) ──────────────────────────
-   .detail__hud markup is added in Task 6; these rules forward-declare its look. */
+   Decoration for the sci-fi detail-panel corner brackets. Hidden off sci-fi
+   by the default .detail__hud rule above. */
 :root[data-theme="sci-fi"] .detail {
   position: relative;
   clip-path: polygon(20px 0, 100% 0, 100% calc(100% - 20px), calc(100% - 20px) 100%, 0 100%, 0 20px);
@@ -1449,6 +1467,13 @@ body {
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
+  pointer-events: none;
+}
+:root[data-theme="sci-fi"] .detail__hud {
+  display: block;
+  position: absolute;
+  inset: 0;
+  z-index: 4;
   pointer-events: none;
 }
 :root[data-theme="sci-fi"] .detail__hud .br {
@@ -1500,8 +1525,8 @@ body {
 /* ══ WP-28h Task 5: sci-fi glassy chrome + scene/backdrop motif classes ════
    Source: docs/superpowers/plans/wp28h-spikes/scenes-and-cards.html
    Chrome rules scoped :root[data-theme="sci-fi"] only — night/scroll chrome
-   unchanged. .themeScene* markup is added in Task 6; these rules
-   forward-declare the look. */
+   unchanged. Styling for the <ThemeScene> backdrop component (rendered on
+   the hero and app-wide layouts). */
 
 /* ── Theme: sci-fi — glassy chrome (Step 1) ───────────────────────────────
    .appbar → .appHeader | .btn2/.btn2--primary → .btn/.btn--primary |
@@ -1551,9 +1576,9 @@ body {
 }
 
 /* ── Scene + backdrop motif classes (Step 2) ──────────────────────────────
-   Rendered by Task 6's <ThemeScene>; markup doesn't exist yet — this is a
-   forward declaration. Selectors/values are verbatim from the Task 5 brief;
-   grid/horizon values ported exactly from the spike's .grid/.horizon. */
+   Rendered by <ThemeScene> (src/app/(app)/ThemeScene.tsx). Selectors/values
+   are verbatim from the Task 5 brief; grid/horizon values ported exactly
+   from the spike's .grid/.horizon. */
 .themeScene {
   position: absolute;
   inset: 0;

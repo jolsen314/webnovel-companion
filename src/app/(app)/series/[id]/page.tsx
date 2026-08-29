@@ -36,6 +36,10 @@ export default async function SeriesPage({ params }: { params: Promise<{ id: str
 
   return (
     <section className="detail">
+      <div className="detail__hud" aria-hidden="true">
+        <span className="br br--tl" />
+        <span className="br br--br" />
+      </div>
       <Link href="/" className="detail__back">
         ← Shelf
       </Link>
