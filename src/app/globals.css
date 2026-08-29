@@ -1179,3 +1179,320 @@ body {
   font-size: 0.74rem;
   color: var(--color-muted);
 }
+
+/* ══ WP-28h Task 4: card + detail treatments, ported from design spikes ═══
+   Source: docs/superpowers/plans/wp28h-spikes/{scenes-and-cards,detail-treatments}.html
+   Every rule below is scoped under its theme attribute — night is untouched. */
+
+/* ── Theme: scroll — rolled-scroll card (Step 1) ──────────────────────────
+   .roll markup is added in Task 6; these rules forward-declare its look. */
+:root[data-theme="scroll"] .card {
+  position: relative;
+  background: linear-gradient(180deg, var(--color-surface), #e9dcbb);
+  border: none;
+  border-radius: 3px;
+  overflow: visible;
+  padding: 0 15px;
+  box-shadow:
+    0 3px 8px rgba(40, 30, 12, 0.22),
+    inset 0 7px 9px -8px rgba(90, 60, 30, 0.5),
+    inset 0 -7px 9px -8px rgba(90, 60, 30, 0.5);
+}
+:root[data-theme="scroll"] .roll {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 17px;
+  border-radius: 4px;
+  z-index: 2;
+  background: linear-gradient(90deg, #8a6a3c, #c8ad78 22%, #efe1bf 48%, #c2a670 74%, #7d5c30);
+  box-shadow: 0 2px 5px rgba(40, 25, 8, 0.4);
+}
+:root[data-theme="scroll"] .roll--l {
+  left: -2px;
+}
+:root[data-theme="scroll"] .roll--r {
+  right: -2px;
+}
+:root[data-theme="scroll"] .roll::before,
+:root[data-theme="scroll"] .roll::after {
+  content: "";
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  height: 5px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #6f5228, #b9a06f, #6f5228);
+}
+:root[data-theme="scroll"] .roll::before {
+  top: -4px;
+}
+:root[data-theme="scroll"] .roll::after {
+  bottom: -4px;
+}
+:root[data-theme="scroll"] .card__title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: #3a2c18;
+}
+:root[data-theme="scroll"] .card__num {
+  color: var(--color-glow);
+}
+:root[data-theme="scroll"] .card__latest {
+  color: #5c5140;
+}
+:root[data-theme="scroll"] .card__latest b {
+  color: #3a2c18;
+  font-weight: 600;
+}
+:root[data-theme="scroll"] .card__meta {
+  color: #6f6650;
+}
+
+/* ── Theme: sci-fi — HUD glass card (Step 2) ──────────────────────────────
+   .hud markup is added in Task 6; these rules forward-declare its look. */
+:root[data-theme="sci-fi"] .card-wrap {
+  filter: drop-shadow(0 0 12px rgba(70, 150, 255, 0.35));
+}
+:root[data-theme="sci-fi"] .card {
+  position: relative;
+  clip-path: polygon(15px 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%, 0 15px);
+  background: linear-gradient(150deg, rgba(55, 205, 215, 0.2), rgba(90, 160, 225, 0.24));
+  backdrop-filter: blur(8px) saturate(1.25);
+  border: none;
+  border-radius: 0;
+  overflow: visible;
+}
+:root[data-theme="sci-fi"] .card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  clip-path: polygon(15px 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%, 0 15px);
+  padding: 1.5px;
+  background: linear-gradient(120deg, var(--holo-1), var(--holo-2) 38%, var(--holo-3) 68%, var(--holo-4));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+:root[data-theme="sci-fi"] .card__body {
+  padding-left: 1.5rem; /* room for the accent bar */
+}
+:root[data-theme="sci-fi"] .card__title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: #eaf6fb;
+}
+:root[data-theme="sci-fi"] .card__num {
+  color: #7fb6ff;
+}
+:root[data-theme="sci-fi"] .card__latest {
+  color: #a7c4d6;
+}
+:root[data-theme="sci-fi"] .card__latest b {
+  color: #eaf6fb;
+  font-weight: 600;
+}
+:root[data-theme="sci-fi"] .card__meta {
+  color: #7f9bb2;
+}
+:root[data-theme="sci-fi"] .card__unread {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #04121a;
+  background: linear-gradient(100deg, var(--color-glow), var(--holo-3));
+  padding: 0.14rem 0.5rem;
+  border-radius: 3px;
+  box-shadow: 0 0 10px -1px rgba(90, 166, 255, 0.8);
+}
+:root[data-theme="sci-fi"] .hud {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+:root[data-theme="sci-fi"] .hud .accent {
+  position: absolute;
+  left: 7px;
+  top: 16px;
+  bottom: 16px;
+  width: 3px;
+  border-radius: 2px;
+  background: linear-gradient(var(--holo-1), var(--color-glow));
+  box-shadow: 0 0 8px var(--color-glow);
+}
+:root[data-theme="sci-fi"] .hud .br {
+  position: absolute;
+  width: 13px;
+  height: 13px;
+  border: 2px solid #9fe9ff;
+}
+:root[data-theme="sci-fi"] .hud .br--tl {
+  top: 5px;
+  left: 5px;
+  border-right: none;
+  border-bottom: none;
+}
+:root[data-theme="sci-fi"] .hud .br--br {
+  bottom: 5px;
+  right: 5px;
+  border-left: none;
+  border-top: none;
+}
+:root[data-theme="sci-fi"] .hud .chev {
+  position: absolute;
+  bottom: 8px;
+  right: 70px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: -1px;
+  color: rgba(120, 220, 255, 0.6);
+}
+:root[data-theme="sci-fi"] .hud .hatch {
+  position: absolute;
+  bottom: 7px;
+  right: 26px;
+  width: 34px;
+  height: 9px;
+  background: repeating-linear-gradient(-45deg, rgba(120, 220, 255, 0.5) 0 2px, transparent 2px 5px);
+}
+:root[data-theme="sci-fi"] .hud .flare {
+  position: absolute;
+  right: -2px;
+  top: 40%;
+  width: 34px;
+  height: 10px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(150, 240, 255, 0.8), transparent 70%);
+  filter: blur(1px);
+}
+
+/* ── Theme: scroll — opened-scroll detail (Step 3) ────────────────────────
+   Parchment (--color-surface) panel sitting on the mauve page — this is what
+   restores legible contrast for --color-muted (2.11:1 on bare mauve, much
+   better on parchment). Wax badge markup is Task 6, not part of this rule set. */
+:root[data-theme="scroll"] .detail {
+  position: relative;
+  padding: 34px 30px;
+  background:
+    radial-gradient(120% 30% at 50% 0%, rgba(120, 80, 40, 0.05), transparent 60%),
+    linear-gradient(180deg, var(--color-surface), #ecdfbd);
+  box-shadow:
+    0 8px 30px rgba(70, 45, 20, 0.24),
+    inset 8px 0 12px -10px rgba(90, 60, 30, 0.5),
+    inset -8px 0 12px -10px rgba(90, 60, 30, 0.5);
+  border-left: 1px dashed rgba(120, 85, 45, 0.25);
+  border-right: 1px dashed rgba(120, 85, 45, 0.25);
+}
+:root[data-theme="scroll"] .detail::before,
+:root[data-theme="scroll"] .detail::after {
+  content: "";
+  position: absolute;
+  left: -10px;
+  right: -10px;
+  height: 26px;
+  z-index: 2;
+  border-radius: 6px;
+  background: linear-gradient(180deg, #7d5c30, #c8ad78 30%, #f0e1bf 52%, #bd9f68 74%, #6f5228);
+  box-shadow: 0 3px 8px rgba(60, 40, 15, 0.4);
+}
+:root[data-theme="scroll"] .detail::before {
+  top: -13px;
+}
+:root[data-theme="scroll"] .detail::after {
+  bottom: -13px;
+}
+:root[data-theme="scroll"] .detail__back {
+  color: #8a6a3c;
+}
+:root[data-theme="scroll"] .detail__title {
+  font-family: var(--font-display);
+  color: #3a2c18;
+}
+:root[data-theme="scroll"] .detail__meta {
+  color: var(--color-muted);
+}
+:root[data-theme="scroll"] .chapter {
+  border-bottom: 1px solid rgba(120, 85, 45, 0.18);
+}
+:root[data-theme="scroll"] .chapter__num {
+  color: var(--color-glow);
+}
+:root[data-theme="scroll"] .chapter__title {
+  color: #3a2c18;
+}
+:root[data-theme="scroll"] .chapter__mark {
+  color: var(--color-muted);
+  border: 1px solid rgba(120, 85, 45, 0.3);
+}
+
+/* ── Theme: sci-fi — holographic detail (Step 4) ──────────────────────────
+   .detail__hud markup is added in Task 6; these rules forward-declare its look. */
+:root[data-theme="sci-fi"] .detail {
+  position: relative;
+  clip-path: polygon(20px 0, 100% 0, 100% calc(100% - 20px), calc(100% - 20px) 100%, 0 100%, 0 20px);
+  padding: 28px 30px;
+  background:
+    linear-gradient(160deg, rgba(55, 205, 215, 0.18), rgba(90, 160, 225, 0.22)),
+    repeating-linear-gradient(0deg, rgba(55, 224, 216, 0.05) 0 1px, transparent 1px 6px);
+  backdrop-filter: blur(8px) saturate(1.2);
+  filter: drop-shadow(0 0 20px rgba(70, 150, 255, 0.35));
+}
+:root[data-theme="sci-fi"] .detail::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  clip-path: polygon(20px 0, 100% 0, 100% calc(100% - 20px), calc(100% - 20px) 100%, 0 100%, 0 20px);
+  padding: 1.6px;
+  background: linear-gradient(120deg, var(--holo-1), var(--holo-2) 40%, var(--holo-3) 70%, var(--holo-4));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+:root[data-theme="sci-fi"] .detail__hud .br {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #9fe9ff;
+  z-index: 4;
+}
+:root[data-theme="sci-fi"] .detail__hud .br--tl {
+  top: 9px;
+  left: 9px;
+  border-right: none;
+  border-bottom: none;
+}
+:root[data-theme="sci-fi"] .detail__hud .br--br {
+  bottom: 9px;
+  right: 9px;
+  border-left: none;
+  border-top: none;
+}
+:root[data-theme="sci-fi"] .detail__back {
+  color: var(--color-glow);
+}
+:root[data-theme="sci-fi"] .detail__title {
+  font-family: var(--font-display);
+  background: linear-gradient(100deg, var(--holo-1), var(--holo-2) 45%, var(--holo-3) 75%, var(--holo-4));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+:root[data-theme="sci-fi"] .detail__meta {
+  color: #7f9bb2;
+}
+:root[data-theme="sci-fi"] .chapter {
+  border-bottom: 1px solid rgba(55, 224, 216, 0.14);
+}
+:root[data-theme="sci-fi"] .chapter__num {
+  color: #7fb6ff;
+}
+:root[data-theme="sci-fi"] .chapter__title {
+  color: #dbe9f2;
+}
+:root[data-theme="sci-fi"] .chapter__mark {
+  color: #a7c4d6;
+  border: 1px solid rgba(55, 224, 216, 0.3);
+}
