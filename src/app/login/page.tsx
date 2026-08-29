@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { ThemeScene } from '../(app)/ThemeScene';
 
 /** Only follow same-origin, non-protocol-relative redirect targets (no open redirect). */
 function safeNext(): string {
@@ -37,6 +38,8 @@ export default function LoginPage() {
 
   return (
     <section className="login">
+      <ThemeScene variant="appwide" />
+      <ThemeScene variant="hero" />
       <p className="login__eyebrow">Locked</p>
       <h1 className="login__title">Enter your passphrase</h1>
       <form className="login__form" onSubmit={onSubmit}>

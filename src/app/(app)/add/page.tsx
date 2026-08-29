@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { ThemeScene } from '../ThemeScene';
 
 /** The three shapes `POST /api/series` returns on success — needs-confirm (unreadable page),
  *  added-but-similar (possible duplicate), or a plain add. Replaces three progressive `as` casts. */
@@ -88,6 +89,7 @@ export default function AddSeriesPage() {
 
   return (
     <section className="login">
+      <ThemeScene variant="hero" />
       <p className="login__eyebrow">Add a series</p>
       <h1 className="login__title">Paste a series URL</h1>
       {similar && (

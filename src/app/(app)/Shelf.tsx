@@ -7,6 +7,7 @@ import { sortSeries, filterSeries, type ShelfSort } from '../../lib/shelf';
 import { SERIES_STATUSES, type SeriesStatus } from '../../lib/series';
 import type { listSeries } from '../../server/services';
 import { DeleteSeriesButton } from './DeleteSeriesButton';
+import { WaxBadge } from './WaxBadge';
 
 type SeriesRow = Awaited<ReturnType<typeof listSeries>>[number];
 
@@ -37,11 +38,13 @@ function SeriesCard({ series, now }: { series: SeriesRow; now: Date }) {
   return (
     <div className="card-wrap">
       <Link href={`/series/${series.id}`} className="card">
+        <span className="roll roll--l" aria-hidden="true" />
+        <span className="roll roll--r" aria-hidden="true" />
         {unread > 0 && <span className="card__ribbon" aria-hidden="true" />}
         <div className="card__body">
           <div className="card__top">
             <h2 className="card__title">{series.title}</h2>
-            {unread > 0 && <span className="card__unread">{unread} new</span>}
+            {unread > 0 && <WaxBadge count={unread} />}
           </div>
           <p className="card__latest">
             {latest ? (
@@ -68,6 +71,14 @@ function SeriesCard({ series, now }: { series: SeriesRow; now: Date }) {
           </div>
         </div>
       </Link>
+      <div className="hud" aria-hidden="true">
+        <span className="accent" />
+        <span className="br br--tl" />
+        <span className="br br--br" />
+        <span className="chev">//</span>
+        <span className="hatch" />
+        <span className="flare" />
+      </div>
       <DeleteSeriesButton id={series.id} title={series.title} chapterCount={series.chapterCount} />
     </div>
   );

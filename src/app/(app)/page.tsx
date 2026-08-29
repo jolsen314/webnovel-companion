@@ -1,12 +1,14 @@
 import Link from 'next/link';
 import { listSeries } from '../../server/services';
 import { Shelf } from './Shelf';
+import { ThemeScene } from './ThemeScene';
 
 export const dynamic = 'force-dynamic';
 
 function EmptyState() {
   return (
     <section className="hero">
+      <ThemeScene variant="hero" />
       <p className="hero__eyebrow">Your shelf</p>
       <h1 className="hero__title">
         It&rsquo;s quiet in here.
