@@ -26,10 +26,10 @@
 
 /* ── Theme: cultivation ancient-scroll (light parchment) ─────────────────── */
 :root[data-theme="scroll"] {
-  --color-ink: #e4d8bc;
-  --color-ink-2: #dccfae;
-  --color-surface: #efe4c9;
-  --color-surface-2: #f5ecd6;
+  --color-ink: #c4afb8;      /* page ground → soft mauve (was parchment) */
+  --color-ink-2: #b79fac;
+  --color-surface: #f2e8cf;  /* parchment — cards/scroll/detail */
+  --color-surface-2: #efe4c9;
   --color-line: #cbb98f;
   --color-paper: #372a18;      /* primary text = sepia ink */
   --color-muted: #8a765a;
@@ -55,6 +55,7 @@
   --color-glow-dim: #37e0d800;
   --color-down: #ff6b8a;
   --color-on-glow: #06141a;    /* dark text on cyan */
+  --holo-1: #8ff6ee; --holo-2: #37e0d8; --holo-3: #5aa6ff; --holo-4: #a98bff;
   --font-display: var(--font-chakra), system-ui, sans-serif;
   --font-sans: var(--font-space-grotesk), system-ui, sans-serif;
   color-scheme: dark;
@@ -224,10 +225,8 @@ body {
   letter-spacing: -0.02em;
   margin: 0 0 1.1rem;
 }
-.hero__title em {
-  font-style: italic;
-  color: var(--color-glow);
-}
+/* WP-28h: "here" is no longer emphasized in any theme (owner). */
+.hero__title em { font-style: normal; color: inherit; }
 .hero__lede {
   color: var(--color-muted);
   font-size: clamp(1rem, 2.4vw, 1.12rem);
