@@ -1496,3 +1496,177 @@ body {
   color: #a7c4d6;
   border: 1px solid rgba(55, 224, 216, 0.3);
 }
+
+/* ══ WP-28h Task 5: sci-fi glassy chrome + scene/backdrop motif classes ════
+   Source: docs/superpowers/plans/wp28h-spikes/scenes-and-cards.html
+   Chrome rules scoped :root[data-theme="sci-fi"] only — night/scroll chrome
+   unchanged. .themeScene* markup is added in Task 6; these rules
+   forward-declare the look. */
+
+/* ── Theme: sci-fi — glassy chrome (Step 1) ───────────────────────────────
+   .appbar → .appHeader | .btn2/.btn2--primary → .btn/.btn--primary |
+   .sel → .shelf-select/.shelf-search/.control select/.login__input */
+:root[data-theme="sci-fi"] .appHeader {
+  background: linear-gradient(180deg, rgba(20, 36, 56, 0.5), rgba(12, 22, 36, 0.3));
+  backdrop-filter: blur(9px);
+  border-bottom: 1px solid rgba(90, 166, 255, 0.4);
+  box-shadow: 0 6px 24px -12px rgba(70, 150, 255, 0.5);
+}
+:root[data-theme="sci-fi"] .brand__name em {
+  font-style: normal;
+  background: linear-gradient(100deg, var(--holo-2), var(--holo-4));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+:root[data-theme="sci-fi"] .hero__title {
+  background: linear-gradient(100deg, var(--holo-1), var(--holo-2) 40%, var(--holo-3) 72%, var(--holo-4));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+:root[data-theme="sci-fi"] .btn {
+  background: rgba(20, 36, 56, 0.4);
+  border: 1px solid rgba(90, 166, 255, 0.35);
+  color: #cfe6f5;
+  backdrop-filter: blur(6px);
+}
+:root[data-theme="sci-fi"] .btn--primary {
+  background: linear-gradient(110deg, rgba(55, 224, 216, 0.22), rgba(90, 166, 255, 0.22));
+  border: 1px solid rgba(120, 220, 255, 0.7);
+  color: #d9f6ff;
+  box-shadow:
+    0 0 16px -4px rgba(90, 166, 255, 0.7),
+    inset 0 0 12px -6px rgba(140, 240, 255, 0.6);
+  backdrop-filter: blur(4px);
+}
+:root[data-theme="sci-fi"] .shelf-select,
+:root[data-theme="sci-fi"] .shelf-search,
+:root[data-theme="sci-fi"] .control select,
+:root[data-theme="sci-fi"] .login__input {
+  background: rgba(20, 36, 56, 0.4);
+  border: 1px solid rgba(90, 166, 255, 0.35);
+  color: #cfe6f5;
+  backdrop-filter: blur(6px);
+}
+
+/* ── Scene + backdrop motif classes (Step 2) ──────────────────────────────
+   Rendered by Task 6's <ThemeScene>; markup doesn't exist yet — this is a
+   forward declaration. Selectors/values are verbatim from the Task 5 brief;
+   grid/horizon values ported exactly from the spike's .grid/.horizon. */
+.themeScene {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.themeScene--appwide {
+  position: fixed;
+  z-index: -1;
+  opacity: 0.5;
+}
+
+/* scroll: tree + drifting petals */
+:root[data-theme="scroll"] .themeScene__tree {
+  position: absolute;
+  left: -70px;
+  bottom: 0;
+  height: 96%;
+  width: auto;
+  opacity: 0.92;
+}
+:root[data-theme="scroll"] .themeScene__petal {
+  position: absolute;
+  width: 9px;
+  height: 12px;
+  background: var(--color-glow);
+  border-radius: 60% 60% 60% 0 / 70% 70% 40% 40%;
+  animation: wp28h-fall linear infinite;
+}
+@keyframes wp28h-fall {
+  0% { transform: translateY(-40px) rotate(0); opacity: 0; }
+  12% { opacity: 0.85; }
+  100% { transform: translateY(940px) rotate(320deg) translateX(30px); opacity: 0.12; }
+}
+
+/* sci-fi: grid + horizon + flickering binary + glitch bar — grid/horizon
+   values ported exactly from scenes-and-cards.html .grid / .horizon */
+:root[data-theme="sci-fi"] .themeScene__grid {
+  position: absolute;
+  left: -25%;
+  right: -25%;
+  bottom: -3%;
+  height: 62%;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(120, 224, 255, 0.42) 1.5px, transparent 1.5px),
+    linear-gradient(90deg, rgba(120, 224, 255, 0.32) 1.5px, transparent 1.5px);
+  background-size: 46px 46px;
+  transform: perspective(500px) rotateX(60deg);
+  transform-origin: bottom center;
+  mask-image: linear-gradient(to top, #000 4%, rgba(0, 0, 0, 0.6) 40%, transparent 82%);
+  -webkit-mask-image: linear-gradient(to top, #000 4%, rgba(0, 0, 0, 0.6) 40%, transparent 82%);
+}
+:root[data-theme="sci-fi"] .themeScene__horizon {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(62% - 3%);
+  height: 2px;
+  z-index: 0;
+  background: linear-gradient(90deg, transparent, rgba(120, 230, 255, 0.55), transparent);
+  filter: blur(1px);
+}
+:root[data-theme="sci-fi"] .themeScene__bit {
+  position: absolute;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  color: var(--holo-2);
+  animation: wp28h-flick 3s steps(2) infinite;
+}
+@keyframes wp28h-flick {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.12; }
+}
+/* GLITCH bar — a cyan line that jumps intermittently (owner wants glitch/motion kept) */
+:root[data-theme="sci-fi"] .themeScene__glitch {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: rgba(120, 230, 255, 0.55);
+  mix-blend-mode: screen;
+  animation: wp28h-glitch 6s infinite;
+}
+@keyframes wp28h-glitch {
+  0%, 90%, 100% { opacity: 0; top: 20%; }
+  91% { opacity: 1; top: 38%; }
+  94% { opacity: 1; top: 61%; }
+  96% { opacity: 0.6; top: 47%; }
+}
+
+/* --appwide: hide the tree/grid/horizon/glitch — only the faint petals/bits
+   show over the whole app; Task 6 passes the lower petal/bit counts. */
+.themeScene--appwide .themeScene__tree,
+.themeScene--appwide .themeScene__grid,
+.themeScene--appwide .themeScene__horizon,
+.themeScene--appwide .themeScene__glitch {
+  display: none;
+}
+
+/* ── Reduced motion (Step 3) — stops petals, binary flicker, and glitch ──
+   Additive to the existing prefers-reduced-motion block near the top of
+   this file (global animation-duration clamp at line 103); that block is
+   left untouched — this is a new block for the scene elements. */
+@media (prefers-reduced-motion: reduce) {
+  .themeScene__petal,
+  :root[data-theme="sci-fi"] .themeScene__bit,
+  :root[data-theme="sci-fi"] .themeScene__glitch {
+    animation: none !important;
+  }
+  :root[data-theme="sci-fi"] .themeScene__glitch {
+    opacity: 0 !important;
+  }
+}
