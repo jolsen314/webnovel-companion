@@ -1,0 +1,221 @@
+<!doctype html>
+<!-- THROWAWAY SPIKE (WP-28h theme component treatments). Not app code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Theme components spike</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Chakra+Petch:wght@400;600;700&family=Space+Grotesk:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  .section { position: relative; padding: 2.2rem clamp(1rem,4vw,2.5rem) 3rem; overflow: hidden; isolation: isolate; }
+  .label { font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; opacity: .55; margin: 0 0 1.4rem; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; align-items: start; max-width: 1180px; margin: 0 auto; position: relative; z-index: 2; }
+  .colhead { font-family: "IBM Plex Mono", monospace; font-size: .66rem; letter-spacing: .12em; text-transform: uppercase; opacity: .5; margin: 0 0 .7rem; }
+
+  /* shared card structure */
+  .stream__list { display: flex; flex-direction: column; gap: .9rem; }
+  .card-wrap { position: relative; }
+  .card { display: flex; text-decoration: none; color: inherit; }
+  .card__body { padding: .85rem 1.05rem; flex: 1; min-width: 0; }
+  .card__top { display: flex; align-items: center; gap: .55rem; }
+  .card__title { font-size: 1.12rem; margin: 0; flex: 1; letter-spacing: -.01em; }
+  .card__latest { font-size: .9rem; margin: .35rem 0 0; }
+  .card__meta { display: flex; align-items: center; gap: .55rem; margin-top: .55rem; font-family: "IBM Plex Mono", monospace; font-size: .72rem; }
+  .health-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: #6fae8f; }
+
+  /* detail structure */
+  .detail { max-width: 42rem; margin: 0 auto; }
+  .detail__back { font-family: "IBM Plex Mono", monospace; font-size: .78rem; text-decoration: none; opacity: .8; }
+  .detail__title { font-size: clamp(1.8rem,4vw,2.4rem); letter-spacing: -.02em; margin: .7rem 0 .4rem; }
+  .detail__meta { font-family: "IBM Plex Mono", monospace; font-size: .76rem; opacity: .75; margin-bottom: 1.3rem; }
+  .chapters { list-style: none; margin: 1rem 0 0; padding: 0; display: flex; flex-direction: column; }
+  .chapter { display: flex; align-items: flex-start; gap: .7rem; padding: .6rem .2rem; }
+  .chapter__num { font-family: "IBM Plex Mono", monospace; font-size: .75rem; flex: none; min-width: 2.8rem; padding-top: .12rem; }
+  .chapter__title { flex: 1; text-decoration: none; line-height: 1.4; }
+  .chapter__mark { font-family: "IBM Plex Mono", monospace; font-size: .68rem; border-radius: 6px; padding: .2rem .5rem; flex: none; cursor: pointer; background: none; }
+
+  /* ============================ SCROLL ============================ */
+  .scroll { background:
+      repeating-linear-gradient(0deg, rgba(120,90,50,.03) 0 2px, transparent 2px 4px),
+      linear-gradient(180deg,#e6dabd,#ddcfae);
+    color:#372a18; font-family:"EB Garamond",Georgia,serif; }
+  /* faint app-wide petals behind cards */
+  .scroll .field { position:absolute; inset:0; z-index:0; pointer-events:none; overflow:hidden; }
+  .scroll .petal { position:absolute; width:8px; height:11px; background:#9e2b25; opacity:.16;
+    border-radius:60% 60% 60% 0 / 70% 70% 40% 40%; }
+  .scroll .colhead, .scroll .label { color:#6d5b40; }
+
+  /* scroll CARD = a small rolled handscroll: parchment stretched between two rolled ends */
+  .scroll .card { position:relative; background:
+      radial-gradient(120% 60% at 30% 20%, rgba(120,80,40,.06), transparent 60%),
+      linear-gradient(180deg,#f0e6cd,#e7dab9);
+    border-radius:3px; padding:0 16px; /* room for the rolls */
+    box-shadow: 0 2px 6px rgba(80,55,25,.18),
+                inset 0 7px 9px -8px rgba(90,60,30,.5), inset 0 -7px 9px -8px rgba(90,60,30,.5); }
+  /* weathered top/bottom deckle */
+  .scroll .card::before, .scroll .card::after { content:""; position:absolute; left:16px; right:16px; height:3px; }
+  .scroll .card::before { top:0; background: repeating-linear-gradient(90deg, transparent 0 6px, rgba(90,60,30,.14) 6px 9px); }
+  .scroll .card::after  { bottom:0; background: repeating-linear-gradient(90deg, transparent 0 5px, rgba(90,60,30,.12) 5px 8px); }
+  /* the two rolled cylinders (left & right rods) */
+  .scroll .roll { position:absolute; top:-3px; bottom:-3px; width:18px; border-radius:4px; z-index:2;
+    background: linear-gradient(90deg,#8a6a3c,#c8ad78 22%,#efe1bf 48%,#c2a670 74%,#7d5c30);
+    box-shadow: 0 2px 5px rgba(60,40,15,.4); }
+  .scroll .roll--l { left:-2px; } .scroll .roll--r { right:-2px; }
+  .scroll .roll::before, .scroll .roll::after { content:""; position:absolute; left:-2px; right:-2px; height:5px;
+    border-radius:3px; background: linear-gradient(90deg,#6f5228,#b9a06f,#6f5228); }
+  .scroll .roll::before { top:-4px; } .scroll .roll::after { bottom:-4px; }
+  .scroll .card__title { font-family:"Cinzel",Georgia,serif; font-weight:600; color:#3a2c18; }
+  .scroll .card__latest { color:#6d5b40; } .scroll .card__latest b { color:#3a2c18; font-weight:600; }
+  .scroll .card__num { color:#9e2b25; font-weight:600; }
+  .scroll .card__meta { color:#8a765a; }
+  /* unread = a wax seal */
+  .scroll .card__unread { flex:none; width:34px; height:34px; border-radius:50%; display:grid; place-items:center;
+    font-family:"Cinzel",serif; font-size:.62rem; font-weight:700; color:#f3e1cf;
+    background: radial-gradient(circle at 38% 32%, #c23a30, #8f231d 60%, #6f1a16);
+    box-shadow: inset 0 2px 3px rgba(255,255,255,.25), inset 0 -3px 4px rgba(0,0,0,.35), 0 1px 3px rgba(0,0,0,.3); }
+
+  /* scroll DETAIL = an opened vertical scroll (rolled top & bottom, parchment sheet between) */
+  .scroll .detail { position:relative; padding:34px 30px; background:
+      radial-gradient(120% 30% at 50% 0%, rgba(120,80,40,.05), transparent 60%),
+      linear-gradient(180deg,#f2e8cf,#ecdfbd);
+    box-shadow: 0 8px 30px rgba(70,45,20,.22),
+                inset 8px 0 12px -10px rgba(90,60,30,.5), inset -8px 0 12px -10px rgba(90,60,30,.5); }
+  /* side deckle edges */
+  .scroll .detail { border-left:1px dashed rgba(120,85,45,.25); border-right:1px dashed rgba(120,85,45,.25); }
+  /* top & bottom rolled rods */
+  .scroll .detail::before, .scroll .detail::after { content:""; position:absolute; left:-10px; right:-10px; height:26px; z-index:2;
+    border-radius:6px; background: linear-gradient(180deg,#7d5c30,#c8ad78 30%,#f0e1bf 52%,#bd9f68 74%,#6f5228);
+    box-shadow: 0 3px 8px rgba(60,40,15,.4); }
+  .scroll .detail::before { top:-13px; } .scroll .detail::after { bottom:-13px; }
+  .scroll .detail__back { color:#8a6a3c; } .scroll .detail__title { font-family:"Cinzel",serif; color:#3a2c18; }
+  .scroll .detail__meta { color:#8a765a; }
+  .scroll .chapter { border-bottom:1px solid rgba(120,85,45,.18); }
+  .scroll .chapter__num { color:#9e2b25; } .scroll .chapter__title { color:#3a2c18; }
+  .scroll .chapter__mark { color:#8a765a; border:1px solid rgba(120,85,45,.3); }
+
+  /* ============================ SCI-FI ============================ */
+  .scifi { background:
+      radial-gradient(70% 40% at 50% 0%, rgba(55,224,216,.06), transparent 60%),
+      linear-gradient(180deg,#0a1018,#070b12);
+    color:#d6e8f2; font-family:"Space Grotesk",system-ui,sans-serif; }
+  .scifi .field { position:absolute; inset:0; z-index:0; pointer-events:none; overflow:hidden; font-family:"IBM Plex Mono",monospace; }
+  .scifi .bit { position:absolute; color:#37e0d8; opacity:.1; font-size:12px; }
+  .scifi .colhead, .scifi .label { color:#6f8aa6; }
+
+  /* sci-fi CARD = a holographic panel: glassy dark, cyan rim-light, HUD corner ticks, inner grid */
+  .scifi .card { position:relative; border-radius:10px; overflow:hidden;
+    background:
+      linear-gradient(180deg, rgba(20,34,52,.92), rgba(12,22,36,.94)),
+      repeating-linear-gradient(0deg, rgba(55,224,216,.05) 0 1px, transparent 1px 5px);
+    border:1px solid rgba(55,224,216,.32);
+    box-shadow: 0 0 0 1px rgba(55,224,216,.06), 0 0 22px -8px rgba(55,224,216,.45), inset 0 1px 0 rgba(55,224,216,.35); }
+  /* bright top scan edge */
+  .scifi .card > .card__body { position:relative; z-index:1; }
+  /* HUD corner brackets */
+  .scifi .card::before, .scifi .card::after { content:""; position:absolute; width:14px; height:14px; z-index:2;
+    border:2px solid rgba(55,224,216,.7); }
+  .scifi .card::before { top:6px; left:6px; border-right:none; border-bottom:none; }
+  .scifi .card::after  { bottom:6px; right:6px; border-left:none; border-top:none; }
+  .scifi .card__title { font-family:"Chakra Petch",system-ui,sans-serif; font-weight:600; color:#eaf6fb; }
+  .scifi .card__latest { color:#8fb0c4; } .scifi .card__latest b { color:#eaf6fb; font-weight:600; }
+  .scifi .card__num { color:#37e0d8; } .scifi .card__meta { color:#6f8aa6; }
+  .scifi .card__unread { flex:none; font-family:"IBM Plex Mono",monospace; font-size:.68rem; font-weight:600; color:#06141a;
+    background:#37e0d8; padding:.14rem .5rem; border-radius:4px; box-shadow:0 0 10px -1px rgba(55,224,216,.7); letter-spacing:.03em; }
+  .scifi .health-dot { box-shadow:0 0 6px rgba(111,174,143,.8); }
+
+  /* sci-fi DETAIL = a large holographic panel with HUD framing + scanlines */
+  .scifi .detail { position:relative; padding:26px 28px; border-radius:12px; overflow:hidden;
+    background:
+      linear-gradient(180deg, rgba(18,30,48,.92), rgba(10,18,30,.94)),
+      repeating-linear-gradient(0deg, rgba(55,224,216,.04) 0 1px, transparent 1px 6px);
+    border:1px solid rgba(55,224,216,.3);
+    box-shadow: 0 0 26px -8px rgba(55,224,216,.4), inset 0 1px 0 rgba(55,224,216,.3); }
+  .scifi .detail::before, .scifi .detail::after { content:""; position:absolute; width:20px; height:20px; z-index:2;
+    border:2px solid rgba(55,224,216,.65); }
+  .scifi .detail::before { top:8px; left:8px; border-right:none; border-bottom:none; }
+  .scifi .detail::after { bottom:8px; right:8px; border-left:none; border-top:none; }
+  .scifi .detail__back { color:#37e0d8; } .scifi .detail__title { font-family:"Chakra Petch",sans-serif; color:#eaf6fb; }
+  .scifi .detail__meta { color:#6f8aa6; }
+  .scifi .chapter { border-bottom:1px solid rgba(55,224,216,.12); }
+  .scifi .chapter__num { color:#37e0d8; } .scifi .chapter__title { color:#d6e8f2; }
+  .scifi .chapter__mark { color:#8fb0c4; border:1px solid rgba(55,224,216,.3); }
+</style>
+</head>
+<body>
+  <!-- ===================== SCROLL ===================== -->
+  <section class="section scroll" id="scroll">
+    <p class="label">scroll — shelf cards (rolled scrolls) + detail (opened scroll)</p>
+    <div class="field" id="petalfield"></div>
+    <div class="cols">
+      <div>
+        <p class="colhead">Shelf</p>
+        <div class="stream__list" id="scroll-cards"></div>
+      </div>
+      <div>
+        <p class="colhead">Detail</p>
+        <div class="detail">
+          <a class="detail__back">← Library</a>
+          <h1 class="detail__title">The Sword and the Lantern</h1>
+          <p class="detail__meta">translatorden · 512 chapters</p>
+          <ul class="chapters" id="scroll-chapters"></ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== SCI-FI ===================== -->
+  <section class="section scifi" id="scifi">
+    <p class="label">sci-fi — shelf cards (holographic panels) + detail</p>
+    <div class="field" id="bitfield"></div>
+    <div class="cols">
+      <div>
+        <p class="colhead">Shelf</p>
+        <div class="stream__list" id="scifi-cards"></div>
+      </div>
+      <div>
+        <p class="colhead">Detail</p>
+        <div class="detail">
+          <a class="detail__back">← Library</a>
+          <h1 class="detail__title">Neon Ascendant Protocol</h1>
+          <p class="detail__meta">gridhost · 512 chapters</p>
+          <ul class="chapters" id="scifi-chapters"></ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+<script>
+  const SERIES = [
+    { title:"The Sword and the Lantern", num:512, latest:"A Familiar Face", unread:3, host:"translatorden" },
+    { title:"Reverend of the Nine Heavens", num:2334, latest:"The Immortal's Gambit", unread:0, host:"webhost" },
+    { title:"Lantern of the Fool", num:1421, latest:"The Fool Descends", unread:12, host:"novelden" },
+  ];
+  function cardHTML(s) {
+    return `<div class="card-wrap"><a class="card">
+      <span class="roll roll--l"></span><span class="roll roll--r"></span>
+      <div class="card__body">
+        <div class="card__top"><h2 class="card__title">${s.title}</h2>${s.unread>0?`<span class="card__unread">${s.unread}<br>new</span>`:''}</div>
+        <p class="card__latest"><span class="card__num">#${s.num}</span> <b>${s.latest}</b></p>
+        <div class="card__meta"><span class="health-dot"></span><span>${s.host}</span><span>· 2h ago</span></div>
+      </div></a></div>`;
+  }
+  // scroll cards have the rolls; sci-fi cards reuse markup minus rolls
+  document.getElementById('scroll-cards').innerHTML = SERIES.map(cardHTML).join('');
+  document.getElementById('scifi-cards').innerHTML = SERIES.map(s => cardHTML(s).replace(/<span class="roll[^>]*><\/span>/g,'').replace('#'+s.num, '#'+s.num).replace(`${s.unread}<br>new`, `${s.unread} new`)).join('');
+
+  const CH = [[512,"A Familiar Face"],[511,"The Long Road Home"],[510,"Beneath the Old Willow"],[509,"Ash and Ember"],[508,"What the River Carried"]];
+  const chHTML = CH.map(([n,t]) => `<li class="chapter"><span class="chapter__num">#${n}</span><a class="chapter__title">${t}</a><button class="chapter__mark">mark read</button></li>`).join('');
+  document.getElementById('scroll-chapters').innerHTML = chHTML;
+  document.getElementById('scifi-chapters').innerHTML = chHTML;
+
+  // faint fields
+  const pf = document.getElementById('petalfield');
+  for (let i=0;i<22;i++){ const p=document.createElement('span'); p.className='petal'; p.style.left=(Math.random()*100)+'%'; p.style.top=(Math.random()*100)+'%'; p.style.transform=`scale(${.6+Math.random()*.8}) rotate(${Math.random()*360}deg)`; pf.appendChild(p); }
+  const bf = document.getElementById('bitfield');
+  function rb(){ const n=1+Math.floor(Math.random()*6); let s=''; for(let i=0;i<n;i++) s+=Math.random()<.5?'0':'1'; return s; }
+  for (let i=0;i<70;i++){ const b=document.createElement('span'); b.className='bit'; b.textContent=rb(); b.style.left=(Math.random()*98)+'%'; b.style.top=(Math.random()*100)+'%'; b.style.fontSize=(10+Math.random()*6)+'px'; bf.appendChild(b); }
+</script>
+</body>
+</html>

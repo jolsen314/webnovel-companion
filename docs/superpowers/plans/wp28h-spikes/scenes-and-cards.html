@@ -1,0 +1,159 @@
+<!doctype html>
+<!-- THROWAWAY SPIKE v4 (WP-28h) — HUD cards, visible grid, pressed wax. Not app code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Theme scenes v4</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Chakra+Petch:wght@400;600;700&family=Space+Grotesk:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  .scene { position: relative; min-height: 900px; overflow: hidden; isolation: isolate; }
+  .label { position: absolute; top: 12px; right: 16px; z-index: 8; font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; opacity: .6; }
+  .hero { position: relative; max-width: 46rem; margin: 0 auto; padding: 4.5rem 2rem 1.5rem; text-align: center; z-index: 4; }
+  .hero__eyebrow { font-family: "IBM Plex Mono", monospace; font-size: .72rem; letter-spacing: .22em; text-transform: uppercase; margin-bottom: 1.2rem; }
+  .hero__title { font-weight: 400; font-size: clamp(2.3rem,6vw,3.4rem); line-height: 1.05; letter-spacing: -.02em; margin: 0 0 1rem; }
+  .hero__title em { font-style: normal; color: inherit; }
+  .hero__lede { font-size: 1.06rem; line-height: 1.6; max-width: 34rem; margin: 0 auto 1.6rem; }
+  .hero__btn { display: inline-block; font-weight: 600; font-size: .92rem; padding: .62rem 1.15rem; border-radius: 9px; }
+  .stream { max-width: 40rem; margin: 1rem auto 0; position: relative; z-index: 4; }
+  .stream__list { display: flex; flex-direction: column; gap: 1rem; }
+  .card-wrap { position: relative; }
+  .card { display: flex; text-decoration: none; color: inherit; }
+  .card__body { padding: .85rem 1.1rem; flex: 1; min-width: 0; }
+  .card__top { display: flex; align-items: center; gap: .55rem; }
+  .card__title { font-size: 1.08rem; margin: 0; flex: 1; letter-spacing: -.01em; }
+  .card__latest { font-size: .88rem; margin: .3rem 0 0; }
+  .card__meta { display: flex; align-items: center; gap: .5rem; margin-top: .5rem; font-family: "IBM Plex Mono", monospace; font-size: .7rem; }
+  .health-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: #6fae8f; }
+
+  /* ============ SCROLL / MAUVE ============ */
+  .scroll { color:#2c2519; font-family:"EB Garamond",Georgia,serif; background:linear-gradient(180deg,#c4afb8,#b79fac); }
+  .scroll .hero__eyebrow{color:#9e2b25} .scroll .hero__title{font-family:"Cinzel",Georgia,serif;color:#241d12}
+  .scroll .hero__lede{color:#4a3a44} .scroll .hero__btn{background:#9e2b25;color:#f5ecd6}
+  .tree{position:absolute;left:-215px;bottom:0;height:96%;width:auto;z-index:1;opacity:.92;pointer-events:none}
+  .petals{position:absolute;inset:0;z-index:2;pointer-events:none;overflow:hidden}
+  .petal{position:absolute;width:9px;height:12px;background:#9e2b25;border-radius:60% 60% 60% 0 / 70% 70% 40% 40%;opacity:.8;animation:fall linear infinite}
+  @keyframes fall{0%{transform:translateY(-40px) rotate(0);opacity:0}12%{opacity:.85}100%{transform:translateY(940px) rotate(320deg) translateX(30px);opacity:.12}}
+  .scroll .card{position:relative;background:linear-gradient(180deg,#f2e8cf,#e9dcbb);border-radius:3px;padding:0 15px;
+    box-shadow:0 3px 8px rgba(40,30,12,.22),inset 0 7px 9px -8px rgba(90,60,30,.5),inset 0 -7px 9px -8px rgba(90,60,30,.5)}
+  .scroll .roll{position:absolute;top:-3px;bottom:-3px;width:17px;border-radius:4px;z-index:2;background:linear-gradient(90deg,#8a6a3c,#c8ad78 22%,#efe1bf 48%,#c2a670 74%,#7d5c30);box-shadow:0 2px 5px rgba(40,25,8,.4)}
+  .scroll .roll--l{left:-2px} .scroll .roll--r{right:-2px}
+  .scroll .roll::before,.scroll .roll::after{content:"";position:absolute;left:-2px;right:-2px;height:5px;border-radius:3px;background:linear-gradient(90deg,#6f5228,#b9a06f,#6f5228)}
+  .scroll .roll::before{top:-4px} .scroll .roll::after{bottom:-4px}
+  .scroll .card__title{font-family:"Cinzel",serif;font-weight:600;color:#3a2c18}
+  .scroll .card__num{color:#9e2b25} .scroll .card__latest{color:#5c5140} .scroll .card__latest b{color:#3a2c18;font-weight:600} .scroll .card__meta{color:#6f6650}
+  /* WAX seal = Adobe Stock image (seal A), number stamped in the empty centre */
+  .scroll .card__unread{flex:none;width:50px;height:50px;display:grid;place-items:center;
+    background:url(wax-seal.png) center/contain no-repeat;
+    font-family:"Cinzel",serif;font-size:.94rem;font-weight:700;color:#fbeee2;
+    text-shadow:0 1px 2px rgba(60,10,8,.8), 0 0 3px rgba(0,0,0,.5)}
+
+  /* ============ SCI-FI / FULL ENVIRONMENT ============ */
+  .scifi{color:#dbe9f2;font-family:"Space Grotesk",system-ui,sans-serif;background:linear-gradient(180deg,#0a1018,#06090f)}
+  .scifi .hero__eyebrow{font-family:"IBM Plex Mono",monospace;color:#37e0d8}
+  .scifi .hero__title{font-family:"Chakra Petch",system-ui,sans-serif;background:linear-gradient(100deg,#8ff6ee,#37e0d8 40%,#5aa6ff 72%,#a98bff);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .scifi .hero__lede{color:#8fb0c4}
+  /* MORE VISIBLE grid */
+  .grid{position:absolute;left:-25%;right:-25%;bottom:-3%;height:62%;z-index:0;pointer-events:none;
+    background-image:linear-gradient(rgba(120,224,255,.42) 1.5px,transparent 1.5px),linear-gradient(90deg,rgba(120,224,255,.32) 1.5px,transparent 1.5px);
+    background-size:46px 46px;transform:perspective(500px) rotateX(60deg);transform-origin:bottom center;
+    mask-image:linear-gradient(to top,#000 4%,rgba(0,0,0,.6) 40%,transparent 82%);-webkit-mask-image:linear-gradient(to top,#000 4%,rgba(0,0,0,.6) 40%,transparent 82%)}
+  .horizon{position:absolute;left:0;right:0;bottom:calc(62% - 3%);height:2px;z-index:0;background:linear-gradient(90deg,transparent,rgba(120,230,255,.55),transparent);filter:blur(1px)}
+  .binary{position:absolute;inset:0;z-index:1;pointer-events:none;overflow:hidden;font-family:"IBM Plex Mono",monospace;letter-spacing:.06em}
+  .bit{position:absolute;white-space:nowrap;animation:flick 3s steps(2) infinite}
+  @keyframes flick{0%,100%{opacity:var(--o)}50%{opacity:calc(var(--o)*.35)}}
+  .scifi::after{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(55,224,216,.04) 0 1px,transparent 1px 3px)}
+  /* glassy chrome */
+  .appbar{position:relative;z-index:6;display:flex;align-items:center;justify-content:space-between;padding:.9rem clamp(1rem,4vw,2rem);
+    background:linear-gradient(180deg,rgba(20,36,56,.5),rgba(12,22,36,.3));backdrop-filter:blur(9px);border-bottom:1px solid rgba(90,166,255,.4);box-shadow:0 6px 24px -12px rgba(70,150,255,.5)}
+  .brand{font-family:"Chakra Petch",sans-serif;font-weight:600;color:#eaf6fb}
+  .brand em{font-style:normal;background:linear-gradient(100deg,#37e0d8,#a98bff);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .chrome-actions{display:flex;gap:.5rem;align-items:center}
+  .btn2{font:inherit;font-size:.9rem;font-weight:600;padding:.5rem .95rem;border-radius:9px;cursor:pointer}
+  .sel{font:inherit;font-size:.82rem;padding:.4rem .6rem;border-radius:8px}
+  .scifi .hero__btn,.scifi .btn2--primary{background:linear-gradient(110deg,rgba(55,224,216,.22),rgba(90,166,255,.22));border:1px solid rgba(120,220,255,.7);color:#d9f6ff;box-shadow:0 0 16px -4px rgba(90,166,255,.7),inset 0 0 12px -6px rgba(140,240,255,.6);backdrop-filter:blur(4px)}
+  .scifi .btn2,.scifi .sel{background:rgba(20,36,56,.4);border:1px solid rgba(90,166,255,.35);color:#cfe6f5;backdrop-filter:blur(6px)}
+
+  /* === HUD holographic card === */
+  --chamfer: polygon(15px 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%, 0 15px);
+  .scifi .card-wrap{filter:drop-shadow(0 0 12px rgba(70,150,255,.35))}
+  .scifi .card{clip-path:polygon(15px 0,100% 0,100% calc(100% - 15px),calc(100% - 15px) 100%,0 100%,0 15px);
+    background:linear-gradient(150deg,rgba(55,205,215,.20),rgba(90,160,225,.24));backdrop-filter:blur(8px) saturate(1.25);position:relative}
+  /* gradient RIM only (masked ring), so the glass fill stays transparent to the scene behind */
+  .scifi .card::after{content:"";position:absolute;inset:0;clip-path:polygon(15px 0,100% 0,100% calc(100% - 15px),calc(100% - 15px) 100%,0 100%,0 15px);
+    padding:1.5px;background:linear-gradient(120deg,#8ff6ee,#37e0d8 38%,#5aa6ff 68%,#a98bff);
+    -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
+  .scifi .card__body{padding-left:1.5rem} /* room for the accent bar */
+  .scifi .card__title{font-family:"Chakra Petch",sans-serif;font-weight:600;color:#eaf6fb}
+  .scifi .card__num{color:#7fb6ff} .scifi .card__latest{color:#a7c4d6} .scifi .card__latest b{color:#eaf6fb;font-weight:600} .scifi .card__meta{color:#7f9bb2}
+  .scifi .card__unread{flex:none;font-family:"IBM Plex Mono",monospace;font-size:.68rem;font-weight:600;color:#04121a;background:linear-gradient(100deg,#37e0d8,#5aa6ff);padding:.14rem .5rem;border-radius:3px;box-shadow:0 0 10px -1px rgba(90,166,255,.8)}
+  /* HUD decorations layer */
+  .hud{position:absolute;inset:0;z-index:3;pointer-events:none}
+  .hud .accent{position:absolute;left:7px;top:16px;bottom:16px;width:3px;border-radius:2px;background:linear-gradient(#8ff6ee,#37e0d8);box-shadow:0 0 8px #37e0d8}
+  .hud .br{position:absolute;width:13px;height:13px;border:2px solid #9fe9ff}
+  .hud .br--tl{top:5px;left:5px;border-right:none;border-bottom:none}
+  .hud .br--br{bottom:5px;right:5px;border-left:none;border-top:none}
+  .hud .squares{position:absolute;top:9px;right:34px;display:flex;gap:4px}
+  .hud .squares i{width:6px;height:6px;background:#5aa6ff;box-shadow:0 0 5px #5aa6ff}
+  .hud .squares i:last-child{background:transparent;border:1px solid #5aa6ff;box-shadow:none}
+  .hud .chev{position:absolute;bottom:8px;right:70px;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:-1px;color:rgba(120,220,255,.6)}
+  .hud .hatch{position:absolute;bottom:7px;right:26px;width:34px;height:9px;
+    background:repeating-linear-gradient(-45deg,rgba(120,220,255,.5) 0 2px,transparent 2px 5px)}
+  .hud .flare{position:absolute;right:-2px;top:40%;width:34px;height:10px;border-radius:50%;
+    background:radial-gradient(circle,rgba(150,240,255,.8),transparent 70%);filter:blur(1px)}
+</style>
+</head>
+<body>
+  <!-- ===== SCROLL / MAUVE (pressed wax) ===== -->
+  <section class="scene scroll">
+    <span class="label">scroll — mauve · pressed wax seal (v4)</span>
+    <img class="tree" src="scroll-tree.png" alt="">
+    <div class="petals" id="p1"></div>
+    <div class="hero">
+      <p class="hero__eyebrow">Your shelf</p>
+      <h1 class="hero__title">It's quiet in <em>here</em>. Let's fix that.</h1>
+      <p class="hero__lede">Add a series and I'll watch its release feed. When a new chapter drops, your phone lights up.</p>
+      <span class="hero__btn">Add your first series</span>
+    </div>
+    <div class="stream"><div class="stream__list" id="sc1"></div></div>
+  </section>
+
+  <!-- ===== SCI-FI / FULL ENVIRONMENT (HUD cards, visible grid) ===== -->
+  <section class="scene scifi">
+    <span class="label">sci-fi — full env · HUD cards · visible grid (v4)</span>
+    <div class="grid"></div><div class="horizon"></div><div class="binary" id="b1"></div>
+    <div class="appbar"><span class="brand">Webnovel <em>Companion</em></span>
+      <span class="chrome-actions"><select class="sel"><option>Recent activity</option></select><span class="btn2 btn2--primary">Add a series</span></span></div>
+    <div class="hero">
+      <p class="hero__eyebrow">Your shelf</p>
+      <h1 class="hero__title">It's quiet in <em>here</em>. Let's fix that.</h1>
+      <p class="hero__lede">Add a series and I'll watch its release feed. When a new chapter drops, your phone lights up.</p>
+      <span class="hero__btn">Add your first series</span>
+    </div>
+    <div class="stream"><div class="stream__list" id="sf1"></div></div>
+  </section>
+
+<script>
+  const S=[{t:"The Sword and the Lantern",n:512,l:"A Familiar Face",u:3,h:"translatorden"},
+           {t:"Lantern of the Fool",n:1421,l:"The Fool Descends",u:12,h:"novelden"}];
+  function scrollCard(s){return `<div class="card-wrap"><a class="card"><span class="roll roll--l"></span><span class="roll roll--r"></span>
+    <div class="card__body"><div class="card__top"><h2 class="card__title">${s.t}</h2>${s.u?`<span class="card__unread">${s.u}</span>`:''}</div>
+    <p class="card__latest"><span class="card__num">#${s.n}</span> <b>${s.l}</b></p>
+    <div class="card__meta"><span class="health-dot"></span><span>${s.h}</span><span>· 2h ago</span></div></div></a></div>`;}
+  function scifiCard(s){return `<div class="card-wrap"><a class="card">
+    <div class="card__body"><div class="card__top"><h2 class="card__title">${s.t}</h2>${s.u?`<span class="card__unread">${s.u} new</span>`:''}</div>
+    <p class="card__latest"><span class="card__num">#${s.n}</span> <b>${s.l}</b></p>
+    <div class="card__meta"><span class="health-dot"></span><span>${s.h}</span><span>· 2h ago</span></div></div></a>
+    <div class="hud"><span class="accent"></span><span class="br br--tl"></span><span class="br br--br"></span>
+      <span class="chev">&gt;&gt;&gt;&gt;</span><span class="hatch"></span><span class="flare"></span></div></div>`;}
+  sc1.innerHTML=S.map(scrollCard).join('');
+  sf1.innerHTML=S.map(scifiCard).join('');
+  const c=document.getElementById('p1');for(let i=0;i<26;i++){const p=document.createElement('span');p.className='petal';p.style.left=(Math.random()*100)+'%';p.style.animationDuration=(7+Math.random()*8)+'s';p.style.animationDelay=(-Math.random()*12)+'s';p.style.transform=`scale(${.6+Math.random()*.9})`;p.style.opacity=(.5+Math.random()*.4).toFixed(2);c.appendChild(p);}
+  function rb(){const n=1+Math.floor(Math.random()*6);let s='';for(let i=0;i<n;i++)s+=Math.random()<.5?'0':'1';return s;}
+  const COLORS=['#37e0d8','#5aa6ff','#a98bff','#8ff6ee'];const bf=document.getElementById('b1');
+  for(let i=0;i<70;i++){const b=document.createElement('span');b.className='bit';b.textContent=rb();b.style.left=(Math.random()*98)+'%';b.style.top=(Math.random()*82)+'%';const o=(.08+Math.random()*.5);b.style.setProperty('--o',o.toFixed(2));b.style.opacity=o.toFixed(2);b.style.fontSize=(10+Math.random()*7)+'px';b.style.color=COLORS[Math.floor(Math.random()*COLORS.length)];b.style.animationDelay=(-Math.random()*3)+'s';if(Math.random()<.14)b.style.textShadow='0 0 7px currentColor';bf.appendChild(b);}
+</script>
+</body>
+</html>

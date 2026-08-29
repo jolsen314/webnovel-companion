@@ -36,3 +36,6 @@ next-env.d.ts
 
 # Local WP-28b theme review screenshots (not committed)
 screenshots/
+
+# WP-28h licensed theme images — served from Vercel Blob in prod; kept locally for dev only (see public/themes/CREDITS.md)
+/public/themes/*.png
