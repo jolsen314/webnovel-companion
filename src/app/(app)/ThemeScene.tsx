@@ -51,9 +51,15 @@ export function ThemeScene({ variant }: { variant: 'hero' | 'appwide' }) {
         <span
           key={i}
           className="themeScene__bit"
-          // Per-bit delay + duration (from the deterministic scatter) desync the shimmer so
-          // the field breathes/floats organically instead of pulsing in lockstep.
-          style={{ left: `${b.leftPct}%`, top: `${b.topPct}%`, animationDelay: `${b.delaySec}s`, animationDuration: `${b.durSec}s` }}
+          // Per-bit delay + split durations (from the deterministic scatter) desync the field
+          // so it breathes/wanders organically. Two values map to [flick, drift]: a quicker
+          // opacity pulse and a slower, wider wander.
+          style={{
+            left: `${b.leftPct}%`,
+            top: `${b.topPct}%`,
+            animationDelay: `${b.delaySec}s`,
+            animationDuration: `${(b.durSec * 0.5).toFixed(1)}s, ${(b.durSec * 2).toFixed(1)}s`,
+          }}
         >
           {binaryString(i)}
         </span>

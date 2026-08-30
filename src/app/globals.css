@@ -1711,10 +1711,10 @@ body {
   white-space: nowrap;
   font-family: var(--font-mono);
   color: var(--holo-2);
-  /* Smooth opacity breathing + a little float. Per-bit duration/delay (set inline from
-     the scatter) desync the field so it drifts organically. steps() removed → no hard
-     on/off flicker. */
-  animation: wp28h-flick 9s ease-in-out infinite;
+  /* Two decoupled animations: a fairly quick opacity breathe + a slower, wider wander.
+     Per-bit durations (inline `animationDuration: "<flick>s, <drift>s"` from the scatter)
+     and a per-bit delay desync the field so it drifts organically. */
+  animation: wp28h-flick 5s ease-in-out infinite, wp28h-drift 20s ease-in-out infinite;
 }
 /* Mobile: the dense hero binary (70 bits) crowds a small screen. Thin ~half of the
    hero scene's bits (not the toned app-wide backdrop). Deterministic nth-child →
@@ -1725,8 +1725,16 @@ body {
   }
 }
 @keyframes wp28h-flick {
-  0%, 100% { opacity: 0.38; transform: translate(0, 0); }
-  50% { opacity: 0.13; transform: translate(2px, -4px); }
+  0%, 100% { opacity: 0.38; }
+  50% { opacity: 0.13; }
+}
+/* A wider, wandering drift so bits travel across a larger area rather than jittering in place. */
+@keyframes wp28h-drift {
+  0% { transform: translate(0, 0); }
+  25% { transform: translate(24px, -28px); }
+  50% { transform: translate(-16px, -50px); }
+  75% { transform: translate(18px, -24px); }
+  100% { transform: translate(0, 0); }
 }
 /* GLITCH bar — a cyan line that jumps intermittently (owner wants glitch/motion kept) */
 :root[data-theme="sci-fi"] .themeScene__glitch {
