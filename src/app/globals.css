@@ -32,7 +32,7 @@
   --color-surface-2: #efe4c9;
   --color-line: #cbb98f;
   --color-paper: #372a18;      /* primary text = sepia ink */
-  --color-muted: #8a765a;
+  --color-muted: #4f3d22;      /* sepia — ~4.9:1 on the mauve ground (AA), was #8a765a (~2.1:1) */
   --color-glow: #9e2b25;       /* cinnabar wax-seal */
   --color-glow-dim: #9e2b2500;
   --color-down: #b23b2f;
@@ -1544,12 +1544,61 @@ body {
   background-clip: text;
   color: transparent;
 }
+/* Scroll: dark sepia text is legible on the mauve ground but NOT where the black tree
+   branch crosses the lede — and no single text color can win on both. Seat the hero/login
+   content on a parchment sheet so the (sepia) text always reads. The parchment is a
+   background-only ::after layer with a turbulence-displacement filter (#wp28h-rough-edge)
+   giving it rough torn-paper edges + square corners — the filter roughens only the sheet,
+   never the text above it. */
+:root[data-theme="scroll"] .hero,
+:root[data-theme="scroll"] .login {
+  overflow: visible;
+  padding-top: clamp(2.5rem, 9vh, 4rem);
+  padding-bottom: 3rem;
+}
+:root[data-theme="scroll"] .hero::after,
+:root[data-theme="scroll"] .login::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  z-index: -1;
+  background: rgba(242, 232, 207, 0.9);
+  box-shadow: inset 0 0 26px rgba(90, 60, 30, 0.1);
+  filter: url(#wp28h-rough-edge);
+}
+
+/* Sci-fi: the full-viewport binary backdrop drifts behind the hero/login text and
+   obscures the muted lede. Seat the content on a translucent HUD panel so the text
+   reads cleanly over the busy scene (owner-requested "panel behind"). overflow:hidden
+   clips the ::after scanline to the panel's rounded corners. */
+:root[data-theme="sci-fi"] .hero,
+:root[data-theme="sci-fi"] .login {
+  background: linear-gradient(180deg, rgba(10, 20, 34, 0.66), rgba(8, 15, 26, 0.72));
+  border: 1px solid rgba(90, 166, 255, 0.22);
+  border-radius: 16px;
+  overflow: hidden;
+  backdrop-filter: blur(3px);
+  padding-top: clamp(2.5rem, 9vh, 4rem);
+  padding-bottom: 3rem;
+}
+
 :root[data-theme="sci-fi"] .hero__title {
   background: linear-gradient(100deg, var(--holo-1), var(--holo-2) 40%, var(--holo-3) 72%, var(--holo-4));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
+/* Scroll: secondary/Cancel buttons default to a transparent fill (base .btn), which
+   disappears against the mauve ground / parchment. Give them a parchment fill + firmer
+   border so they read as real buttons. Primary (cinnabar) is excluded. */
+:root[data-theme="scroll"] .btn:not(.btn--primary) {
+  background: var(--color-surface);
+  border-color: var(--color-line);
+}
+:root[data-theme="scroll"] .btn:not(.btn--primary):hover {
+  background: var(--color-surface-2);
+}
+
 :root[data-theme="sci-fi"] .btn {
   background: rgba(20, 36, 56, 0.4);
   border: 1px solid rgba(90, 166, 255, 0.35);
@@ -1580,16 +1629,19 @@ body {
    are verbatim from the Task 5 brief; grid/horizon values ported exactly
    from the spike's .grid/.horizon. */
 .themeScene {
-  position: absolute;
+  /* WP-28h: viewport-fixed backdrop. The hero scene must span the whole SCREEN,
+     not the centered .hero/.login content column (max-width 24–44rem) it renders
+     beside — anchoring to that box confined the tree/petals/grid to a small
+     rectangle. `fixed` pins it to the viewport so it's size-agnostic across
+     login/add/empty AND phone/tablet/desktop; scene surfaces mount it as a
+     ROOT-level sibling of the content (child of <main>, not inside .hero), so
+     its z-index:-1 resolves in the root stacking context and stays behind the
+     sticky header + the centered content, exactly like --appwide.
+     (Task 6 note: a positioned descendant paints after non-positioned in-flow
+     siblings regardless of DOM order, so z-index:-1 — not 0 — is required to
+     keep it a backdrop; confirmed live against the login title/input/button.) */
+  position: fixed;
   inset: 0;
-  /* WP-28h Task 6 fix: CSS painting order puts ANY positioned descendant
-     (even z-index:0/auto) after non-positioned in-flow siblings, regardless
-     of DOM order — so a z-index:0 scene here would render IN FRONT of the
-     hero/login's static text and buttons instead of behind them. -1 matches
-     the .hero::before glow and the (already-correct) --appwide override
-     below, keeping this purely a backdrop. Confirmed live: without this,
-     scroll petals / sci-fi binary+grid visibly overlapped the login title,
-     passphrase input, and Unlock button. */
   z-index: -1;
   pointer-events: none;
   overflow: hidden;
@@ -1603,11 +1655,22 @@ body {
 /* scroll: tree + drifting petals */
 :root[data-theme="scroll"] .themeScene__tree {
   position: absolute;
-  left: -70px;
-  bottom: 0;
-  height: 96%;
+  left: -130px;
+  bottom: -10%;
+  height: 100%;
   width: auto;
   opacity: 0.92;
+}
+/* Mobile: bigger but pushed hard off the left edge so the TRUNK never shows — only the
+   canopy sweeps in low from the bottom-left corner, clear of the centered title/lede.
+   Dropped below the bottom edge so it reads as rooted off-screen; softened for legibility. */
+@media (max-width: 640px) {
+  :root[data-theme="scroll"] .themeScene__tree {
+    left: -175px;
+    bottom: -6%;
+    height: 62%;
+    opacity: 0.9;
+  }
 }
 :root[data-theme="scroll"] .themeScene__petal {
   position: absolute;
@@ -1659,6 +1722,14 @@ body {
   color: var(--holo-2);
   animation: wp28h-flick 3s steps(2) infinite;
 }
+/* Mobile: the dense hero binary (70 bits) crowds a small screen. Thin ~half of the
+   hero scene's bits (not the toned app-wide backdrop). Deterministic nth-child →
+   hydration-safe; the leading grid/horizon/glitch spans keep their positions. */
+@media (max-width: 640px) {
+  :root[data-theme="sci-fi"] .themeScene:not(.themeScene--appwide) .themeScene__bit:nth-child(2n) {
+    display: none;
+  }
+}
 @keyframes wp28h-flick {
   0%, 100% { opacity: 0.4; }
   50% { opacity: 0.12; }
@@ -1698,6 +1769,17 @@ body {
   :root[data-theme="sci-fi"] .themeScene__bit,
   :root[data-theme="sci-fi"] .themeScene__glitch {
     animation: none !important;
+  }
+  /* The bit/petal opacity lives only inside their @keyframes, so `animation:none`
+     would snap them to the default full opacity — a static-but-GLARING scene for
+     reduced-motion users (and the reduced-motion settings screenshot). Pin the
+     resting opacity to the animated midpoint so the static scene stays faint and
+     matches shelf/detail. */
+  :root[data-theme="sci-fi"] .themeScene__bit {
+    opacity: 0.28 !important;
+  }
+  .themeScene__petal {
+    opacity: 0.55 !important;
   }
   :root[data-theme="sci-fi"] .themeScene__glitch {
     opacity: 0 !important;

@@ -27,7 +27,7 @@ export function ThemeScene({ variant }: { variant: 'hero' | 'appwide' }) {
 
   if (theme === 'scroll') {
     const treeUrl = resolveAssetUrl('scroll-tree.png', ASSET_BASE);
-    const petals = scatter(hero ? 26 : 12, 42);
+    const petals = scatter(hero ? 44 : 18, 42);
     return (
       <div className={cls} aria-hidden="true">
         {hero && treeUrl && !treeBroken && (

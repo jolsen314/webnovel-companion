@@ -88,8 +88,9 @@ export default function AddSeriesPage() {
   }
 
   return (
-    <section className="login">
+    <>
       <ThemeScene variant="hero" />
+      <section className="login">
       <p className="login__eyebrow">Add a series</p>
       <h1 className="login__title">Paste a series URL</h1>
       {similar && (
@@ -162,6 +163,7 @@ export default function AddSeriesPage() {
         Paste the novel&rsquo;s page on a translator site. I&rsquo;ll find its release feed — or fall back to watching
         the page — and start tracking new chapters.
       </p>
-    </section>
+      </section>
+    </>
   );
 }

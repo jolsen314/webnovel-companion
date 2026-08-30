@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import { Settings } from 'lucide-react';
 import { SignOutButton } from '../SignOutButton';
-import { ThemeScene } from './ThemeScene';
 
 /** A bookmark-ribbon glyph — the app's signature motif. */
 function RibbonMark() {
@@ -33,7 +32,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <SignOutButton />
         </div>
       </header>
-      <ThemeScene variant="appwide" />
       <main>{children}</main>
     </>
   );

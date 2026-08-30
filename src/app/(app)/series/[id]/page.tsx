@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getSeries } from '../../../../server/services';
 import { EditableTitle } from './EditableTitle';
+import { ThemeScene } from '../../ThemeScene';
 import { SeriesDetail, type ChapterLite } from './SeriesDetail';
 import type { ScheduleInit } from './ScheduleEditor';
 import { SERIES_STATUSES } from '../../../../lib/series';
@@ -35,7 +36,9 @@ export default async function SeriesPage({ params }: { params: Promise<{ id: str
   };
 
   return (
-    <section className="detail">
+    <>
+      <ThemeScene variant="appwide" />
+      <section className="detail">
       <div className="detail__hud" aria-hidden="true">
         <span className="br br--tl" />
         <span className="br br--br" />
@@ -72,6 +75,7 @@ export default async function SeriesPage({ params }: { params: Promise<{ id: str
         showSchedule={!!active?.linkOnly}
         scheduleInit={scheduleInit}
       />
-    </section>
+      </section>
+    </>
   );
 }

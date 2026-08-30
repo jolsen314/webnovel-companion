@@ -37,10 +37,10 @@ export default function LoginPage() {
   }
 
   return (
-    <section className="login">
-      <ThemeScene variant="appwide" />
+    <>
       <ThemeScene variant="hero" />
-      <p className="login__eyebrow">Locked</p>
+      <section className="login">
+        <p className="login__eyebrow">Locked</p>
       <h1 className="login__title">Enter your passphrase</h1>
       <form className="login__form" onSubmit={onSubmit}>
         <input
@@ -61,6 +61,7 @@ export default function LoginPage() {
           {busy ? 'Unlocking…' : 'Unlock'}
         </button>
       </form>
-    </section>
+      </section>
+    </>
   );
 }
