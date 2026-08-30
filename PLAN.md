@@ -46,14 +46,16 @@ uncommitted notes." Real names/URLs live only in those local notes and in scratc
 
 ## Current focus
 
-> **NEXT: WP-28i — Private theme-asset proxy.** Serve WP-28h's licensed wax-seal/tree images from a **private**
-> Vercel Blob store through an auth-gated route so they render in prod instead of the fallback (moved to the top of
-> the queue 2026-08-29). WP-28 was split into pickup-able children (2026-08-20) after its long-title readability facet
-> shipped; the shelf-ordering facet (WP-28a) landed **expanded** into full shelf **sort + filter**, **WP-28b** (theme
-> system) shipped, and **WP-28h** (per-theme scenes/cards/detail — scroll's ink-tree+petals+rolled-scroll+wax-seal,
-> sci-fi's holo env) shipped as a side effort. Still queued behind WP-28i: **WP-28c** (feed vs library split),
-> **WP-28e** (shelf delete affordance), and **WP-28j** (no-flash shelf sort/filter — a flash of the unsorted shelf on
-> nav when a filter/sort is saved) — priority = the **▶ Active queue** table, reorderable by the owner. WP-28b's spike
+> **NEXT: WP-28c — Feed page vs library split.** Decide + build a cross-series "what's new across everything" river
+> distinct from the per-series library grid (an IA decision before a build — needs a brainstorm up front). WP-28 was
+> split into pickup-able children (2026-08-20) after its long-title readability facet shipped; the shelf-ordering facet
+> (WP-28a) landed **expanded** into full shelf **sort + filter**, **WP-28b** (theme system) shipped, **WP-28h**
+> (per-theme scenes/cards/detail — scroll's ink-tree+petals+rolled-scroll+wax-seal, sci-fi's holo env) shipped as a
+> side effort, and **WP-28i** (private theme-asset proxy — WP-28h's licensed images served through an auth-gated
+> `api/theme-asset` route off a private Blob store) shipped 2026-08-29. Still queued: **WP-28c** (feed vs library
+> split, NEXT), **WP-28e** (shelf delete affordance), and **WP-28j** (no-flash shelf sort/filter — a flash of the
+> unsorted shelf on nav when a filter/sort is saved) — priority = the **▶ Active queue** table, reorderable by the
+> owner. WP-28b's spike
 > also surfaced a fourth theme candidate + two low-pri extensions, filed as **WP-28f** (bookshelf theme), **WP-28g**
 > (header quick-switch), and **WP-THEMESYNC** (cross-device persistence).
 >
@@ -96,8 +98,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 
 | ID | Work package | Status | Depends on |
 |----|--------------|--------|------------|
-| WP-28i | Private theme-asset proxy — serve WP-28h's licensed wax-seal/tree PNGs from a **private** Vercel Blob store through an auth-gated Next route (licenses forbid public hosting), so they render in prod instead of the red-circle/no-tree fallback | `NEXT` | WP-28h, WP-AUTH |
-| WP-28c | Feed page vs library split — a cross-series "what's new across everything" river vs the per-series grid (decide one view or two) | `TODO` | WP-10 |
+| WP-28c | Feed page vs library split — a cross-series "what's new across everything" river vs the per-series grid (decide one view or two) | `NEXT` | WP-10 |
 | WP-28e | Shelf delete affordance — hide the always-visible per-card delete (WP-51) by default and expose it two ways (**both** wanted): (1) an iOS-Mail-style **swipe-left-to-reveal-Delete** on touch, and (2) an **"Edit" mode toggle** on the shelf head that reveals the per-card delete buttons (also the non-touch / keyboard / a11y path). Keep the confirm + the tap-through guard on both | `TODO` | WP-10, WP-51, WP-28a |
 | WP-28f | Bookshelf theme — gothic/Victorian palette + book-stack shelf layout | `TODO` | WP-28b, WP-28a, WP-28e |
 | WP-28j | No-flash shelf sort/filter — navigating to `/` with a saved sort/filter briefly shows the unsorted/unfiltered shelf before it snaps to the persisted view. The control state lives in `localStorage` and is applied client-side after mount; pre-apply it before paint (reuse WP-28b's no-flash pattern) or render the shelf from the persisted state | `TODO` | WP-28a, WP-28b |
@@ -139,7 +140,8 @@ WP-NOTES (detail-page notes UI — collapsible, save-on-blur, content-aware defa
 WP-52 (poll-time hard-fail render escalation — PAGE_WATCH PLAIN + Cloudflare 403 → persist RENDER) ·
 WP-28a (shelf sort + filter — pure `lib/shelf.ts` [4 sort modes + status/title/min-rating filter] behind a client control bar, localStorage-persisted; **subsumes WP-15** `lib/search.ts`) ·
 WP-28b (theme system — `[data-theme]` token architecture + pre-paint inline-script/localStorage no-flash + settings picker; night/scroll/sci-fi; `--color-on-glow` tokenized) ·
-WP-28h (per-theme scenes/cards/detail — scroll ink-tree+petals+rolled-scroll cards+wax-seal badge+opened-scroll detail; sci-fi holo env: glassy chrome + grid/binary-flicker/glitch/shimmer + HUD glass cards/detail; hydration-safe deterministic scatter; reduced-motion-gated; licensed assets via Vercel Blob with tree-hidden/red-circle onError fallback; hero "here" de-emphasized — the one night-visible change).
+WP-28h (per-theme scenes/cards/detail — scroll ink-tree+petals+rolled-scroll cards+wax-seal badge+opened-scroll detail; sci-fi holo env: glassy chrome + grid/binary-flicker/glitch/shimmer + HUD glass cards/detail; hydration-safe deterministic scatter; reduced-motion-gated; licensed assets via Vercel Blob with tree-hidden/red-circle onError fallback; hero "here" de-emphasized — the one night-visible change). ·
+WP-28i (private theme-asset proxy — WP-28h's licensed images moved to a **private** Blob store, served only through the auth-gated `api/theme-asset/[name]` route: exact-match allowlist [`themeAssetBlobPath`, pure/tested], stream-through with `Cache-Control: private` + ETag/304, any failure → 404 so the WP-28h `onError` fallback holds; upload script flipped to `access:'private'`, prod base = `/api/theme-asset`).
 
 ### ⏭ Later tiers (M2–M4)
 
@@ -403,43 +405,6 @@ control bar — needs gothic styling, done), WP-28e (delete affordance must work
 theme option ships in the picker; the shelf renders as book pile or spines (per the brainstorm's call) with a
 gothic/Victorian palette; the rest of the app (detail, add, settings, login) gets matching typography/motifs; existing
 shelf interactions (sort/filter, delete) still work on the new layout.
-
-### WP-28i — Private theme-asset proxy (licensed images in prod)
-
-**Goal:** make WP-28h's licensed `scroll` images (`wax-seal.png`, `scroll-tree.png`) render in **production** without
-hosting them publicly. Their licenses don't permit public redistribution, so the images live in a **private** Vercel
-Blob store and are served only to authenticated users through an app route. Non-blocking: until this ships, prod keeps
-WP-28h's graceful fallback (no tree, red-circle wax badge); local dev already works via `public/themes/` + `/themes`.
-
-**Why a proxy is needed:** WP-28h loads the images with a plain browser `<img src>` off `NEXT_PUBLIC_THEME_ASSET_BASE`.
-A **public** blob would work but re-publishes the licensed image (auth-free, and with `addRandomSuffix:false` the URL is
-predictable) — the owner (2026-08-29) ruled that out. A **private** blob "requires authentication to access", which an
-`<img>` tag can't provide, so a private blob needs a server-side fetch. `@vercel/blob@2.8.0` supports `access:'private'`
-(store already created private) and a server `get(pathname, { access:'private' })` + `getDownloadUrl`/`presignUrl`.
-
-**Design (agreed, Option B — pin before building):**
-- **Upload private:** change `scripts/upload-theme-assets.mjs` `access:'public'` → `access:'private'` (this WP owns that
-  edit) + update `docs/theme-assets.md`.
-- **Auth-gated proxy route:** add `src/app/api/theme-asset/[name]/route.ts` (server). It runs behind the existing gate —
-  `src/middleware.ts` matcher `['/((?!_next/static|_next/image|favicon.ico).*)']` already covers `/api/*`, so the route
-  is auth-protected by default (verify, don't assume). Read the private blob server-side with `BLOB_READ_WRITE_TOKEN`
-  (via `get()` stream, or issue a short-lived signed URL and redirect) and stream the bytes.
-- **Filename allowlist:** the route MUST map only the two known names → their `themes/<name>` blob paths (never proxy an
-  arbitrary `[name]` — otherwise it's an open private-blob reader). Reject anything else with 404.
-- **Wire:** set `NEXT_PUBLIC_THEME_ASSET_BASE=/api/theme-asset` in prod → `resolveAssetUrl` builds
-  `/api/theme-asset/wax-seal.png`. The existing `<img>`/`onError` fallback in `WaxBadge.tsx`/`ThemeScene.tsx` needs **no
-  change** and still covers failures. Local dev stays on `/themes`.
-- **Caching:** static images but private — use `Cache-Control: private` (browser cache OK; keep it off shared/CDN
-  caches so the auth gate isn't bypassed). Decide max-age; ETag optional.
-- **Open decisions for this WP's own design pass:** stream-through vs signed-URL-redirect (redirect is cheaper on the
-  function but the signed URL is briefly bearer-public — weigh against the license); exact cache lifetime; whether the
-  route needs its own tiny e2e (private→proxied render) beyond WP-28h's fallback e2e.
-
-**Skills:** `mattpocock-skills:codebase-design` (route seam), `ai-toolkit:api-endpoint-creator` (route shape),
-`vercel:vercel-storage` (current Blob `get`/private API). **Depends:** WP-28h (assets + wiring, done), WP-AUTH (the gate
-this leans on, done). **DoD:** with the store private + `NEXT_PUBLIC_THEME_ASSET_BASE=/api/theme-asset`, an authenticated
-prod user sees the wax seal + tree; an unauthenticated request to `/api/theme-asset/*` is denied by the gate; a request
-for any name other than the two allowlisted assets 404s; unset/broken base still degrades to the WP-28h fallback.
 
 ### WP-28j — No-flash shelf sort/filter
 

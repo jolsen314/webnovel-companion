@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { resolveAssetUrl } from '../../src/lib/themeAssets';
+import { resolveAssetUrl, themeAssetBlobPath } from '../../src/lib/themeAssets';
 
 describe('resolveAssetUrl', () => {
   test('joins base + name, normalizing a trailing slash', () => {
@@ -12,5 +12,19 @@ describe('resolveAssetUrl', () => {
   test('missing/empty base → null (caller falls back)', () => {
     expect(resolveAssetUrl('scroll-tree.png', undefined)).toBeNull();
     expect(resolveAssetUrl('scroll-tree.png', '')).toBeNull();
+  });
+});
+
+describe('themeAssetBlobPath', () => {
+  test('maps each allowlisted asset to its themes/<name> blob path', () => {
+    expect(themeAssetBlobPath('wax-seal.png')).toBe('themes/wax-seal.png');
+    expect(themeAssetBlobPath('scroll-tree.png')).toBe('themes/scroll-tree.png');
+  });
+  test('rejects any non-allowlisted name → null (proxy must not read arbitrary blobs)', () => {
+    expect(themeAssetBlobPath('secret.png')).toBeNull();
+    expect(themeAssetBlobPath('../wax-seal.png')).toBeNull();
+    expect(themeAssetBlobPath('themes/wax-seal.png')).toBeNull();
+    expect(themeAssetBlobPath('')).toBeNull();
+    expect(themeAssetBlobPath('WAX-SEAL.PNG')).toBeNull();
   });
 });

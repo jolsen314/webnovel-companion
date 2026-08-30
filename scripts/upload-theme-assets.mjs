@@ -12,17 +12,19 @@ if (!process.env.BLOB_READ_WRITE_TOKEN) {
 }
 
 const assets = ['wax-seal.png', 'scroll-tree.png'];
-const urls = [];
 
 for (const name of assets) {
-  const { url } = await put(`themes/${name}`, readFileSync(`public/themes/${name}`), {
-    access: 'public',
+  // access: 'private' — the licenses don't permit public redistribution, so the blobs are
+  // served only through the auth-gated /api/theme-asset proxy (WP-28i), never via a public URL.
+  const { pathname } = await put(`themes/${name}`, readFileSync(`public/themes/${name}`), {
+    access: 'private',
     addRandomSuffix: false,
     contentType: 'image/png',
   });
-  urls.push(url);
-  console.log(name, '→', url);
+  console.log(name, '→', pathname, '(private)');
 }
 
-const base = urls[0].slice(0, urls[0].lastIndexOf('/'));
-console.log(`\nSet NEXT_PUBLIC_THEME_ASSET_BASE to the common base in Vercel + .env: ${base}`);
+console.log(
+  '\nSet NEXT_PUBLIC_THEME_ASSET_BASE=/api/theme-asset in Vercel + .env — the app streams these\n' +
+    'private blobs through the auth-gated proxy route, not a public Blob URL.',
+);

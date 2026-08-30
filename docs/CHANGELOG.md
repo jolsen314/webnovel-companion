@@ -2,6 +2,24 @@
 
 Append-only history, moved out of [PLAN.md](../PLAN.md). Newest first.
 
+- **2026-08-29** — **WP-28i shipped: private theme-asset proxy.** WP-28h's licensed `scroll` images (`wax-seal.png`,
+  `scroll-tree.png`) now render in prod without being hosted publicly — the licenses forbid public redistribution, so
+  they live in a **private** Vercel Blob store and are streamed only to authenticated callers through a new auth-gated
+  route, `src/app/api/theme-asset/[name]/route.ts`. The route reads the private blob server-side
+  (`get(path, { access: 'private' })`, `@vercel/blob@2.8.0`) and **streams the bytes through** rather than issuing a
+  signed-URL redirect (a short-lived signed URL is briefly a public bearer link to a license-restricted image — ruled
+  out). It sits behind the existing middleware gate (matcher covers `/api/*`, path not in the public allowlist → 401
+  for unauthenticated requests). A pure, **test-first** exact-match allowlist (`themeAssetBlobPath` in
+  `src/lib/themeAssets.ts`) maps only the two known names → `themes/<name>`; anything else 404s, so the route can't be
+  coerced into reading arbitrary objects from the private store. Any failure (missing token, store gone, network) →
+  404, never 500, so the existing `<img onError>` fallback in `WaxBadge.tsx`/`ThemeScene.tsx` still degrades
+  gracefully (no tree, red-circle badge) — consumers unchanged. `Cache-Control: private, max-age=86400` + ETag/304
+  keeps browser caching on but shared/CDN caches off (gate can't be bypassed) and private-blob egress down.
+  Provisioning: `scripts/upload-theme-assets.mjs` flipped to `access:'private'`; prod now sets
+  `NEXT_PUBLIC_THEME_ASSET_BASE=/api/theme-asset` (local dev stays `/themes`); `docs/theme-assets.md` updated. 526
+  unit tests pass + typecheck clean; route smoke-tested under Next 16.3.2 (allowlist reject + graceful-404 fallback,
+  no 500s). The authed-success render + unauth→401 are prod/owner-provisioned (private store token + `AUTH_SECRET`),
+  same as WP-28h's owner-run upload. **Next: WP-28c** (feed vs library split).
 - **2026-08-29** — **Queue reprioritized: WP-28i → NEXT; filed WP-28j.** Moved **WP-28i** (private theme-asset proxy —
   serve WP-28h's licensed images from a private Blob via an auth-gated route) to the top of the active queue ahead of
   WP-28c. Filed **WP-28j** (no-flash shelf sort/filter — navigating to `/` with a saved sort/filter flashes the
