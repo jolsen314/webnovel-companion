@@ -6,7 +6,7 @@ import { themeAssetBlobPath, themeAssetBlobToken } from '../../../../lib/themeAs
  * Auth-gated proxy for WP-28h's licensed `scroll` theme images (WP-28i).
  *
  * The images can't be hosted publicly (license), so they live in a **private** Vercel Blob
- * store and are streamed here only to callers past the session gate — `src/middleware.ts`
+ * store and are streamed here only to callers past the session gate — `src/proxy.ts`
  * runs on `/api/*` and this path is NOT in the public allowlist, so an unauthenticated
  * request is denied (401) before it reaches this handler.
  *

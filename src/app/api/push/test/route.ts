@@ -3,7 +3,7 @@ import { sendTestNotification } from '../../../../server/services';
 
 export const dynamic = 'force-dynamic';
 
-/** Send a canned test push to this user's subscriptions (auth-gated by middleware). */
+/** Send a canned test push to this user's subscriptions (auth-gated by proxy). */
 export async function POST() {
   try {
     return NextResponse.json(await sendTestNotification());

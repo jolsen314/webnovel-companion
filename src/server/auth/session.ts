@@ -1,6 +1,6 @@
 /**
  * Signed session token for the single-user gate. HMAC-SHA256 via Web Crypto so the
- * same verify runs in edge middleware and Node routes. The token carries only an
+ * same verify runs in the proxy gate and Node routes. The token carries only an
  * expiry; a valid signature means "the one user authenticated". Not a JWT library —
  * no dependency, minimal surface.
  */

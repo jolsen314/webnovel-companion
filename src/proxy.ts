@@ -3,7 +3,8 @@ import { isPublicPath } from './server/auth/access';
 import { SESSION_COOKIE, verifySession } from './server/auth/session';
 
 /**
- * The single-user gate. Runs on the edge for every request except static assets.
+ * The single-user gate. Runs for every request except static assets. (Next 16 Proxy;
+ * the runtime is Node, not edge — the session verify works in both.)
  * Public paths (login, auth endpoints, cron, PWA files) pass through; everything
  * else needs a valid session cookie.
  *
@@ -11,7 +12,7 @@ import { SESSION_COOKIE, verifySession } from './server/auth/session';
  * (convenience) but CLOSED in production (so a forgotten env var never ships an open
  * API). Configure AUTH_SECRET + AUTH_PASSWORD_HASH to enable it.
  */
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   if (isPublicPath(pathname)) return NextResponse.next();
 

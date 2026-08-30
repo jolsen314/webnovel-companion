@@ -2,6 +2,13 @@
 
 Append-only history, moved out of [PLAN.md](../PLAN.md). Newest first.
 
+- **2026-08-29** — **Next 16 deprecation cleanup: `middleware` → `proxy`.** Renamed `src/middleware.ts` →
+  `src/proxy.ts` and the `middleware` export → `proxy` (Next 16 deprecated the `middleware` convention). Behavior
+  unchanged — same single-user gate, same `/api/*` matcher — but Proxy runs on the Node runtime (edge isn't supported
+  for `proxy`), which is fine here: the HMAC session verify already ran in both, and no `runtime='edge'` was ever set.
+  Refreshed stale "edge middleware" comments in `session.ts`/`passphrase.ts` and the two route docstrings that named
+  the old file. Typecheck + 530 unit tests pass; `next build` recognizes it (`ƒ Proxy (Middleware)`, no deprecation
+  warning). No PLAN/WP change — housekeeping.
 - **2026-08-29** — **WP-28i shipped: private theme-asset proxy.** WP-28h's licensed `scroll` images (`wax-seal.png`,
   `scroll-tree.png`) now render in prod without being hosted publicly — the licenses forbid public redistribution, so
   they live in a **private** Vercel Blob store and are streamed only to authenticated callers through a new auth-gated

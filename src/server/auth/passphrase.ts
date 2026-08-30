@@ -4,7 +4,7 @@ import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
  * Passphrase hashing for the single-user gate. We store a scrypt hash (salted),
  * never the raw passphrase — so a leaked env var exposes no usable secret. Node
  * runtime only (used by the login route + the hash-generation script), never in
- * edge middleware. Format: `scrypt:<saltHex>:<hashHex>` — colon-separated, NOT `$`,
+ * the proxy gate. Format: `scrypt:<saltHex>:<hashHex>` — colon-separated, NOT `$`,
  * so it survives dotenv-expand (which would treat `$…` as variable interpolation).
  */
 const PREFIX = 'scrypt';
