@@ -1680,10 +1680,11 @@ body {
   border-radius: 60% 60% 60% 0 / 70% 70% 40% 40%;
   animation: wp28h-fall linear infinite;
 }
+/* Petals fall AND drift right — blown off the tree on the left. */
 @keyframes wp28h-fall {
-  0% { transform: translateY(-40px) rotate(0); opacity: 0; }
+  0% { transform: translate(-20px, -40px) rotate(0); opacity: 0; }
   12% { opacity: 0.85; }
-  100% { transform: translateY(940px) rotate(320deg) translateX(30px); opacity: 0.12; }
+  100% { transform: translate(170px, 940px) rotate(320deg); opacity: 0.12; }
 }
 
 /* sci-fi: grid + horizon + flickering binary + glitch bar — grid/horizon
@@ -1705,22 +1706,15 @@ body {
   mask-image: linear-gradient(to top, #000 4%, rgba(0, 0, 0, 0.6) 40%, transparent 82%);
   -webkit-mask-image: linear-gradient(to top, #000 4%, rgba(0, 0, 0, 0.6) 40%, transparent 82%);
 }
-:root[data-theme="sci-fi"] .themeScene__horizon {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: calc(62% - 3%);
-  height: 2px;
-  z-index: 0;
-  background: linear-gradient(90deg, transparent, rgba(120, 230, 255, 0.55), transparent);
-  filter: blur(1px);
-}
 :root[data-theme="sci-fi"] .themeScene__bit {
   position: absolute;
   white-space: nowrap;
   font-family: var(--font-mono);
   color: var(--holo-2);
-  animation: wp28h-flick 3s steps(2) infinite;
+  /* Smooth opacity breathing + a little float. Per-bit duration/delay (set inline from
+     the scatter) desync the field so it drifts organically. steps() removed → no hard
+     on/off flicker. */
+  animation: wp28h-flick 9s ease-in-out infinite;
 }
 /* Mobile: the dense hero binary (70 bits) crowds a small screen. Thin ~half of the
    hero scene's bits (not the toned app-wide backdrop). Deterministic nth-child →
@@ -1731,8 +1725,8 @@ body {
   }
 }
 @keyframes wp28h-flick {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 0.12; }
+  0%, 100% { opacity: 0.38; transform: translate(0, 0); }
+  50% { opacity: 0.13; transform: translate(2px, -4px); }
 }
 /* GLITCH bar — a cyan line that jumps intermittently (owner wants glitch/motion kept) */
 :root[data-theme="sci-fi"] .themeScene__glitch {
@@ -1755,7 +1749,6 @@ body {
    show over the whole app; Task 6 passes the lower petal/bit counts. */
 .themeScene--appwide .themeScene__tree,
 .themeScene--appwide .themeScene__grid,
-.themeScene--appwide .themeScene__horizon,
 .themeScene--appwide .themeScene__glitch {
   display: none;
 }

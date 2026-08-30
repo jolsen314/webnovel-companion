@@ -46,9 +46,17 @@ export function ThemeScene({ variant }: { variant: 'hero' | 'appwide' }) {
   const bits = scatter(hero ? 70 : 34, 91);
   return (
     <div className={cls} aria-hidden="true">
-      {hero && <><span className="themeScene__grid" /><span className="themeScene__horizon" /><span className="themeScene__glitch" /></>}
+      {hero && <><span className="themeScene__grid" /><span className="themeScene__glitch" /></>}
       {bits.map((b, i) => (
-        <span key={i} className="themeScene__bit" style={{ left: `${b.leftPct}%`, top: `${b.topPct}%` }}>{binaryString(i)}</span>
+        <span
+          key={i}
+          className="themeScene__bit"
+          // Per-bit delay + duration (from the deterministic scatter) desync the shimmer so
+          // the field breathes/floats organically instead of pulsing in lockstep.
+          style={{ left: `${b.leftPct}%`, top: `${b.topPct}%`, animationDelay: `${b.delaySec}s`, animationDuration: `${b.durSec}s` }}
+        >
+          {binaryString(i)}
+        </span>
       ))}
     </div>
   );
