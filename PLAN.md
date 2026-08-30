@@ -97,6 +97,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 | WP-28c | Feed page vs library split — a cross-series "what's new across everything" river vs the per-series grid (decide one view or two) | `NEXT` | WP-10 |
 | WP-28e | Shelf delete affordance — hide the always-visible per-card delete (WP-51) by default and expose it two ways (**both** wanted): (1) an iOS-Mail-style **swipe-left-to-reveal-Delete** on touch, and (2) an **"Edit" mode toggle** on the shelf head that reveals the per-card delete buttons (also the non-touch / keyboard / a11y path). Keep the confirm + the tap-through guard on both | `TODO` | WP-10, WP-51, WP-28a |
 | WP-28f | Bookshelf theme — gothic/Victorian palette + book-stack shelf layout | `TODO` | WP-28b, WP-28a, WP-28e |
+| WP-28i | Private theme-asset proxy — serve WP-28h's licensed wax-seal/tree PNGs from a **private** Vercel Blob store through an auth-gated Next route (licenses forbid public hosting), so they render in prod instead of the red-circle/no-tree fallback | `TODO` | WP-28h, WP-AUTH |
 | WP-55 | Decode HTML entities in **API-source** chapter titles — `decodeHTML` in `parseApiChapters` (feed/TOC paths already decode) + a one-off script to fix stored API-source rows | `TODO` | WP-45 |
 | WP-56 | Fix `parseToc` lock-detection false positives — **`LOCK_CLASS` matches "lock" inside "b`lock`"** so *every WordPress block-theme source* (`wp-block-*` classes) marks **all** chapters `LOCKED`; also `LOCK_TEXT` matches generic title words ("coin"/"premium" in a chapter title) and the lock **scope** is a whole shared content `<div>` (bare-anchor TOCs) that taints every row. Use class-**token boundaries** (not substring), gate lock state on markers not free text, and don't treat a giant shared container as a per-chapter row. **Data-correctness** (a real source had 556 free chapters all shown locked; fixed in prod by hand). **Drivers (local IDs):** block→lock confirmed on B01 (×5 series) + B02 (`wp-block` classes, 0 real lock markers); B03 is a **non-block variant** (0 `wp-block` — a shared big scope + a stray `LOCK_TEXT` token elsewhere on the page taints all rows) | `TODO` | WP-17, WP-20 |
 | WP-57 | `parseToc` must exclude **recommendation / "other novels" widgets** and **series-scope** to the novel's own chapter links — "you-may-also-like" / "popular" / "site-latest" cards are `/novel/<other-slug>` links whose "… Chapters: N" text trips `CHAPTER_TEXT`, so a JS/SPA source whose render captured only the shell scrapes the widget as chapters (and its `<h1>` as the title). Extends WP-36 (region scoping) with a **cross-series-card** exclusion + slug-family scoping to the series' own chapters. **Data-correctness** (wrong series' chapters ingested). **Drivers (local IDs):** B07 (×2), B08; also the 2026-08-22 XHR-SPA source (16 recommendation cards as "chapters") | `TODO` | WP-36, WP-17 |
@@ -399,6 +400,43 @@ control bar — needs gothic styling, done), WP-28e (delete affordance must work
 theme option ships in the picker; the shelf renders as book pile or spines (per the brainstorm's call) with a
 gothic/Victorian palette; the rest of the app (detail, add, settings, login) gets matching typography/motifs; existing
 shelf interactions (sort/filter, delete) still work on the new layout.
+
+### WP-28i — Private theme-asset proxy (licensed images in prod)
+
+**Goal:** make WP-28h's licensed `scroll` images (`wax-seal.png`, `scroll-tree.png`) render in **production** without
+hosting them publicly. Their licenses don't permit public redistribution, so the images live in a **private** Vercel
+Blob store and are served only to authenticated users through an app route. Non-blocking: until this ships, prod keeps
+WP-28h's graceful fallback (no tree, red-circle wax badge); local dev already works via `public/themes/` + `/themes`.
+
+**Why a proxy is needed:** WP-28h loads the images with a plain browser `<img src>` off `NEXT_PUBLIC_THEME_ASSET_BASE`.
+A **public** blob would work but re-publishes the licensed image (auth-free, and with `addRandomSuffix:false` the URL is
+predictable) — the owner (2026-08-29) ruled that out. A **private** blob "requires authentication to access", which an
+`<img>` tag can't provide, so a private blob needs a server-side fetch. `@vercel/blob@2.8.0` supports `access:'private'`
+(store already created private) and a server `get(pathname, { access:'private' })` + `getDownloadUrl`/`presignUrl`.
+
+**Design (agreed, Option B — pin before building):**
+- **Upload private:** change `scripts/upload-theme-assets.mjs` `access:'public'` → `access:'private'` (this WP owns that
+  edit) + update `docs/theme-assets.md`.
+- **Auth-gated proxy route:** add `src/app/api/theme-asset/[name]/route.ts` (server). It runs behind the existing gate —
+  `src/middleware.ts` matcher `['/((?!_next/static|_next/image|favicon.ico).*)']` already covers `/api/*`, so the route
+  is auth-protected by default (verify, don't assume). Read the private blob server-side with `BLOB_READ_WRITE_TOKEN`
+  (via `get()` stream, or issue a short-lived signed URL and redirect) and stream the bytes.
+- **Filename allowlist:** the route MUST map only the two known names → their `themes/<name>` blob paths (never proxy an
+  arbitrary `[name]` — otherwise it's an open private-blob reader). Reject anything else with 404.
+- **Wire:** set `NEXT_PUBLIC_THEME_ASSET_BASE=/api/theme-asset` in prod → `resolveAssetUrl` builds
+  `/api/theme-asset/wax-seal.png`. The existing `<img>`/`onError` fallback in `WaxBadge.tsx`/`ThemeScene.tsx` needs **no
+  change** and still covers failures. Local dev stays on `/themes`.
+- **Caching:** static images but private — use `Cache-Control: private` (browser cache OK; keep it off shared/CDN
+  caches so the auth gate isn't bypassed). Decide max-age; ETag optional.
+- **Open decisions for this WP's own design pass:** stream-through vs signed-URL-redirect (redirect is cheaper on the
+  function but the signed URL is briefly bearer-public — weigh against the license); exact cache lifetime; whether the
+  route needs its own tiny e2e (private→proxied render) beyond WP-28h's fallback e2e.
+
+**Skills:** `mattpocock-skills:codebase-design` (route seam), `ai-toolkit:api-endpoint-creator` (route shape),
+`vercel:vercel-storage` (current Blob `get`/private API). **Depends:** WP-28h (assets + wiring, done), WP-AUTH (the gate
+this leans on, done). **DoD:** with the store private + `NEXT_PUBLIC_THEME_ASSET_BASE=/api/theme-asset`, an authenticated
+prod user sees the wax seal + tree; an unauthenticated request to `/api/theme-asset/*` is denied by the gate; a request
+for any name other than the two allowlisted assets 404s; unset/broken base still degrades to the WP-28h fallback.
 
 ### WP-31 — Tab-structured premium TOCs (renderer tab capture + tab-membership access)
 
