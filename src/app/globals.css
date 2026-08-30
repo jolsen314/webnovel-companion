@@ -26,13 +26,13 @@
 
 /* ── Theme: cultivation ancient-scroll (light parchment) ─────────────────── */
 :root[data-theme="scroll"] {
-  --color-ink: #e4d8bc;
-  --color-ink-2: #dccfae;
-  --color-surface: #efe4c9;
-  --color-surface-2: #f5ecd6;
+  --color-ink: #c4afb8;      /* page ground → soft mauve (was parchment) */
+  --color-ink-2: #b79fac;
+  --color-surface: #f2e8cf;  /* parchment — cards/scroll/detail */
+  --color-surface-2: #efe4c9;
   --color-line: #cbb98f;
   --color-paper: #372a18;      /* primary text = sepia ink */
-  --color-muted: #8a765a;
+  --color-muted: #4f3d22;      /* sepia — ~4.9:1 on the mauve ground (AA), was #8a765a (~2.1:1) */
   --color-glow: #9e2b25;       /* cinnabar wax-seal */
   --color-glow-dim: #9e2b2500;
   --color-down: #b23b2f;
@@ -55,6 +55,7 @@
   --color-glow-dim: #37e0d800;
   --color-down: #ff6b8a;
   --color-on-glow: #06141a;    /* dark text on cyan */
+  --holo-1: #8ff6ee; --holo-2: #37e0d8; --holo-3: #5aa6ff; --holo-4: #a98bff;
   --font-display: var(--font-chakra), system-ui, sans-serif;
   --font-sans: var(--font-space-grotesk), system-ui, sans-serif;
   color-scheme: dark;
@@ -224,10 +225,8 @@ body {
   letter-spacing: -0.02em;
   margin: 0 0 1.1rem;
 }
-.hero__title em {
-  font-style: italic;
-  color: var(--color-glow);
-}
+/* WP-28h: "here" is no longer emphasized in any theme (owner). */
+.hero__title em { font-style: normal; color: inherit; }
 .hero__lede {
   color: var(--color-muted);
   font-size: clamp(1rem, 2.4vw, 1.12rem);
@@ -256,6 +255,13 @@ body {
   max-width: 42rem;
   margin: 0 auto;
   padding: clamp(1.5rem, 5vh, 3rem) clamp(1rem, 4vw, 2rem) 5rem;
+}
+/* Sci-fi detail corner-bracket overlay markup (.detail__hud) is
+   theme-agnostic in the DOM; hidden off sci-fi (its .br spans are empty
+   so this is defensive, matching the .hud pattern above). Re-shown by the
+   sci-fi rule near the other .detail__hud rules. */
+.detail__hud {
+  display: none;
 }
 .detail__back {
   font-family: var(--font-mono);
@@ -806,6 +812,13 @@ body {
 .card-wrap {
   position: relative;
 }
+/* Sci-fi HUD overlay markup (.hud) is theme-agnostic in the DOM but only
+   meant to render under sci-fi — off sci-fi it must stay fully hidden
+   (its .chev span carries literal text "//" that would otherwise leak
+   into night/scroll below every card). Re-shown by the sci-fi rule below. */
+.hud {
+  display: none;
+}
 .card__delete {
   position: absolute;
   bottom: 0.5rem;
@@ -1180,3 +1193,613 @@ body {
   font-size: 0.74rem;
   color: var(--color-muted);
 }
+
+/* ══ WP-28h Task 4: card + detail treatments, ported from design spikes ═══
+   Source: docs/superpowers/plans/wp28h-spikes/{scenes-and-cards,detail-treatments}.html
+   Every rule below is scoped under its theme attribute — night is untouched. */
+
+/* ── Theme: scroll — rolled-scroll card (Step 1) ──────────────────────────
+   Styling for the scroll-roll card edges (.roll spans are empty; invisible
+   off-scroll since they carry no content of their own). */
+:root[data-theme="scroll"] .card {
+  position: relative;
+  background: linear-gradient(180deg, var(--color-surface), #e9dcbb);
+  border: none;
+  border-radius: 3px;
+  overflow: visible;
+  padding: 0 15px;
+  box-shadow:
+    0 3px 8px rgba(40, 30, 12, 0.22),
+    inset 0 7px 9px -8px rgba(90, 60, 30, 0.5),
+    inset 0 -7px 9px -8px rgba(90, 60, 30, 0.5);
+}
+:root[data-theme="scroll"] .roll {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 17px;
+  border-radius: 4px;
+  z-index: 2;
+  background: linear-gradient(90deg, #8a6a3c, #c8ad78 22%, #efe1bf 48%, #c2a670 74%, #7d5c30);
+  box-shadow: 0 2px 5px rgba(40, 25, 8, 0.4);
+}
+:root[data-theme="scroll"] .roll--l {
+  left: -2px;
+}
+:root[data-theme="scroll"] .roll--r {
+  right: -2px;
+}
+:root[data-theme="scroll"] .roll::before,
+:root[data-theme="scroll"] .roll::after {
+  content: "";
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  height: 5px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #6f5228, #b9a06f, #6f5228);
+}
+:root[data-theme="scroll"] .roll::before {
+  top: -4px;
+}
+:root[data-theme="scroll"] .roll::after {
+  bottom: -4px;
+}
+/* The bottom-right delete button otherwise sits under the right roll rod (right:-2px,
+   width 17px, z-index 2 paints over it). Shift it left so it clears the rod. */
+:root[data-theme="scroll"] .card__delete {
+  right: 1.5rem;
+}
+:root[data-theme="scroll"] .card__title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: #3a2c18;
+}
+:root[data-theme="scroll"] .card__num {
+  color: var(--color-glow);
+}
+:root[data-theme="scroll"] .card__latest {
+  color: #5c5140;
+}
+:root[data-theme="scroll"] .card__latest b {
+  color: #3a2c18;
+  font-weight: 600;
+}
+:root[data-theme="scroll"] .card__meta {
+  color: #6f6650;
+}
+
+/* ── Theme: sci-fi — HUD glass card (Step 2) ──────────────────────────────
+   Decoration for the sci-fi HUD card overlay (accent bar, corner brackets,
+   chevron, hatch, flare). Hidden off sci-fi by the default .hud rule above. */
+:root[data-theme="sci-fi"] .card-wrap {
+  filter: drop-shadow(0 0 12px rgba(70, 150, 255, 0.35));
+}
+:root[data-theme="sci-fi"] .card {
+  position: relative;
+  clip-path: polygon(15px 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%, 0 15px);
+  background: linear-gradient(150deg, rgba(55, 205, 215, 0.2), rgba(90, 160, 225, 0.24));
+  backdrop-filter: blur(8px) saturate(1.25);
+  border: none;
+  border-radius: 0;
+  overflow: visible;
+}
+:root[data-theme="sci-fi"] .card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  clip-path: polygon(15px 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%, 0 15px);
+  padding: 1.5px;
+  background: linear-gradient(120deg, var(--holo-1), var(--holo-2) 38%, var(--holo-3) 68%, var(--holo-4));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+:root[data-theme="sci-fi"] .card__body {
+  padding-left: 1.5rem; /* room for the accent bar */
+}
+:root[data-theme="sci-fi"] .card__title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: #eaf6fb;
+}
+:root[data-theme="sci-fi"] .card__num {
+  color: #7fb6ff;
+}
+:root[data-theme="sci-fi"] .card__latest {
+  color: #a7c4d6;
+}
+:root[data-theme="sci-fi"] .card__latest b {
+  color: #eaf6fb;
+  font-weight: 600;
+}
+:root[data-theme="sci-fi"] .card__meta {
+  color: #7f9bb2;
+}
+:root[data-theme="sci-fi"] .card__unread {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #04121a;
+  background: linear-gradient(100deg, var(--color-glow), var(--holo-3));
+  padding: 0.14rem 0.5rem;
+  border-radius: 3px;
+  box-shadow: 0 0 10px -1px rgba(90, 166, 255, 0.8);
+}
+:root[data-theme="sci-fi"] .hud {
+  display: block;
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+:root[data-theme="sci-fi"] .hud .accent {
+  position: absolute;
+  left: 7px;
+  top: 16px;
+  bottom: 16px;
+  width: 3px;
+  border-radius: 2px;
+  background: linear-gradient(var(--holo-1), var(--color-glow));
+  box-shadow: 0 0 8px var(--color-glow);
+}
+:root[data-theme="sci-fi"] .hud .br {
+  position: absolute;
+  width: 13px;
+  height: 13px;
+  border: 2px solid #9fe9ff;
+}
+:root[data-theme="sci-fi"] .hud .br--tl {
+  top: 5px;
+  left: 5px;
+  border-right: none;
+  border-bottom: none;
+}
+:root[data-theme="sci-fi"] .hud .br--br {
+  bottom: 5px;
+  right: 5px;
+  border-left: none;
+  border-top: none;
+}
+:root[data-theme="sci-fi"] .hud .chev {
+  position: absolute;
+  bottom: 8px;
+  right: 70px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: -1px;
+  color: rgba(120, 220, 255, 0.6);
+}
+:root[data-theme="sci-fi"] .hud .hatch {
+  position: absolute;
+  bottom: 7px;
+  right: 26px;
+  width: 34px;
+  height: 9px;
+  background: repeating-linear-gradient(-45deg, rgba(120, 220, 255, 0.5) 0 2px, transparent 2px 5px);
+}
+:root[data-theme="sci-fi"] .hud .flare {
+  position: absolute;
+  right: -2px;
+  top: 40%;
+  width: 34px;
+  height: 10px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(150, 240, 255, 0.8), transparent 70%);
+  filter: blur(1px);
+}
+
+/* ── Theme: scroll — opened-scroll detail (Step 3) ────────────────────────
+   Parchment (--color-surface) panel sitting on the mauve page — this is what
+   restores legible contrast for --color-muted (2.11:1 on bare mauve, much
+   better on parchment). Wax badge markup is Task 6, not part of this rule set. */
+:root[data-theme="scroll"] .detail {
+  position: relative;
+  padding: 34px 30px;
+  background:
+    radial-gradient(120% 30% at 50% 0%, rgba(120, 80, 40, 0.05), transparent 60%),
+    linear-gradient(180deg, var(--color-surface), #ecdfbd);
+  box-shadow:
+    0 8px 30px rgba(70, 45, 20, 0.24),
+    inset 8px 0 12px -10px rgba(90, 60, 30, 0.5),
+    inset -8px 0 12px -10px rgba(90, 60, 30, 0.5);
+  border-left: 1px dashed rgba(120, 85, 45, 0.25);
+  border-right: 1px dashed rgba(120, 85, 45, 0.25);
+}
+:root[data-theme="scroll"] .detail::before,
+:root[data-theme="scroll"] .detail::after {
+  content: "";
+  position: absolute;
+  left: -10px;
+  right: -10px;
+  height: 26px;
+  z-index: 2;
+  border-radius: 6px;
+  background: linear-gradient(180deg, #7d5c30, #c8ad78 30%, #f0e1bf 52%, #bd9f68 74%, #6f5228);
+  box-shadow: 0 3px 8px rgba(60, 40, 15, 0.4);
+}
+:root[data-theme="scroll"] .detail::before {
+  top: -13px;
+}
+:root[data-theme="scroll"] .detail::after {
+  bottom: -13px;
+}
+:root[data-theme="scroll"] .detail__back {
+  color: #8a6a3c;
+}
+:root[data-theme="scroll"] .detail__title {
+  font-family: var(--font-display);
+  color: #3a2c18;
+}
+:root[data-theme="scroll"] .detail__meta {
+  color: var(--color-muted);
+}
+:root[data-theme="scroll"] .chapter {
+  border-bottom: 1px solid rgba(120, 85, 45, 0.18);
+}
+:root[data-theme="scroll"] .chapter__num {
+  color: var(--color-glow);
+}
+:root[data-theme="scroll"] .chapter__title {
+  color: #3a2c18;
+}
+:root[data-theme="scroll"] .chapter__mark {
+  color: var(--color-muted);
+  border: 1px solid rgba(120, 85, 45, 0.3);
+}
+
+/* ── Theme: sci-fi — holographic detail (Step 4) ──────────────────────────
+   Decoration for the sci-fi detail-panel corner brackets. Hidden off sci-fi
+   by the default .detail__hud rule above. */
+:root[data-theme="sci-fi"] .detail {
+  position: relative;
+  clip-path: polygon(20px 0, 100% 0, 100% calc(100% - 20px), calc(100% - 20px) 100%, 0 100%, 0 20px);
+  padding: 28px 30px;
+  background:
+    linear-gradient(160deg, rgba(55, 205, 215, 0.18), rgba(90, 160, 225, 0.22)),
+    repeating-linear-gradient(0deg, rgba(55, 224, 216, 0.05) 0 1px, transparent 1px 6px);
+  backdrop-filter: blur(8px) saturate(1.2);
+  filter: drop-shadow(0 0 20px rgba(70, 150, 255, 0.35));
+}
+:root[data-theme="sci-fi"] .detail::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  clip-path: polygon(20px 0, 100% 0, 100% calc(100% - 20px), calc(100% - 20px) 100%, 0 100%, 0 20px);
+  padding: 1.6px;
+  background: linear-gradient(120deg, var(--holo-1), var(--holo-2) 40%, var(--holo-3) 70%, var(--holo-4));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+:root[data-theme="sci-fi"] .detail__hud {
+  display: block;
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+:root[data-theme="sci-fi"] .detail__hud .br {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #9fe9ff;
+  z-index: 4;
+}
+:root[data-theme="sci-fi"] .detail__hud .br--tl {
+  top: 9px;
+  left: 9px;
+  border-right: none;
+  border-bottom: none;
+}
+:root[data-theme="sci-fi"] .detail__hud .br--br {
+  bottom: 9px;
+  right: 9px;
+  border-left: none;
+  border-top: none;
+}
+:root[data-theme="sci-fi"] .detail__back {
+  color: var(--color-glow);
+}
+:root[data-theme="sci-fi"] .detail__title {
+  font-family: var(--font-display);
+  background: linear-gradient(100deg, var(--holo-1), var(--holo-2) 45%, var(--holo-3) 75%, var(--holo-4));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+:root[data-theme="sci-fi"] .detail__meta {
+  color: #7f9bb2;
+}
+:root[data-theme="sci-fi"] .chapter {
+  border-bottom: 1px solid rgba(55, 224, 216, 0.14);
+}
+:root[data-theme="sci-fi"] .chapter__num {
+  color: #7fb6ff;
+}
+:root[data-theme="sci-fi"] .chapter__title {
+  color: #dbe9f2;
+}
+:root[data-theme="sci-fi"] .chapter__mark {
+  color: #a7c4d6;
+  border: 1px solid rgba(55, 224, 216, 0.3);
+}
+
+/* ══ WP-28h Task 5: sci-fi glassy chrome + scene/backdrop motif classes ════
+   Source: docs/superpowers/plans/wp28h-spikes/scenes-and-cards.html
+   Chrome rules scoped :root[data-theme="sci-fi"] only — night/scroll chrome
+   unchanged. Styling for the <ThemeScene> backdrop component (rendered on
+   the hero and app-wide layouts). */
+
+/* ── Theme: sci-fi — glassy chrome (Step 1) ───────────────────────────────
+   .appbar → .appHeader | .btn2/.btn2--primary → .btn/.btn--primary |
+   .sel → .shelf-select/.shelf-search/.control select/.login__input */
+:root[data-theme="sci-fi"] .appHeader {
+  background: linear-gradient(180deg, rgba(20, 36, 56, 0.5), rgba(12, 22, 36, 0.3));
+  backdrop-filter: blur(9px);
+  border-bottom: 1px solid rgba(90, 166, 255, 0.4);
+  box-shadow: 0 6px 24px -12px rgba(70, 150, 255, 0.5);
+}
+:root[data-theme="sci-fi"] .brand__name em {
+  font-style: normal;
+  background: linear-gradient(100deg, var(--holo-2), var(--holo-4));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+/* Scroll: dark sepia text is legible on the mauve ground but NOT where the black tree
+   branch crosses the lede — and no single text color can win on both. Seat the hero/login
+   content on a parchment sheet so the (sepia) text always reads. The parchment is a
+   background-only ::after layer with a turbulence-displacement filter (#wp28h-rough-edge)
+   giving it rough torn-paper edges + square corners — the filter roughens only the sheet,
+   never the text above it. */
+:root[data-theme="scroll"] .hero,
+:root[data-theme="scroll"] .login {
+  overflow: visible;
+  padding-top: clamp(2.5rem, 9vh, 4rem);
+  padding-bottom: 3rem;
+}
+:root[data-theme="scroll"] .hero::after,
+:root[data-theme="scroll"] .login::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  z-index: -1;
+  background: rgba(242, 232, 207, 0.9);
+  box-shadow: inset 0 0 26px rgba(90, 60, 30, 0.1);
+  filter: url(#wp28h-rough-edge);
+}
+
+/* Sci-fi: the full-viewport binary backdrop drifts behind the hero/login text and
+   obscures the muted lede. Seat the content on a translucent HUD panel so the text
+   reads cleanly over the busy scene (owner-requested "panel behind"). overflow:hidden
+   clips the ::after scanline to the panel's rounded corners. */
+:root[data-theme="sci-fi"] .hero,
+:root[data-theme="sci-fi"] .login {
+  background: linear-gradient(180deg, rgba(10, 20, 34, 0.66), rgba(8, 15, 26, 0.72));
+  border: 1px solid rgba(90, 166, 255, 0.22);
+  border-radius: 16px;
+  overflow: hidden;
+  backdrop-filter: blur(3px);
+  padding-top: clamp(2.5rem, 9vh, 4rem);
+  padding-bottom: 3rem;
+}
+
+:root[data-theme="sci-fi"] .hero__title {
+  background: linear-gradient(100deg, var(--holo-1), var(--holo-2) 40%, var(--holo-3) 72%, var(--holo-4));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+/* Scroll: secondary/Cancel buttons default to a transparent fill (base .btn), which
+   disappears against the mauve ground / parchment. Give them a parchment fill + firmer
+   border so they read as real buttons. Primary (cinnabar) is excluded. */
+:root[data-theme="scroll"] .btn:not(.btn--primary) {
+  background: var(--color-surface);
+  border-color: var(--color-line);
+}
+:root[data-theme="scroll"] .btn:not(.btn--primary):hover {
+  background: var(--color-surface-2);
+}
+
+:root[data-theme="sci-fi"] .btn {
+  background: rgba(20, 36, 56, 0.4);
+  border: 1px solid rgba(90, 166, 255, 0.35);
+  color: #cfe6f5;
+  backdrop-filter: blur(6px);
+}
+:root[data-theme="sci-fi"] .btn--primary {
+  background: linear-gradient(110deg, rgba(55, 224, 216, 0.22), rgba(90, 166, 255, 0.22));
+  border: 1px solid rgba(120, 220, 255, 0.7);
+  color: #d9f6ff;
+  box-shadow:
+    0 0 16px -4px rgba(90, 166, 255, 0.7),
+    inset 0 0 12px -6px rgba(140, 240, 255, 0.6);
+  backdrop-filter: blur(4px);
+}
+:root[data-theme="sci-fi"] .shelf-select,
+:root[data-theme="sci-fi"] .shelf-search,
+:root[data-theme="sci-fi"] .control select,
+:root[data-theme="sci-fi"] .login__input {
+  background: rgba(20, 36, 56, 0.4);
+  border: 1px solid rgba(90, 166, 255, 0.35);
+  color: #cfe6f5;
+  backdrop-filter: blur(6px);
+}
+
+/* ── Scene + backdrop motif classes (Step 2) ──────────────────────────────
+   Rendered by <ThemeScene> (src/app/(app)/ThemeScene.tsx). Selectors/values
+   are verbatim from the Task 5 brief; grid/horizon values ported exactly
+   from the spike's .grid/.horizon. */
+.themeScene {
+  /* WP-28h: viewport-fixed backdrop. The hero scene must span the whole SCREEN,
+     not the centered .hero/.login content column (max-width 24–44rem) it renders
+     beside — anchoring to that box confined the tree/petals/grid to a small
+     rectangle. `fixed` pins it to the viewport so it's size-agnostic across
+     login/add/empty AND phone/tablet/desktop; scene surfaces mount it as a
+     ROOT-level sibling of the content (child of <main>, not inside .hero), so
+     its z-index:-1 resolves in the root stacking context and stays behind the
+     sticky header + the centered content, exactly like --appwide.
+     (Task 6 note: a positioned descendant paints after non-positioned in-flow
+     siblings regardless of DOM order, so z-index:-1 — not 0 — is required to
+     keep it a backdrop; confirmed live against the login title/input/button.) */
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+}
+.themeScene--appwide {
+  position: fixed;
+  z-index: -1;
+  opacity: 0.5;
+}
+
+/* scroll: tree + drifting petals */
+:root[data-theme="scroll"] .themeScene__tree {
+  position: absolute;
+  left: -130px;
+  bottom: -10%;
+  height: 100%;
+  width: auto;
+  opacity: 0.92;
+}
+/* Mobile: bigger but pushed hard off the left edge so the TRUNK never shows — only the
+   canopy sweeps in low from the bottom-left corner, clear of the centered title/lede.
+   Dropped below the bottom edge so it reads as rooted off-screen; softened for legibility. */
+@media (max-width: 640px) {
+  :root[data-theme="scroll"] .themeScene__tree {
+    left: -175px;
+    bottom: -6%;
+    height: 62%;
+    opacity: 0.9;
+  }
+}
+:root[data-theme="scroll"] .themeScene__petal {
+  position: absolute;
+  width: 9px;
+  height: 12px;
+  background: var(--color-glow);
+  border-radius: 60% 60% 60% 0 / 70% 70% 40% 40%;
+  animation: wp28h-fall linear infinite;
+}
+/* Petals fall AND drift right — blown off the tree on the left. */
+@keyframes wp28h-fall {
+  0% { transform: translate(-20px, -40px) rotate(0); opacity: 0; }
+  12% { opacity: 0.85; }
+  100% { transform: translate(170px, 940px) rotate(320deg); opacity: 0.12; }
+}
+
+/* sci-fi: grid + horizon + flickering binary + glitch bar — grid/horizon
+   values ported exactly from scenes-and-cards.html .grid / .horizon */
+:root[data-theme="sci-fi"] .themeScene__grid {
+  position: absolute;
+  left: -25%;
+  right: -25%;
+  bottom: -3%;
+  height: 62%;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(120, 224, 255, 0.42) 1.5px, transparent 1.5px),
+    linear-gradient(90deg, rgba(120, 224, 255, 0.32) 1.5px, transparent 1.5px);
+  background-size: 46px 46px;
+  transform: perspective(500px) rotateX(60deg);
+  transform-origin: bottom center;
+  mask-image: linear-gradient(to top, #000 4%, rgba(0, 0, 0, 0.6) 40%, transparent 82%);
+  -webkit-mask-image: linear-gradient(to top, #000 4%, rgba(0, 0, 0, 0.6) 40%, transparent 82%);
+}
+:root[data-theme="sci-fi"] .themeScene__bit {
+  position: absolute;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  color: var(--holo-2);
+  /* Two decoupled animations: a fairly quick opacity breathe + a slower, wider wander.
+     Per-bit durations (inline `animationDuration: "<flick>s, <drift>s"` from the scatter)
+     and a per-bit delay desync the field so it drifts organically. */
+  animation: wp28h-flick 5s ease-in-out infinite, wp28h-drift 20s ease-in-out infinite;
+}
+/* Mobile: the dense hero binary (70 bits) crowds a small screen. Thin ~half of the
+   hero scene's bits (not the toned app-wide backdrop). Deterministic nth-child →
+   hydration-safe; the leading grid/horizon/glitch spans keep their positions. */
+@media (max-width: 640px) {
+  :root[data-theme="sci-fi"] .themeScene:not(.themeScene--appwide) .themeScene__bit:nth-child(2n) {
+    display: none;
+  }
+}
+@keyframes wp28h-flick {
+  0%, 100% { opacity: 0.38; }
+  50% { opacity: 0.13; }
+}
+/* A wider, wandering drift so bits travel across a larger area rather than jittering in place. */
+@keyframes wp28h-drift {
+  0% { transform: translate(0, 0); }
+  25% { transform: translate(24px, -28px); }
+  50% { transform: translate(-16px, -50px); }
+  75% { transform: translate(18px, -24px); }
+  100% { transform: translate(0, 0); }
+}
+/* GLITCH bar — a cyan line that jumps intermittently (owner wants glitch/motion kept) */
+:root[data-theme="sci-fi"] .themeScene__glitch {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: rgba(120, 230, 255, 0.55);
+  mix-blend-mode: screen;
+  animation: wp28h-glitch 6s infinite;
+}
+@keyframes wp28h-glitch {
+  0%, 90%, 100% { opacity: 0; top: 20%; }
+  91% { opacity: 1; top: 38%; }
+  94% { opacity: 1; top: 61%; }
+  96% { opacity: 0.6; top: 47%; }
+}
+
+/* --appwide: hide the tree/grid/horizon/glitch — only the faint petals/bits
+   show over the whole app; Task 6 passes the lower petal/bit counts. */
+.themeScene--appwide .themeScene__tree,
+.themeScene--appwide .themeScene__grid,
+.themeScene--appwide .themeScene__glitch {
+  display: none;
+}
+
+/* ── Reduced motion (Step 3) — stops petals, binary flicker, and glitch ──
+   Additive to the existing prefers-reduced-motion block near the top of
+   this file (global animation-duration clamp at line 103); that block is
+   left untouched — this is a new block for the scene elements. */
+@media (prefers-reduced-motion: reduce) {
+  .themeScene__petal,
+  :root[data-theme="sci-fi"] .themeScene__bit,
+  :root[data-theme="sci-fi"] .themeScene__glitch {
+    animation: none !important;
+  }
+  /* The bit/petal opacity lives only inside their @keyframes, so `animation:none`
+     would snap them to the default full opacity — a static-but-GLARING scene for
+     reduced-motion users (and the reduced-motion settings screenshot). Pin the
+     resting opacity to the animated midpoint so the static scene stays faint and
+     matches shelf/detail. */
+  :root[data-theme="sci-fi"] .themeScene__bit {
+    opacity: 0.28 !important;
+  }
+  .themeScene__petal {
+    opacity: 0.55 !important;
+  }
+  :root[data-theme="sci-fi"] .themeScene__glitch {
+    opacity: 0 !important;
+  }
+}
+
+/* ── WP-28h Task 6: WaxBadge — scroll seal / red-circle fallback ─────────── */
+.card__unread-img { display: none; }
+/* night/sci-fi keep the existing pill/chip; append " new" after the number */
+:root:not([data-theme="scroll"]) .card__unread-num::after { content: " new"; }
+/* scroll: wax seal (image) or red-circle fallback, number stamped in the centre */
+:root[data-theme="scroll"] .card__unread { position: relative; background: none; border: 0; padding: 0;
+  width: 50px; height: 50px; display: grid; place-items: center; }
+:root[data-theme="scroll"] .card__unread--seal .card__unread-img { display: block; position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+:root[data-theme="scroll"] .card__unread--noseal { width: 34px; height: 34px; background: #9e2b25; border-radius: 50%; }
+:root[data-theme="scroll"] .card__unread-num { position: relative; z-index: 1; color: #fbeee2; font-family: var(--font-display); font-weight: 700;
+  text-shadow: 0 1px 2px rgba(60,10,8,.8), 0 0 3px rgba(0,0,0,.5); }

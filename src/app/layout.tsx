@@ -53,6 +53,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Applies the saved theme before first paint (no FOUC). suppressHydrationWarning on <html>
             because this script sets data-theme, which the server does not render. */}
         <script dangerouslySetInnerHTML={{ __html: buildThemeScript() }} />
+        {/* WP-28h: turbulence-displacement filter for the scroll theme's rough torn-paper
+            panel edge. Applied via CSS `filter: url(#wp28h-rough-edge)` to a background-only
+            layer so the parchment edge roughens without distorting the text above it. */}
+        <svg aria-hidden="true" width="0" height="0" style={{ position: 'absolute' }}>
+          <filter id="wp28h-rough-edge" x="-8%" y="-8%" width="116%" height="116%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.019" numOctaves="3" seed="9" result="noise" />
+            <feDisplacementMap in="SourceGraphic" in2="noise" scale="12" xChannelSelector="R" yChannelSelector="G" />
+          </filter>
+        </svg>
         {children}
         <ServiceWorkerRegister />
       </body>

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getPushState, enablePush, disablePush, type PushState } from '../../pushClient';
 import { ThemePicker } from './ThemePicker';
+import { ThemeScene } from '../ThemeScene';
 
 interface Prefs {
   pushNewChapter: boolean;
@@ -82,7 +83,9 @@ export default function SettingsPage() {
   }
 
   return (
-    <section className="settings">
+    <>
+      <ThemeScene variant="appwide" />
+      <section className="settings">
       <Link href="/" className="detail__back">
         ← Library
       </Link>
@@ -148,7 +151,8 @@ export default function SettingsPage() {
       </div>
 
       <ThemePicker />
-    </section>
+      </section>
+    </>
   );
 }
 

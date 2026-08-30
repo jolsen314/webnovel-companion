@@ -2,6 +2,26 @@
 
 Append-only history, moved out of [PLAN.md](../PLAN.md). Newest first.
 
+- **2026-08-28** — **WP-28h shipped: per-theme scenes, cards, and detail** (a follow-on to WP-28b's token
+  architecture — scroll and sci-fi now have a full scene identity, not just a recolored night). **Scroll** gained a
+  mauve page ground with parchment reserved for card/panel surfaces, an ink-tree with drifting cinnabar petals behind
+  the hero, rolled-scroll shelf cards, a wax-seal unread badge, and an opened-scroll detail view (rods + deckle edge).
+  **Sci-fi** gained a full holographic environment: glassy translucent chrome on the header/buttons/inputs, a
+  perspective grid + shimmer-binary backdrop with flicker plus a glitch bar, iridescent shimmer on the title/rims, and
+  HUD-glass shelf cards + a holo detail view. Both themes' motion (petal fall; binary flicker + glitch) is gated
+  behind `prefers-reduced-motion`. **Hydration-safe by construction:** a new deterministic-scatter helper
+  (`lib/scatter.ts`) seeds petal/binary placement so the SSR baseline and the post-mount client render agree, and
+  `ThemeScene`/`WaxBadge` render an SSR-safe baseline that only fills in after mount; card markup is identical
+  SSR↔client across all themes and only *styled* differently via CSS — no markup branching on theme, no
+  hydration-mismatch warnings. **Licensed art (wax seal, ink tree) is gitignored** and served from Vercel Blob in
+  prod (`scripts/upload-theme-assets.mjs`, `docs/theme-assets.md`); an `onError` fallback degrades gracefully for a
+  set-but-unreachable base too, not just an unset one (tree hides, the wax seal falls back to a plain red circle).
+  **The one night-visible change:** the hero's emphasized "here" (italic amber) is now plain text in *every* theme —
+  every other rule stays scoped under `:root[data-theme="scroll"/"sci-fi"]`. New: `lib/scatter.ts`,
+  `lib/themeAssets.ts`, `ThemeScene.tsx`, `WaxBadge.tsx`, e2e `theme-scenes.spec.ts` + review-screenshot
+  `theme-scenes-screens.spec.ts`. Surface mapping (spikes were composite reference, not literal layout): the hero
+  scene renders only on the empty-library `EmptyState`; shelf cards and the hero are mutually exclusive states of the
+  same `/` route; the populated shelf/detail sit on a toned-down app-wide backdrop, not the full hero scene.
 - **2026-08-28** — **WP-28b shipped: pluggable theme system.** Replaced the single baked-in "night reading" identity
   with a `[data-theme]` token architecture — per-theme CSS custom-property sets keyed off `data-theme` on `<html>`, so
   components keep referencing `var(--color-…)` unchanged — plus a new shared `--color-on-glow` token (tokenized
