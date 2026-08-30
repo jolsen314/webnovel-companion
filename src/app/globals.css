@@ -1245,6 +1245,11 @@ body {
 :root[data-theme="scroll"] .roll::after {
   bottom: -4px;
 }
+/* The bottom-right delete button otherwise sits under the right roll rod (right:-2px,
+   width 17px, z-index 2 paints over it). Shift it left so it clears the rod. */
+:root[data-theme="scroll"] .card__delete {
+  right: 1.5rem;
+}
 :root[data-theme="scroll"] .card__title {
   font-family: var(--font-display);
   font-weight: 600;
