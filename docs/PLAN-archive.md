@@ -7,6 +7,39 @@ index lives in PLAN.md's ✅ Completed table.
 
 ---
 
+### WP-28i — Private theme-asset proxy (licensed images in prod)
+
+**DONE (2026-08-29).** WP-28h's licensed `scroll` images (`wax-seal.png`, `scroll-tree.png`) now render in production
+without being hosted publicly. Their licenses don't permit public redistribution, so they live in a **private** Vercel
+Blob store and are streamed only to authenticated callers through a new app route.
+
+**What shipped:**
+- **Auth-gated proxy route** `src/app/api/theme-asset/[name]/route.ts` (Node runtime, `force-dynamic`). Reads the
+  private blob server-side with `get(path, { access: 'private' })` (`@vercel/blob@2.8.0`, `BLOB_READ_WRITE_TOKEN` from
+  env) and **streams the bytes through** — chosen over a signed-URL redirect, whose short-lived URL is briefly a
+  public bearer link to a license-restricted image, defeating the point. It runs behind the existing gate: the
+  `src/middleware.ts` matcher covers `/api/*` and the path is **not** in the `isPublicPath` allowlist, so an
+  unauthenticated request is denied (401) before the handler runs (verified: route sits under the gate; smoke-tested
+  that middleware executes on it).
+- **Exact-match filename allowlist** — a pure, test-first `themeAssetBlobPath(name)` in `src/lib/themeAssets.ts` maps
+  only the two known names → `themes/<name>`; everything else (unknown name, `themes/…` prefix, case variants,
+  traversal-ish) → null → 404. Prevents the route from becoming an open reader over the whole private store.
+- **Graceful degradation** — any failure (missing token, store gone, network) is caught → 404, never a 500, so the
+  existing `<img onError>` fallback in `WaxBadge.tsx`/`ThemeScene.tsx` holds (no tree, red-circle badge). No change
+  needed to those consumers or to `resolveAssetUrl`.
+- **Caching** — `Cache-Control: private, max-age=86400` + ETag/`If-None-Match`→304 pass-through (browser cache OK;
+  `private` keeps it off shared/CDN caches so the gate can't be bypassed; ETag keeps private-blob egress down).
+- **Provisioning** — `scripts/upload-theme-assets.mjs` flipped `access:'public'` → `access:'private'`; prod sets
+  `NEXT_PUBLIC_THEME_ASSET_BASE=/api/theme-asset` (was the Blob URL base) so `resolveAssetUrl` builds
+  `/api/theme-asset/wax-seal.png`. Local dev unchanged (`/themes`). `docs/theme-assets.md` updated.
+
+**Verification:** 526 unit tests pass (incl. the new allowlist tests) + typecheck clean; runtime smoke under Next
+16.3.2 confirmed the route mounts and that unknown/tokenless names both degrade to a graceful 404 (no 500s). The
+authed-success streaming path and the unauth→401 are prod/owner-provisioned (private store + `BLOB_READ_WRITE_TOKEN`
++ `AUTH_SECRET`), same pattern as WP-28h's owner-run asset upload. New: `src/app/api/theme-asset/[name]/route.ts`;
+touched `src/lib/themeAssets.ts`, `tests/unit/themeAssets.test.ts`, `scripts/upload-theme-assets.mjs`,
+`docs/theme-assets.md`.
+
 ### WP-PW — Playwright E2E harness + backfill UI coverage
 
 **DONE (2026-08-15).** Stood up the Playwright E2E harness the README had long deferred: `playwright.config.ts`
