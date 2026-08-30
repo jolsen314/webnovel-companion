@@ -2,6 +2,10 @@
 
 Append-only history, moved out of [PLAN.md](../PLAN.md). Newest first.
 
+- **2026-08-29** — **Queue reprioritized: WP-28i → NEXT; filed WP-28j.** Moved **WP-28i** (private theme-asset proxy —
+  serve WP-28h's licensed images from a private Blob via an auth-gated route) to the top of the active queue ahead of
+  WP-28c. Filed **WP-28j** (no-flash shelf sort/filter — navigating to `/` with a saved sort/filter flashes the
+  unsorted shelf before snapping to the persisted view; fix via WP-28b's pre-paint no-flash pattern). No code change.
 - **2026-08-28** — **WP-28h shipped: per-theme scenes, cards, and detail** (a follow-on to WP-28b's token
   architecture — scroll and sci-fi now have a full scene identity, not just a recolored night). **Scroll** gained a
   mauve page ground with parchment reserved for card/panel surfaces, an ink-tree with drifting cinnabar petals behind

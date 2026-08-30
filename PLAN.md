@@ -46,14 +46,16 @@ uncommitted notes." Real names/URLs live only in those local notes and in scratc
 
 ## Current focus
 
-> **NEXT: WP-28c — Feed page vs library split.** WP-28 was split into pickup-able children (2026-08-20) after its
-> long-title readability facet shipped; the shelf-ordering facet (WP-28a) landed **expanded** into full shelf **sort +
-> filter**, and **WP-28b** (theme system) has now shipped too — leaving **WP-28c** (feed vs library split, NEXT) and
-> **WP-28e** (shelf delete affordance) — priority = the **▶ Active queue** table, reorderable by the owner.
-> WP-28b's spike also surfaced a fourth theme candidate + two low-pri extensions, filed as **WP-28f** (bookshelf
-> theme), **WP-28g** (header quick-switch), and **WP-THEMESYNC** (cross-device persistence). **WP-28h** (per-theme
-> scenes/cards/detail — scroll's ink-tree+petals+rolled-scroll+wax-seal, sci-fi's holo env) has now shipped too, a
-> side effort alongside WP-28b that doesn't change the queue above.
+> **NEXT: WP-28i — Private theme-asset proxy.** Serve WP-28h's licensed wax-seal/tree images from a **private**
+> Vercel Blob store through an auth-gated route so they render in prod instead of the fallback (moved to the top of
+> the queue 2026-08-29). WP-28 was split into pickup-able children (2026-08-20) after its long-title readability facet
+> shipped; the shelf-ordering facet (WP-28a) landed **expanded** into full shelf **sort + filter**, **WP-28b** (theme
+> system) shipped, and **WP-28h** (per-theme scenes/cards/detail — scroll's ink-tree+petals+rolled-scroll+wax-seal,
+> sci-fi's holo env) shipped as a side effort. Still queued behind WP-28i: **WP-28c** (feed vs library split),
+> **WP-28e** (shelf delete affordance), and **WP-28j** (no-flash shelf sort/filter — a flash of the unsorted shelf on
+> nav when a filter/sort is saved) — priority = the **▶ Active queue** table, reorderable by the owner. WP-28b's spike
+> also surfaced a fourth theme candidate + two low-pri extensions, filed as **WP-28f** (bookshelf theme), **WP-28g**
+> (header quick-switch), and **WP-THEMESYNC** (cross-device persistence).
 >
 > **Recently landed:** see **[docs/CHANGELOG.md](docs/CHANGELOG.md)** (newest first) and the ✅ Completed table below.
 >
@@ -94,10 +96,11 @@ later-tier tables are reference only. `⭐` = load-bearing.
 
 | ID | Work package | Status | Depends on |
 |----|--------------|--------|------------|
-| WP-28c | Feed page vs library split — a cross-series "what's new across everything" river vs the per-series grid (decide one view or two) | `NEXT` | WP-10 |
+| WP-28i | Private theme-asset proxy — serve WP-28h's licensed wax-seal/tree PNGs from a **private** Vercel Blob store through an auth-gated Next route (licenses forbid public hosting), so they render in prod instead of the red-circle/no-tree fallback | `NEXT` | WP-28h, WP-AUTH |
+| WP-28c | Feed page vs library split — a cross-series "what's new across everything" river vs the per-series grid (decide one view or two) | `TODO` | WP-10 |
 | WP-28e | Shelf delete affordance — hide the always-visible per-card delete (WP-51) by default and expose it two ways (**both** wanted): (1) an iOS-Mail-style **swipe-left-to-reveal-Delete** on touch, and (2) an **"Edit" mode toggle** on the shelf head that reveals the per-card delete buttons (also the non-touch / keyboard / a11y path). Keep the confirm + the tap-through guard on both | `TODO` | WP-10, WP-51, WP-28a |
 | WP-28f | Bookshelf theme — gothic/Victorian palette + book-stack shelf layout | `TODO` | WP-28b, WP-28a, WP-28e |
-| WP-28i | Private theme-asset proxy — serve WP-28h's licensed wax-seal/tree PNGs from a **private** Vercel Blob store through an auth-gated Next route (licenses forbid public hosting), so they render in prod instead of the red-circle/no-tree fallback | `TODO` | WP-28h, WP-AUTH |
+| WP-28j | No-flash shelf sort/filter — navigating to `/` with a saved sort/filter briefly shows the unsorted/unfiltered shelf before it snaps to the persisted view. The control state lives in `localStorage` and is applied client-side after mount; pre-apply it before paint (reuse WP-28b's no-flash pattern) or render the shelf from the persisted state | `TODO` | WP-28a, WP-28b |
 | WP-55 | Decode HTML entities in **API-source** chapter titles — `decodeHTML` in `parseApiChapters` (feed/TOC paths already decode) + a one-off script to fix stored API-source rows | `TODO` | WP-45 |
 | WP-56 | Fix `parseToc` lock-detection false positives — **`LOCK_CLASS` matches "lock" inside "b`lock`"** so *every WordPress block-theme source* (`wp-block-*` classes) marks **all** chapters `LOCKED`; also `LOCK_TEXT` matches generic title words ("coin"/"premium" in a chapter title) and the lock **scope** is a whole shared content `<div>` (bare-anchor TOCs) that taints every row. Use class-**token boundaries** (not substring), gate lock state on markers not free text, and don't treat a giant shared container as a per-chapter row. **Data-correctness** (a real source had 556 free chapters all shown locked; fixed in prod by hand). **Drivers (local IDs):** block→lock confirmed on B01 (×5 series) + B02 (`wp-block` classes, 0 real lock markers); B03 is a **non-block variant** (0 `wp-block` — a shared big scope + a stray `LOCK_TEXT` token elsewhere on the page taints all rows) | `TODO` | WP-17, WP-20 |
 | WP-57 | `parseToc` must exclude **recommendation / "other novels" widgets** and **series-scope** to the novel's own chapter links — "you-may-also-like" / "popular" / "site-latest" cards are `/novel/<other-slug>` links whose "… Chapters: N" text trips `CHAPTER_TEXT`, so a JS/SPA source whose render captured only the shell scrapes the widget as chapters (and its `<h1>` as the title). Extends WP-36 (region scoping) with a **cross-series-card** exclusion + slug-family scoping to the series' own chapters. **Data-correctness** (wrong series' chapters ingested). **Drivers (local IDs):** B07 (×2), B08; also the 2026-08-22 XHR-SPA source (16 recommendation cards as "chapters") | `TODO` | WP-36, WP-17 |
@@ -437,6 +440,27 @@ predictable) — the owner (2026-08-29) ruled that out. A **private** blob "requ
 this leans on, done). **DoD:** with the store private + `NEXT_PUBLIC_THEME_ASSET_BASE=/api/theme-asset`, an authenticated
 prod user sees the wax seal + tree; an unauthenticated request to `/api/theme-asset/*` is denied by the gate; a request
 for any name other than the two allowlisted assets 404s; unset/broken base still degrades to the WP-28h fallback.
+
+### WP-28j — No-flash shelf sort/filter
+
+**Goal:** kill the flash where navigating to the shelf (`/`) with a saved sort/filter briefly renders the
+**unsorted/unfiltered** shelf, then snaps to the persisted view once the client mounts.
+
+**Cause:** WP-28a persists the shelf controls (sort mode + status/title/min-rating filter) in `localStorage` and
+applies them in the **client** [`Shelf.tsx`](<src/app/(app)/Shelf.tsx>) after mount. The server renders the default
+order/filter, so there's a visible reflow on every navigation to `/` — the shelf equivalent of a theme FOUC.
+
+**Fix (pick in this WP's design pass):** the cleanest is WP-28b's **no-flash** pattern — a pre-paint inline script
+(or an equivalent blocking read) that applies the persisted control state to the initial markup **before first
+paint**, so the first frame is already the saved view. Alternatives to weigh: render the shelf from the persisted
+state so SSR and first client render agree (must stay hydration-safe — the server can't read `localStorage`, so this
+likely still needs the pre-paint hand-off), or persist the controls **server-side** (overlaps **WP-THEMESYNC**'s
+cross-device idea) so SSR can render the correct view directly. Keep it hydration-clean (no mismatch warnings).
+
+**Skills:** `frontend-design`. **Depends:** WP-28a (shelf controls, done), WP-28b (the no-flash pre-paint pattern to
+reuse, done). **DoD:** navigating to `/` with a non-default saved sort/filter shows the saved view on the first
+painted frame (no flash of the default order); no hydration-mismatch warnings; the controls still persist + apply on
+change as before.
 
 ### WP-31 — Tab-structured premium TOCs (renderer tab capture + tab-membership access)
 
