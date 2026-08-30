@@ -25,7 +25,7 @@ caveats of each.
 
 ## Owner provisioning steps (not run by the agent — needs your Vercel account)
 
-1. **Create a private Blob store** on the Vercel project: Vercel dashboard → project → **Storage** → **Create Database** → **Blob**. This mints a `BLOB_READ_WRITE_TOKEN` for the project (also settable locally for the one-off upload below). The proxy route reads with this token at request time, so make sure it's set on the Vercel project's environment.
+1. **Create a private Blob store** on the Vercel project: Vercel dashboard → project → **Storage** → **Create Database** → **Blob**. This injects a read-write token env var whose **prefix you choose** when connecting the store. This project uses the `THEME_ASSETS_` prefix (namespaced so additional Blob stores can each carry their own prefix later), so the token is **`THEME_ASSETS_READ_WRITE_TOKEN`**, *not* the SDK-default `BLOB_READ_WRITE_TOKEN` that `@vercel/blob`'s `get()` looks up implicitly. The proxy reads it explicitly via `themeAssetBlobToken` (`src/lib/themeAssets.ts`): `THEME_ASSETS_READ_WRITE_TOKEN` first, then a `BLOB_READ_WRITE_TOKEN` fallback. If you use a different prefix, either match `THEME_ASSETS_READ_WRITE_TOKEN` or add a `BLOB_READ_WRITE_TOKEN` alias. (Note: token env-var changes only reach **new** deployments — redeploy the preview/prod after setting it.)
 2. **Upload the assets:**
    ```bash
    BLOB_READ_WRITE_TOKEN=<store's token> node scripts/upload-theme-assets.mjs

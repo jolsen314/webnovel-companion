@@ -11,6 +11,16 @@ export function themeAssetBlobPath(name: string): string | null {
   return (THEME_ASSET_NAMES as readonly string[]).includes(name) ? `themes/${name}` : null;
 }
 
+/** The read-write token the proxy passes to Blob `get()`. This store's token env var uses a
+ *  deliberately-chosen `THEME_ASSETS_` prefix (namespaced so additional Blob stores can each carry
+ *  their own prefix later), so it's `THEME_ASSETS_READ_WRITE_TOKEN`, not the SDK-default
+ *  `BLOB_READ_WRITE_TOKEN` that `get()` looks up implicitly — hence the explicit read here. We
+ *  prefer the prefixed name, fall back to the conventional one, and return undefined if neither is
+ *  set (letting `get()` fall through to its own default). Pure. */
+export function themeAssetBlobToken(env: Record<string, string | undefined>): string | undefined {
+  return env.THEME_ASSETS_READ_WRITE_TOKEN ?? env.BLOB_READ_WRITE_TOKEN;
+}
+
 /** URL from a configured base (Vercel Blob in prod, /themes in dev), or null when unset so callers
  *  render their fallback. A base that IS set but 404s/unreachable is handled by the <img> onError,
  *  not here. */

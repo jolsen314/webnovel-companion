@@ -1,6 +1,6 @@
 import { get } from '@vercel/blob';
 import { NextResponse } from 'next/server';
-import { themeAssetBlobPath } from '../../../../lib/themeAssets';
+import { themeAssetBlobPath, themeAssetBlobToken } from '../../../../lib/themeAssets';
 
 /**
  * Auth-gated proxy for WP-28h's licensed `scroll` theme images (WP-28i).
@@ -35,7 +35,10 @@ export async function GET(request: Request, { params }: NameParams) {
 
   try {
     const ifNoneMatch = request.headers.get('if-none-match') ?? undefined;
-    const result = await get(blobPath, { access: 'private', ifNoneMatch });
+    // Pass the token explicitly: Vercel names a store's token after the store
+    // (THEME_ASSETS_READ_WRITE_TOKEN), so get()'s implicit BLOB_READ_WRITE_TOKEN lookup would miss it.
+    const token = themeAssetBlobToken(process.env);
+    const result = await get(blobPath, { access: 'private', ifNoneMatch, token });
     if (!result) return new NextResponse(null, { status: 404 });
 
     if (result.statusCode === 304) {
@@ -53,7 +56,10 @@ export async function GET(request: Request, { params }: NameParams) {
         ETag: result.blob.etag,
       },
     });
-  } catch {
+  } catch (err) {
+    // Graceful for the client (the <img onError> fallback holds), but log so a real misconfig
+    // (missing/renamed token, store gone) is visible in function logs instead of a silent 404.
+    console.error(`theme-asset proxy failed for ${blobPath}:`, err);
     return new NextResponse(null, { status: 404 });
   }
 }
