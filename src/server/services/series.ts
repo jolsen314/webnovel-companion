@@ -50,6 +50,7 @@ export async function listSeries() {
         ? { id: latest.id, title: latest.title, url: latest.url, number: latest.number, at: latest.publishedAt ?? latest.discoveredAt }
         : null,
       activeSource: s.sources[0] ?? null,
+      createdAt: s.createdAt,
     };
   });
 }

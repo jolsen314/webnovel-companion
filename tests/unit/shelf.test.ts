@@ -7,6 +7,7 @@ const s = (over: Partial<ShelfSeries> & { id: string }): ShelfSeries & { id: str
   rating: null,
   status: 'READING',
   latestChapter: null,
+  createdAt: new Date('2026-01-01T00:00:00Z'),
   ...over,
 });
 
@@ -49,6 +50,15 @@ describe('sortSeries', () => {
       s({ id: 'fiveA', rating: 5, title: 'Alpha' }),
     ];
     expect(sortSeries(rows, 'rating').map((r) => r.id)).toEqual(['fiveA', 'fiveB', 'three', 'unrated']);
+  });
+
+  test('added: newest createdAt first, tie-break title', () => {
+    const rows = [
+      s({ id: 'old', createdAt: new Date('2026-01-01T00:00:00Z') }),
+      s({ id: 'newB', title: 'Beta', createdAt: new Date('2026-06-01T00:00:00Z') }),
+      s({ id: 'newA', title: 'Alpha', createdAt: new Date('2026-06-01T00:00:00Z') }),
+    ];
+    expect(sortSeries(rows, 'added').map((r) => r.id)).toEqual(['newA', 'newB', 'old']);
   });
 
   test('pure: does not mutate the input array', () => {
