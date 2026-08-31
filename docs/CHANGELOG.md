@@ -2,6 +2,15 @@
 
 Append-only history, moved out of [PLAN.md](../PLAN.md). Newest first.
 
+- **2026-08-31** — **WP-57 shipped: `parseToc` excludes cross-series recommendation cards + series-scopes to the
+  novel's own chapters.** When the series URL has a `/<collection>/<slug>/…` shape (collection ∈ a known keyword
+  set — `novel`/`series`/`manga`/… — which gates the logic off for bare `/toc/` or Blogger date-path bases), any
+  chapter-like link sharing the collection prefix but a *different* slug is dropped. This kills the "you may also
+  like" / "popular" / site-latest widgets whose "… Chapters: N" text trips `CHAPTER_TEXT` and which WP-36's
+  chrome-scoping missed (they sit inline in content, not a sidebar). No empty-fallback: an SPA whose real list never
+  rendered — leaving only recommendation cards — now correctly yields **0** chapters instead of ingesting the wrong
+  series (was 16 wrong-series "chapters" on the 2026-08-22 XHR-SPA source; drivers B07 ×2, B08). Pure `pageWatch.ts`
+  change, test-first (3 exclusion tests + 1 guard that scoping stays off for identity-less bases). Extends WP-36.
 - **2026-08-31** — **Two WPs filed from a B15 diagnosis (WP-59, WP-60).** A B15 source sat `LIKELY_DOWN` while the
   site was fine in-browser: the host tightened Cloudflare and now 403s **Vercel's datacenter IP even via render**
   (residential unaffected; 15/16 other RENDER sources healthy → not our render config). Filed **WP-59** (add via a

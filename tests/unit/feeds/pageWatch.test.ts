@@ -141,6 +141,66 @@ describe('parseToc — content scoping (WP-36)', () => {
   });
 });
 
+describe('parseToc — cross-series / recommendation exclusion (WP-57)', () => {
+  const base = 'https://site.example/novel/my-series/';
+
+  test('drops inline "you may also like" cards linking to other novels under the same collection', () => {
+    // A recommendation widget sits in the content (not a sidebar), so WP-36 chrome-scoping misses it.
+    // Its cards link to /novel/<other-slug> and carry "… Chapters: N" text that trips CHAPTER_TEXT.
+    const html = `<html><body><main>
+      <ul class="chapters">
+        <li><a href="/novel/my-series/chapter-1/">Chapter 1</a></li>
+        <li><a href="/novel/my-series/chapter-2/">Chapter 2</a></li>
+      </ul>
+      <div class="related"><h3>You may also like</h3>
+        <a href="/novel/other-one/">Other One — Chapters: 1200</a>
+        <a href="/novel/other-two/">Other Two — Chapters: 999</a>
+      </div>
+    </main></body></html>`;
+
+    expect(parseToc(html, base).map((c) => c.url)).toEqual([
+      'https://site.example/novel/my-series/chapter-1/',
+      'https://site.example/novel/my-series/chapter-2/',
+    ]);
+  });
+
+  test('SPA shell: when the only links are other-novel recommendation cards, returns nothing (no wrong-series ingest)', () => {
+    // The render captured only the shell — the real chapter list never hydrated, so every chapter-like
+    // link on the page is a recommendation card for a different novel. Better 0 chapters than 16 wrong ones.
+    const html = `<html><body><main><div class="popular">
+      <a href="/novel/foo/">Foo — Chapters: 1234</a>
+      <a href="/novel/bar/">Bar — Chapters: 88</a>
+    </div></main></body></html>`;
+
+    expect(parseToc(html, base)).toEqual([]);
+  });
+
+  test('drops a leaked cross-series chapter link (other novel deeper path), keeps the series own chapters', () => {
+    const html = `<html><body><main><ul>
+      <li><a href="/novel/my-series/chapter-1/">Chapter 1</a></li>
+      <li><a href="/novel/other/chapter-5/">Chapter 5</a></li>
+    </ul></main></body></html>`;
+
+    expect(parseToc(html, base).map((c) => c.url)).toEqual([
+      'https://site.example/novel/my-series/chapter-1/',
+    ]);
+  });
+
+  test('no auto-scope when the base URL lacks a recognizable collection/slug shape (flat-slug host)', () => {
+    // base "/toc/" carries no series identity → slug-scoping must NOT fire (would drop every chapter).
+    const flatBase = 'https://site.example/toc/';
+    const html = `<html><body><main><ul>
+      <li><a href="https://site.example/book1-chapter-1/">Chapter 1</a></li>
+      <li><a href="https://site.example/book1-chapter-2/">Chapter 2</a></li>
+    </ul></main></body></html>`;
+
+    expect(parseToc(html, flatBase).map((c) => c.url)).toEqual([
+      'https://site.example/book1-chapter-1/',
+      'https://site.example/book1-chapter-2/',
+    ]);
+  });
+});
+
 describe('mergeFeedAndToc', () => {
   const feed = (url: string, guid?: string): import('../../../src/lib/feeds/diff').FeedItem => ({ url, title: url, guid, access: undefined });
   const toc = (url: string, access: 'FREE' | 'LOCKED'): import('../../../src/lib/feeds/pageWatch').TocChapter => ({ url, title: url, number: null, access });
