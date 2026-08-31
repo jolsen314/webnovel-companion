@@ -34,11 +34,14 @@ describe('buildFeed', () => {
     expect(feed.groups[1]!.items.map((i) => i.chapterTitle)).toEqual(['yesterday']);
   });
 
-  test('keeps both event kinds (a locked→unlocked chapter yields two rows)', () => {
+  test('orders mixed event kinds newest-first (two distinct chapters)', () => {
+    // buildFeed is agnostic — it orders whatever events it's given. The
+    // no-double-notify rule (a single chapter never produces both kinds) is
+    // enforced upstream in getFeed, so these are two DIFFERENT chapters.
     const feed = buildFeed(
       {
         events: [
-          ev({ at: '2026-08-20T00:00:00Z', kind: 'NEW_CHAPTER', chapterUrl: 'https://ex.test/c9' }),
+          ev({ at: '2026-08-20T00:00:00Z', kind: 'NEW_CHAPTER', chapterUrl: 'https://ex.test/c8' }),
           ev({ at: '2026-08-30T00:00:00Z', kind: 'NOW_FREE', chapterUrl: 'https://ex.test/c9' }),
         ],
         downSources: [],
