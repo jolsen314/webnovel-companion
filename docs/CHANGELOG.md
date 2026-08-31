@@ -2,6 +2,13 @@
 
 Append-only history, moved out of [PLAN.md](../PLAN.md). Newest first.
 
+- **2026-08-31** — **WP-28c shipped: feed (digest) home + shelf tab.** `/` is now a cross-series digest of readable
+  new-chapter + now-free events across READING series (newest-first, day-grouped; known-locked new chapters excluded;
+  a formerly-locked chapter notifies once, as now-free), with a consolidated source-down "needs attention" strip and
+  a per-device "seen" divider; already-read rows are dimmed. The shelf moved to `/shelf` behind a view-tab control.
+  Derived on read — no schema change. Shelf card simplified: chapter count replaces the latest-chapter line +
+  relative time; unread badge hidden on non-READING. Adds land on `/shelf` with the new series highlighted; added a
+  "Recently added" sort. Filed WP-TAGS (series genre tags — UI only). **Next: WP-28e** (shelf delete affordance).
 - **2026-08-29** — **Next 16 deprecation cleanup: `middleware` → `proxy`.** Renamed `src/middleware.ts` →
   `src/proxy.ts` and the `middleware` export → `proxy` (Next 16 deprecated the `middleware` convention). Behavior
   unchanged — same single-user gate, same `/api/*` matcher — but Proxy runs on the Node runtime (edge isn't supported
