@@ -134,17 +134,20 @@ export function parseToc(html: string, baseUrl: string, config?: SiteTocConfig):
   }
 
   // WP-57: series-scope to the novel's own chapters. When the series URL has a `/<collection>/<slug>/…`
-  // shape, drop cross-series recommendation cards ("you may also like" / "popular" / site-latest) that link
-  // to a *different* slug under the same collection — their "… Chapters: N" text otherwise trips CHAPTER_TEXT
-  // (and on an SPA whose real list never rendered, they'd be the *only* thing captured). No empty-fallback:
-  // dropping every foreign card down to zero is the correct outcome, not a signal to keep them.
+  // shape, drop cross-series recommendation cards ("you may also like" / "popular" / site-latest) — their
+  // "… Chapters: N" text otherwise trips CHAPTER_TEXT (and on an SPA whose real list never rendered, they'd
+  // be the *only* thing captured). A recommendation card is a **bare sibling landing page**: exactly one
+  // path segment after the collection, and a *different* slug (`/<collection>/<other-slug>`). Deeper links
+  // (two+ segments, e.g. `/book/chapter/<id>` on global-chapter-id hosts) are this series' own chapters
+  // routed under a segment that isn't the slug — keep them. No empty-fallback: dropping every foreign card
+  // down to zero is the correct outcome, not a signal to keep them.
   const scope = seriesSlugScope(baseUrl);
   if (scope) {
     return chapters.filter((c) => {
-      const path = pathnameOf(c.url) ?? c.url;
-      if (!path.toLowerCase().startsWith(scope.collectionPrefix)) return true; // different structure → keep
-      const nextSeg = path.slice(scope.collectionPrefix.length).split('/')[0]!.toLowerCase();
-      return nextSeg === scope.slug; // same series → keep; another novel under the same collection → drop
+      const path = (pathnameOf(c.url) ?? c.url).toLowerCase();
+      if (!path.startsWith(scope.collectionPrefix)) return true; // different structure → keep
+      const segs = path.slice(scope.collectionPrefix.length).split('/').filter(Boolean);
+      return !(segs.length === 1 && segs[0] !== scope.slug); // drop only bare sibling landings
     });
   }
   return chapters;

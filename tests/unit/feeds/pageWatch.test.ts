@@ -175,14 +175,25 @@ describe('parseToc — cross-series / recommendation exclusion (WP-57)', () => {
     expect(parseToc(html, base)).toEqual([]);
   });
 
-  test('drops a leaked cross-series chapter link (other novel deeper path), keeps the series own chapters', () => {
-    const html = `<html><body><main><ul>
-      <li><a href="/novel/my-series/chapter-1/">Chapter 1</a></li>
-      <li><a href="/novel/other/chapter-5/">Chapter 5</a></li>
-    </ul></main></body></html>`;
+  test('keeps own chapters routed under /<collection>/chapter/<id> (global-id sites) while dropping sibling landing cards', () => {
+    // Some hosts route every chapter under /book/chapter/<globalId> — NOT under the series slug — with a
+    // "you may also like" widget of /book/<other-slug> landing cards alongside. The own chapters (two path
+    // segments deep after the collection) must survive; only the bare 1-segment sibling landings drop.
+    const b = 'https://novelight.example/book/my-series';
+    const html = `<html><body><main>
+      <ul>
+        <li><a href="/book/chapter/247684">152 chapter</a></li>
+        <li><a href="/book/chapter/247683">151 chapter</a></li>
+      </ul>
+      <div class="related">
+        <a href="/book/other-one">Other One — Chapters: 300</a>
+        <a href="/book/other-two">Other Two — Chapters: 12</a>
+      </div>
+    </main></body></html>`;
 
-    expect(parseToc(html, base).map((c) => c.url)).toEqual([
-      'https://site.example/novel/my-series/chapter-1/',
+    expect(parseToc(html, b).map((c) => new URL(c.url).pathname)).toEqual([
+      '/book/chapter/247684',
+      '/book/chapter/247683',
     ]);
   });
 

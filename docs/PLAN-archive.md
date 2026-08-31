@@ -25,9 +25,12 @@ chapter-like links, so the widget was ingested as the whole series (and its `<h1
   `manhwa`/`manhua`/`comic`/`story`/`webnovel`/`title`/`read`/…). This keyword gate is the discriminator that keeps
   scoping **off** for identity-less bases (a bare `/toc/`) and for date-path structures (Blogger `/YYYY/MM/slug`),
   where the first segment is not a real collection dir — so those hosts keep today's behavior.
-- **Filter** (generic path only — skipped when an explicit `slugFamilies` config is present): drop any chapter link
-  that shares the collection prefix but whose slug segment ≠ the series slug. Links under a *different* structure
-  (relative/flat) are kept — the scoping only fires against same-collection siblings, so it's conservative.
+- **Filter** (generic path only — skipped when an explicit `slugFamilies` config is present): drop a chapter link
+  only when it's a **bare sibling landing** — exactly one path segment after the collection prefix, and a *different*
+  slug (`/<collection>/<other-slug>`). Links under a different structure (relative/flat) are kept, and so are deeper
+  same-collection links (two+ segments) — critically, **global-chapter-id hosts route own chapters at
+  `/<collection>/chapter/<id>`**, which must survive. (An earlier draft dropped *any* different-slug segment, which a
+  read-only prod pass caught wrongly flagging such a host's real chapters — hence the bare-landing narrowing.)
 - **No empty-fallback** (unlike CHROME scoping): if the filter removes everything — the SPA-shell case — returning
   **0** chapters is the correct outcome (better than ingesting the wrong series), and the empty result flows through
   the existing under-read / needsConfirm handling in `addSeries`.
