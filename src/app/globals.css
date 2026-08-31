@@ -915,17 +915,10 @@ body {
   border-radius: 999px;
   flex: none;
 }
-.card__latest {
+.card__count {
   color: var(--color-muted);
   font-size: 0.9rem;
   margin: 0.35rem 0 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.card__latest b {
-  color: var(--color-paper);
-  font-weight: 500;
 }
 .card__meta {
   display: flex;
@@ -1258,12 +1251,8 @@ body {
 :root[data-theme="scroll"] .card__num {
   color: var(--color-glow);
 }
-:root[data-theme="scroll"] .card__latest {
+:root[data-theme="scroll"] .card__count {
   color: #5c5140;
-}
-:root[data-theme="scroll"] .card__latest b {
-  color: #3a2c18;
-  font-weight: 600;
 }
 :root[data-theme="scroll"] .card__meta {
   color: #6f6650;
@@ -1307,12 +1296,8 @@ body {
 :root[data-theme="sci-fi"] .card__num {
   color: #7fb6ff;
 }
-:root[data-theme="sci-fi"] .card__latest {
+:root[data-theme="sci-fi"] .card__count {
   color: #a7c4d6;
-}
-:root[data-theme="sci-fi"] .card__latest b {
-  color: #eaf6fb;
-  font-weight: 600;
 }
 :root[data-theme="sci-fi"] .card__meta {
   color: #7f9bb2;
@@ -1946,4 +1931,17 @@ body {
   margin: 0.5rem 0 0;
   padding-left: 1.1rem;
   font-size: 0.82rem;
+}
+
+@keyframes cardAddedPulse {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  30% { box-shadow: 0 0 0 3px var(--color-glow); }
+}
+.card-wrap--added .card {
+  border-color: var(--color-glow);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .card-wrap--added .card {
+    animation: cardAddedPulse 1.6s ease-out 2;
+  }
 }

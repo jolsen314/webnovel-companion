@@ -1,18 +1,20 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { relativeTime } from '../../lib/format';
 import { sortSeries, filterSeries, type ShelfSort } from '../../lib/shelf';
 import { SERIES_STATUSES, type SeriesStatus } from '../../lib/series';
 import type { listSeries } from '../../server/services';
 import { DeleteSeriesButton } from './DeleteSeriesButton';
 import { WaxBadge } from './WaxBadge';
+import { ViewTabs } from './ViewTabs';
 
 type SeriesRow = Awaited<ReturnType<typeof listSeries>>[number];
 
 const SORT_OPTIONS: { value: ShelfSort; label: string }[] = [
   { value: 'recent', label: 'Recent activity' },
+  { value: 'added', label: 'Recently added' },
   { value: 'unread', label: 'Unread first' },
   { value: 'title', label: 'A–Z' },
   { value: 'rating', label: 'Rating' },
@@ -27,35 +29,28 @@ const STATUS_KEY = 'shelfStatus';
 const MIN_RATING_KEY = 'shelfMinRating';
 
 function isSort(v: string | null): v is ShelfSort {
-  return v === 'recent' || v === 'unread' || v === 'title' || v === 'rating';
+  return v === 'recent' || v === 'unread' || v === 'title' || v === 'rating' || v === 'added';
 }
 function isStatusFilter(v: string | null): v is SeriesStatus | 'ALL' {
   return v === 'ALL' || (v != null && (SERIES_STATUSES as readonly string[]).includes(v));
 }
 
-function SeriesCard({ series, now }: { series: SeriesRow; now: Date }) {
-  const { latestChapter: latest, unread } = series;
+function SeriesCard({ series, now, highlight }: { series: SeriesRow; now: Date; highlight: boolean }) {
+  const { unread } = series;
+  const showUnread = series.status === 'READING' && unread > 0;
+  const count = series.chapterCount;
   return (
-    <div className="card-wrap">
+    <div className={`card-wrap${highlight ? ' card-wrap--added' : ''}`} id={`series-${series.id}`}>
       <Link href={`/series/${series.id}`} className="card">
         <span className="roll roll--l" aria-hidden="true" />
         <span className="roll roll--r" aria-hidden="true" />
-        {unread > 0 && <span className="card__ribbon" aria-hidden="true" />}
+        {showUnread && <span className="card__ribbon" aria-hidden="true" />}
         <div className="card__body">
           <div className="card__top">
             <h2 className="card__title">{series.title}</h2>
-            {unread > 0 && <WaxBadge count={unread} />}
+            {showUnread && <WaxBadge count={unread} />}
           </div>
-          <p className="card__latest">
-            {latest ? (
-              <>
-                {latest.number != null && <span className="card__num">#{latest.number} </span>}
-                <b>{latest.title}</b>
-              </>
-            ) : (
-              'No chapters yet'
-            )}
-          </p>
+          <p className="card__count">{count > 0 ? `${count} chapter${count === 1 ? '' : 's'}` : 'No chapters yet'}</p>
           <div className="card__meta">
             {series.status !== 'READING' && <span className="status-chip">{series.status}</span>}
             {series.activeSource?.linkOnly && <span className="status-chip">link-only</span>}
@@ -67,7 +62,6 @@ function SeriesCard({ series, now }: { series: SeriesRow; now: Date }) {
                 <span>{series.activeSource.host}</span>
               </>
             )}
-            {latest?.at && <span>· {relativeTime(new Date(latest.at), now)}</span>}
           </div>
         </div>
       </Link>
@@ -121,12 +115,21 @@ export function Shelf({ rows, now }: { rows: SeriesRow[]; now: Date }) {
     [rows, statusFilter, query, minRating, sort],
   );
 
+  const params = useSearchParams();
+  const addedId = params.get('added');
+  useEffect(() => {
+    if (!addedId) return;
+    const el = document.getElementById(`series-${addedId}`);
+    if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [addedId, visible]);
+
   const filtering = statusFilter !== 'ALL' || query.trim() !== '' || minRating != null;
   const unreadTotal = rows.reduce((n, s) => n + s.unread, 0);
 
   return (
     <section className="stream">
       <div className="stream__head">
+        <ViewTabs active="shelf" />
         <div className="stream__headline">
           <h1 className="stream__title">Your shelf</h1>
           <span className="stream__meta">
@@ -204,7 +207,7 @@ export function Shelf({ rows, now }: { rows: SeriesRow[]; now: Date }) {
       ) : (
         <div className="stream__list">
           {visible.map((s) => (
-            <SeriesCard key={s.id} series={s} now={now} />
+            <SeriesCard key={s.id} series={s} now={now} highlight={s.id === addedId} />
           ))}
         </div>
       )}
