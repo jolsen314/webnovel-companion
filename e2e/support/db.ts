@@ -27,6 +27,9 @@ export interface SeedChapter {
   guid?: string;
   /** Paid→free access state (WP-28d). Defaults to the schema default (UNKNOWN) when omitted. */
   access?: 'FREE' | 'LOCKED' | 'UNKNOWN';
+  /** WP-28c: mark as poll-discovered (sets announcedAt) so it appears in the digest feed. Default
+   *  false = an import, which the feed excludes. */
+  announced?: boolean;
 }
 export interface SeedSeriesInput {
   title: string;
@@ -46,6 +49,9 @@ export interface SeedSeriesInput {
 export async function seedSeries(input: SeedSeriesInput): Promise<{ id: string }> {
   const host = input.host ?? 'translator.example';
   const type = input.sourceType ?? 'FEED';
+  // One timestamp for every announced chapter in this call → they tie on announcedAt, so feed
+  // ordering falls to the deterministic tie-break (chapter number, then url) rather than insert race.
+  const announcedAt = new Date();
   const series = await db.series.create({
     data: {
       userId: 'local',
@@ -71,6 +77,7 @@ export async function seedSeries(input: SeedSeriesInput): Promise<{ id: string }
                 url: c.url,
                 guid: c.guid ?? `g${i + 1}`,
                 ...(c.access ? { access: c.access } : {}),
+                ...(c.announced ? { announcedAt } : {}),
               })),
             },
           }

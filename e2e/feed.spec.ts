@@ -8,9 +8,9 @@ test('WP-28c: feed lists readable new chapters, excludes locked + non-reading', 
     title: 'Reading One',
     status: 'READING',
     chapters: [
-      { title: 'free-a', url: 'https://ex.test/r/1', access: 'FREE' },
-      { title: 'free-b', url: 'https://ex.test/r/2', access: 'FREE' },
-      { title: 'locked-c', url: 'https://ex.test/r/3', access: 'LOCKED' },
+      { title: 'free-a', url: 'https://ex.test/r/1', access: 'FREE', announced: true },
+      { title: 'free-b', url: 'https://ex.test/r/2', access: 'FREE', announced: true },
+      { title: 'locked-c', url: 'https://ex.test/r/3', access: 'LOCKED', announced: true },
     ],
   });
   await seedSeries({
@@ -29,7 +29,7 @@ test('WP-28c: feed lists readable new chapters, excludes locked + non-reading', 
 });
 
 test('WP-28c: tabs switch between the feed and the shelf', async ({ page }) => {
-  await seedSeries({ title: 'Reading One', status: 'READING', chapters: [{ title: 'c', url: 'https://ex.test/r/1' }] });
+  await seedSeries({ title: 'Reading One', status: 'READING', chapters: [{ title: 'c', url: 'https://ex.test/r/1', announced: true }] });
 
   await page.goto('/');
   await expect(page.locator('.feed-row__title')).toHaveCount(1);
@@ -85,4 +85,23 @@ test('WP-28c: ?added scrolls the target card into view when it would be below th
   await expect(card).toHaveClass(/card-wrap--added/);
   // Without the scrollIntoView this card would be far below the fold; toBeInViewport proves it scrolled.
   await expect(card).toBeInViewport();
+});
+
+test('WP-28c: ?added does not scroll when a saved filter hides the new series', async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 600 });
+  // Saved filter = Planned only (set before load). The new series is READING → the filter hides it,
+  // so we must NOT scroll to where it briefly sat in the pre-hydration default (unfiltered) render.
+  await page.addInitScript(() => window.localStorage.setItem('shelfStatus', 'PLANNED'));
+  for (let i = 0; i < 15; i++) {
+    await seedSeries({ title: `Planned ${String(i).padStart(2, '0')}`, status: 'PLANNED', chapters: [{ title: 'c', url: `https://ex.test/pl/${i}` }] });
+  }
+  // No chapters → under 'recent' it sorts LAST, i.e. below the fold in the pre-hydration render,
+  // so the old buggy scroll would jump to the bottom before the filter removed it.
+  const { id } = await seedSeries({ title: 'New Reading', status: 'READING' });
+
+  await page.goto(`/shelf?added=${id}`);
+  await expect(page.locator(`#series-${id}`)).toHaveCount(0); // hidden by the Planned filter
+  await expect(page.locator('.card__title').first()).toBeVisible(); // shelf rendered
+  await page.waitForTimeout(600); // let any (buggy) smooth-scroll settle
+  expect(await page.evaluate(() => window.scrollY)).toBeLessThan(50); // stayed at the top
 });

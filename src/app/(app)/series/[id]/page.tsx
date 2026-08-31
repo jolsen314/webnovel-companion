@@ -43,7 +43,7 @@ export default async function SeriesPage({ params }: { params: Promise<{ id: str
         <span className="br br--tl" />
         <span className="br br--br" />
       </div>
-      <Link href="/" className="detail__back">
+      <Link href="/shelf" className="detail__back">
         ← Shelf
       </Link>
       <EditableTitle id={series.id} initialTitle={series.title} />
