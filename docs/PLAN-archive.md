@@ -7,6 +7,40 @@ index lives in PLAN.md's ✅ Completed table.
 
 ---
 
+### WP-57 — `parseToc` cross-series-card exclusion + series-slug scoping (DONE 2026-08-31)
+
+**DONE (2026-08-31).** `parseToc` ([`pageWatch.ts`](../src/lib/feeds/pageWatch.ts)) no longer scrapes
+recommendation / "other novels" widgets ("you may also like" / "popular" / site-latest) as chapters, and scopes
+ingest to the novel's own chapter links. Data-correctness fix (wrong series' chapters ingested). Extends WP-36's
+region scoping with an anchor-level, cross-series exclusion.
+
+**Root cause:** those widget cards are `/novel/<other-slug>` links whose "… Chapters: N" text trips `CHAPTER_TEXT`.
+They sit *inline in content* (not in a sidebar), so WP-36's `CHROME_SELECTOR` scoping missed them. On a JS/SPA
+source whose render captured only the page shell (real chapter list never hydrated), those cards were the *only*
+chapter-like links, so the widget was ingested as the whole series (and its `<h1>` scraped as the title).
+
+**What shipped:**
+- **`seriesSlugScope(baseUrl)`** — derives the series' own slug scope from the source URL when it has a recognized
+  `/<collection>/<slug>/…` shape. `collection` must be in a keyword set (`novel`/`novels`/`series`/`book`/`manga`/
+  `manhwa`/`manhua`/`comic`/`story`/`webnovel`/`title`/`read`/…). This keyword gate is the discriminator that keeps
+  scoping **off** for identity-less bases (a bare `/toc/`) and for date-path structures (Blogger `/YYYY/MM/slug`),
+  where the first segment is not a real collection dir — so those hosts keep today's behavior.
+- **Filter** (generic path only — skipped when an explicit `slugFamilies` config is present): drop a chapter link
+  only when it's a **bare sibling landing** — exactly one path segment after the collection prefix, and a *different*
+  slug (`/<collection>/<other-slug>`). Links under a different structure (relative/flat) are kept, and so are deeper
+  same-collection links (two+ segments) — critically, **global-chapter-id hosts route own chapters at
+  `/<collection>/chapter/<id>`**, which must survive. (An earlier draft dropped *any* different-slug segment, which a
+  read-only prod pass caught wrongly flagging such a host's real chapters — hence the bare-landing narrowing.)
+- **No empty-fallback** (unlike CHROME scoping): if the filter removes everything — the SPA-shell case — returning
+  **0** chapters is the correct outcome (better than ingesting the wrong series), and the empty result flows through
+  the existing under-read / needsConfirm handling in `addSeries`.
+
+**Drivers:** B07 (×2), B08; the 2026-08-22 XHR-SPA source (was 16 recommendation cards as "chapters" → now 0).
+
+**Tests (test-first):** 3 exclusion cases (inline widget dropped, SPA-shell → `[]`, leaked cross-series *chapter*
+link dropped) + 1 guard (scoping stays off for an identity-less `/toc/` base). Pure `pageWatch.ts` change; the
+`<h1>`-as-title symptom is a separate title-extraction concern (WP-30 family), not touched here.
+
 ### WP-28i — Private theme-asset proxy (licensed images in prod)
 
 **DONE (2026-08-29).** WP-28h's licensed `scroll` images (`wax-seal.png`, `scroll-tree.png`) now render in production

@@ -41,6 +41,34 @@ const LOCK_TEXT = /locked|premium|\bvip\b|\bcoins?\b|🔒|🔐|unlock/i;
 /** Page chrome that must not contribute chapters — sidebars / "recent entries" widgets / nav / footer. */
 const CHROME_SELECTOR =
   'aside, nav, header, footer, .sidebar, #sidebar, #secondary, .widget-area, .widget_recent_entries, .recent-posts';
+/** Path segments that denote a per-series collection directory (`/novel/<slug>/…`). When the series URL has
+ *  this shape, sibling `/<collection>/<other-slug>` links are other novels' pages, not this series' chapters. */
+const COLLECTION_SEGMENTS = new Set([
+  'novel', 'novels', 'series', 'book', 'books', 'manga', 'manhwa', 'manhua',
+  'comic', 'comics', 'story', 'stories', 'webnovel', 'ln', 'title', 'titles', 'read',
+]);
+
+/** Derive the series' own slug scope from its URL, when it has a recognized `/<collection>/<slug>/…` shape.
+ *  Returns the collection path prefix (up to and including the collection segment) + the series slug, so
+ *  `parseToc` can drop cross-series recommendation cards (`/<collection>/<other-slug>`) while keeping this
+ *  series' chapters. Null when the URL carries no such identity (e.g. a bare `/toc/` or a flat-slug host),
+ *  so scoping never fires where it can't tell the series apart. (WP-57) */
+function seriesSlugScope(baseUrl: string): { collectionPrefix: string; slug: string } | null {
+  let path: string;
+  try {
+    path = new URL(baseUrl).pathname;
+  } catch {
+    return null;
+  }
+  const segs = path.split('/').filter(Boolean);
+  for (let i = 0; i < segs.length - 1; i++) {
+    if (COLLECTION_SEGMENTS.has(segs[i]!.toLowerCase())) {
+      const prefix = segs.slice(0, i + 1).join('/').toLowerCase();
+      return { collectionPrefix: `/${prefix}/`, slug: segs[i + 1]!.toLowerCase() };
+    }
+  }
+  return null;
+}
 
 export function parseToc(html: string, baseUrl: string, config?: SiteTocConfig): TocChapter[] {
   const $ = cheerio.load(html);
@@ -102,6 +130,24 @@ export function parseToc(html: string, baseUrl: string, config?: SiteTocConfig):
     return chapters.filter((c) => {
       const path = pathnameOf(c.url) ?? c.url;
       return families.some((f) => path.includes(f));
+    });
+  }
+
+  // WP-57: series-scope to the novel's own chapters. When the series URL has a `/<collection>/<slug>/…`
+  // shape, drop cross-series recommendation cards ("you may also like" / "popular" / site-latest) — their
+  // "… Chapters: N" text otherwise trips CHAPTER_TEXT (and on an SPA whose real list never rendered, they'd
+  // be the *only* thing captured). A recommendation card is a **bare sibling landing page**: exactly one
+  // path segment after the collection, and a *different* slug (`/<collection>/<other-slug>`). Deeper links
+  // (two+ segments, e.g. `/book/chapter/<id>` on global-chapter-id hosts) are this series' own chapters
+  // routed under a segment that isn't the slug — keep them. No empty-fallback: dropping every foreign card
+  // down to zero is the correct outcome, not a signal to keep them.
+  const scope = seriesSlugScope(baseUrl);
+  if (scope) {
+    return chapters.filter((c) => {
+      const path = (pathnameOf(c.url) ?? c.url).toLowerCase();
+      if (!path.startsWith(scope.collectionPrefix)) return true; // different structure → keep
+      const segs = path.slice(scope.collectionPrefix.length).split('/').filter(Boolean);
+      return !(segs.length === 1 && segs[0] !== scope.slug); // drop only bare sibling landings
     });
   }
   return chapters;
