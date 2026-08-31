@@ -30,13 +30,10 @@ export async function getFeed(now: Date = new Date()): Promise<Feed> {
           becameFreeAt: true,
         },
       },
-      // Currently-down sources only → the consolidated "needs attention" strip.
-      sources: { where: { isActive: true, linkOnly: false, health: 'LIKELY_DOWN' }, select: { host: true, url: true } },
     },
   });
 
   const events: FeedEvent[] = [];
-  const downSources: DownSource[] = [];
 
   for (const s of series) {
     const ordered = orderChaptersForReading(s.chapters);
@@ -76,11 +73,21 @@ export async function getFeed(now: Date = new Date()): Promise<Feed> {
         });
       }
     }
-
-    for (const src of s.sources) {
-      downSources.push({ seriesId: s.id, seriesTitle: s.title, host: src.host, sourceUrl: src.url });
-    }
   }
+
+  // The "needs attention" strip is NOT scoped to READING (events are): a currently-down source is
+  // actionable on any series you haven't dropped, and this mirrors the shelf's health dot — which
+  // shows red for the active, non-link-only source of any status. Queried separately from the events.
+  const downRows = await db.source.findMany({
+    where: { isActive: true, linkOnly: false, health: 'LIKELY_DOWN', series: { userId, status: { not: 'DROPPED' } } },
+    select: { host: true, url: true, series: { select: { id: true, title: true } } },
+  });
+  const downSources: DownSource[] = downRows.map((r) => ({
+    seriesId: r.series.id,
+    seriesTitle: r.series.title,
+    host: r.host,
+    sourceUrl: r.url,
+  }));
 
   // buildFeed sorts (with its deterministic tie-break) and caps to the newest MAX_EVENTS.
   return buildFeed({ events, downSources }, now, MAX_EVENTS);

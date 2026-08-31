@@ -1874,4 +1874,48 @@ describe('getFeed (real DB)', () => {
     const feed = await getFeed(new Date('2026-08-30T12:00:00Z'));
     expect(feed.attention.some((a) => a.host === 'down.test' && a.seriesTitle === 'Down Series')).toBe(true);
   });
+
+  test('surfaces down sources for every non-DROPPED status (a red dot on the shelf ⇒ a strip entry)', async () => {
+    const userId = getCurrentUserId();
+    const downSeries = (title: string, status: 'PAUSED' | 'COMPLETED' | 'DROPPED') =>
+      db.series.create({
+        data: {
+          userId,
+          title,
+          status,
+          sources: { create: { url: `https://${title}.test/novel/`, host: `${title}.test`, type: 'PAGE_WATCH', health: 'LIKELY_DOWN' } },
+        },
+      });
+    await downSeries('paused', 'PAUSED');
+    await downSeries('completed', 'COMPLETED');
+    await downSeries('dropped', 'DROPPED');
+
+    const hosts = (await getFeed(new Date('2026-08-30T12:00:00Z'))).attention.map((a) => a.host);
+    expect(hosts).toContain('paused.test'); // non-reading still surfaces the down alert
+    expect(hosts).toContain('completed.test');
+    expect(hosts).not.toContain('dropped.test'); // dropped is silenced
+  });
+
+  test('does not surface a link-only or healthy source', async () => {
+    const userId = getCurrentUserId();
+    await db.series.create({
+      data: {
+        userId,
+        title: 'Link Only Down',
+        status: 'READING',
+        sources: { create: { url: 'https://lo.test/novel/', host: 'lo.test', type: 'PAGE_WATCH', health: 'LIKELY_DOWN', linkOnly: true } },
+      },
+    });
+    await db.series.create({
+      data: {
+        userId,
+        title: 'Healthy',
+        status: 'READING',
+        sources: { create: { url: 'https://ok.test/novel/', host: 'ok.test', type: 'PAGE_WATCH', health: 'HEALTHY' } },
+      },
+    });
+    const hosts = (await getFeed(new Date('2026-08-30T12:00:00Z'))).attention.map((a) => a.host);
+    expect(hosts).not.toContain('lo.test'); // link-only → no health alert (matches the shelf dot gating)
+    expect(hosts).not.toContain('ok.test'); // healthy → not down
+  });
 });
