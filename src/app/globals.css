@@ -1933,6 +1933,96 @@ body {
   font-size: 0.82rem;
 }
 
+/* ── WP-28c feed items, per-theme (extends the WP-28h card signatures) ── */
+
+/* sci-fi: each row is a holographic panel — angled clip + a masked holo-gradient edge
+   over translucent cyan glass, the same recipe as the sci-fi card at row scale. */
+:root[data-theme="sci-fi"] .feed-row,
+:root[data-theme="sci-fi"] .feed-attention {
+  position: relative;
+  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
+  border: none;
+  border-radius: 0;
+  backdrop-filter: blur(6px) saturate(1.2);
+}
+:root[data-theme="sci-fi"] .feed-row {
+  background: linear-gradient(150deg, rgba(55, 205, 215, 0.13), rgba(90, 160, 225, 0.16));
+}
+:root[data-theme="sci-fi"] .feed-attention {
+  background: linear-gradient(150deg, rgba(255, 107, 138, 0.12), rgba(169, 139, 255, 0.14));
+}
+:root[data-theme="sci-fi"] .feed-row::after,
+:root[data-theme="sci-fi"] .feed-attention::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
+  padding: 1px;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+:root[data-theme="sci-fi"] .feed-row::after {
+  background: linear-gradient(120deg, var(--holo-1), var(--holo-2) 40%, var(--holo-3) 70%, var(--holo-4));
+}
+:root[data-theme="sci-fi"] .feed-attention::after {
+  background: linear-gradient(120deg, var(--color-down), var(--holo-4) 70%, var(--holo-3));
+}
+:root[data-theme="sci-fi"] .feed-row__num {
+  color: #7fb6ff;
+}
+:root[data-theme="sci-fi"] .feed-row__tag {
+  background: linear-gradient(100deg, var(--color-glow), var(--holo-3));
+  color: #04121a;
+  border-radius: 3px;
+  box-shadow: 0 0 9px -1px rgba(90, 166, 255, 0.7);
+}
+:root[data-theme="sci-fi"] .feed-divider {
+  color: var(--color-glow);
+  border-top-color: color-mix(in oklab, var(--color-glow) 45%, transparent);
+}
+
+/* scroll: each row reads like a parchment strip — the accent lives in cinnabar INK
+   (the chapter number, the "now free" stamp, the day marker are red text), not a
+   coloured border; the row edge stays a quiet aged-paper line. */
+:root[data-theme="scroll"] .feed-row {
+  background: linear-gradient(180deg, #f4ecd6, #efe3c4);
+  border: 1px solid color-mix(in oklab, var(--color-line) 65%, transparent);
+  border-radius: 3px 10px 4px 9px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), inset 0 0 26px rgba(120, 90, 40, 0.05);
+}
+:root[data-theme="scroll"] .feed-row__main {
+  color: var(--color-paper);
+}
+:root[data-theme="scroll"] .feed-row__num {
+  color: var(--color-glow);
+  font-weight: 600;
+}
+:root[data-theme="scroll"] .feed-row__tag {
+  background: transparent;
+  color: var(--color-glow);
+  padding-inline: 0;
+  font-weight: 700;
+}
+:root[data-theme="scroll"] .feed-row__meta,
+:root[data-theme="scroll"] .feed-row__series {
+  color: #6f6650;
+}
+:root[data-theme="scroll"] .feed-day__label,
+:root[data-theme="scroll"] .feed-attention__head {
+  color: var(--color-glow);
+}
+:root[data-theme="scroll"] .feed-divider {
+  color: var(--color-glow);
+  border-top-color: color-mix(in oklab, var(--color-glow) 40%, transparent);
+}
+:root[data-theme="scroll"] .feed-attention {
+  background: linear-gradient(180deg, #f4ecd6, #efe3c4);
+  border: 1px solid color-mix(in oklab, var(--color-glow) 40%, transparent);
+  border-radius: 3px 10px 4px 9px;
+}
+
 @keyframes cardAddedPulse {
   0%, 100% { box-shadow: 0 0 0 0 transparent; }
   30% { box-shadow: 0 0 0 3px var(--color-glow); }

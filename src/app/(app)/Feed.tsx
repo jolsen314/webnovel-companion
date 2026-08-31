@@ -12,7 +12,7 @@ function AttentionStrip({ sources }: { sources: DownSource[] }) {
   return (
     <div className="feed-attention">
       <button type="button" className="feed-attention__head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-        {sources.length} source{sources.length === 1 ? '' : 's'} need checking today
+        {sources.length} source{sources.length === 1 ? '' : 's'} {sources.length === 1 ? 'needs' : 'need'} checking today
       </button>
       {open && (
         <ul className="feed-attention__list">
