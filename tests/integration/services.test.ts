@@ -269,6 +269,12 @@ describe('pollAllSources (real DB)', () => {
 
     const chapters = await db.chapter.findMany({ where: { seriesId } });
     expect(chapters.map((c) => c.guid).sort()).toEqual(['g1', 'g2', 'g3']);
+    // WP-28c: the poll-discovered chapter is stamped announcedAt (a genuine new arrival); the
+    // add-imported ones are not, so imports never surface in the digest feed.
+    const byGuid = Object.fromEntries(chapters.map((c) => [c.guid, c]));
+    expect(byGuid['g3']!.announcedAt).not.toBeNull(); // poll-discovered
+    expect(byGuid['g1']!.announcedAt).toBeNull(); // add import
+    expect(byGuid['g2']!.announcedAt).toBeNull(); // add import
     const source = await db.source.findFirstOrThrow({ where: { seriesId } });
     expect(source.etag).toBe('"v2"');
     expect(source.health).toBe('HEALTHY');
@@ -1794,10 +1800,10 @@ describe('getFeed (real DB)', () => {
         status: 'READING',
         chapters: {
           create: [
-            { title: 'free-recent', url: 'https://ex.test/r/2', access: 'FREE', discoveredAt: recent },
-            { title: 'free-older', url: 'https://ex.test/r/1', access: 'FREE', discoveredAt: older },
+            { title: 'free-recent', url: 'https://ex.test/r/2', access: 'FREE', discoveredAt: recent, announcedAt: recent },
+            { title: 'free-older', url: 'https://ex.test/r/1', access: 'FREE', discoveredAt: older, announcedAt: older },
             { title: 'locked', url: 'https://ex.test/r/3', access: 'LOCKED', discoveredAt: recent },
-            // Discovered locked, now unlocked → access FREE + becameFreeAt set.
+            // Discovered locked, now unlocked → access FREE + becameFreeAt set (NOW_FREE, not new-chapter).
             { title: 'unlocked', url: 'https://ex.test/r/4', access: 'FREE', discoveredAt: older, becameFreeAt: recent },
           ],
         },
@@ -1839,8 +1845,8 @@ describe('getFeed (real DB)', () => {
         status: 'READING',
         chapters: {
           create: [
-            { title: 'prog-read', url: 'https://ex.test/prog/1', access: 'FREE', number: 1, discoveredAt: at },
-            { title: 'prog-unread', url: 'https://ex.test/prog/2', access: 'FREE', number: 2, discoveredAt: at },
+            { title: 'prog-read', url: 'https://ex.test/prog/1', access: 'FREE', number: 1, discoveredAt: at, announcedAt: at },
+            { title: 'prog-unread', url: 'https://ex.test/prog/2', access: 'FREE', number: 2, discoveredAt: at, announcedAt: at },
           ],
         },
       },
@@ -1852,6 +1858,29 @@ describe('getFeed (real DB)', () => {
     const items = (await getFeed(new Date('2026-08-30T12:00:00Z'))).groups.flatMap((g) => g.items);
     expect(items.find((i) => i.chapterTitle === 'prog-read')?.read).toBe(true); // at/before the pointer
     expect(items.find((i) => i.chapterTitle === 'prog-unread')?.read).toBe(false); // after the pointer
+  });
+
+  test('shows only poll-discovered chapters (announcedAt); never add/backfill imports', async () => {
+    const userId = getCurrentUserId();
+    const at = new Date('2026-08-30T06:00:00Z');
+    await db.series.create({
+      data: {
+        userId,
+        title: 'Fresh Import',
+        status: 'READING',
+        chapters: {
+          create: [
+            // A bulk import (add/backfill) leaves announcedAt null — must NOT flood the feed.
+            { title: 'imported', url: 'https://ex.test/imp/1', access: 'FREE', discoveredAt: at },
+            // A poll-discovered arrival carries announcedAt — this is what the feed shows.
+            { title: 'announced', url: 'https://ex.test/imp/2', access: 'FREE', discoveredAt: at, announcedAt: at },
+          ],
+        },
+      },
+    });
+    const titles = (await getFeed(new Date('2026-08-30T12:00:00Z'))).groups.flatMap((g) => g.items.map((i) => i.chapterTitle));
+    expect(titles).toContain('announced');
+    expect(titles).not.toContain('imported'); // the import does not flood the feed
   });
 
   test('surfaces a LIKELY_DOWN source of a READING series as an attention row', async () => {

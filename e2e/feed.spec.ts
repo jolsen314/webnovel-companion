@@ -8,9 +8,9 @@ test('WP-28c: feed lists readable new chapters, excludes locked + non-reading', 
     title: 'Reading One',
     status: 'READING',
     chapters: [
-      { title: 'free-a', url: 'https://ex.test/r/1', access: 'FREE' },
-      { title: 'free-b', url: 'https://ex.test/r/2', access: 'FREE' },
-      { title: 'locked-c', url: 'https://ex.test/r/3', access: 'LOCKED' },
+      { title: 'free-a', url: 'https://ex.test/r/1', access: 'FREE', announced: true },
+      { title: 'free-b', url: 'https://ex.test/r/2', access: 'FREE', announced: true },
+      { title: 'locked-c', url: 'https://ex.test/r/3', access: 'LOCKED', announced: true },
     ],
   });
   await seedSeries({
@@ -29,7 +29,7 @@ test('WP-28c: feed lists readable new chapters, excludes locked + non-reading', 
 });
 
 test('WP-28c: tabs switch between the feed and the shelf', async ({ page }) => {
-  await seedSeries({ title: 'Reading One', status: 'READING', chapters: [{ title: 'c', url: 'https://ex.test/r/1' }] });
+  await seedSeries({ title: 'Reading One', status: 'READING', chapters: [{ title: 'c', url: 'https://ex.test/r/1', announced: true }] });
 
   await page.goto('/');
   await expect(page.locator('.feed-row__title')).toHaveCount(1);

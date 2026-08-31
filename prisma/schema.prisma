@@ -202,6 +202,10 @@ model Chapter {
 
   access       AccessState @default(UNKNOWN) // FREE/LOCKED on advance-chapter sites
   becameFreeAt DateTime? // set when a locked chapter unlocks
+  // Set ONLY when a poll first discovers this chapter — a genuine new arrival. Left null for
+  // add-time and backfill imports, so the digest feed never floods on import (mirrors push, which
+  // fires from poll effects, never from bulk imports). WP-28c.
+  announcedAt  DateTime?
   position     Int? // reading-order index from the TOC (null = not positioned → comparator fallback)
 
   @@unique([seriesId, url]) // soft DB guard; primary de-dup is diff (guid/canonical-url)

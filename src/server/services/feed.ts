@@ -28,6 +28,7 @@ export async function getFeed(now: Date = new Date()): Promise<Feed> {
           discoveredAt: true,
           access: true,
           becameFreeAt: true,
+          announcedAt: true,
         },
       },
     },
@@ -44,14 +45,14 @@ export async function getFeed(now: Date = new Date()): Promise<Feed> {
     const readIds = new Set(ordered.slice(0, lastReadIdx + 1).map((c) => c.id));
 
     for (const c of s.chapters) {
-      const newAt = c.publishedAt ?? c.discoveredAt;
-      // NEW_CHAPTER = readable from the start, never locked. A chapter that ever
-      // became free (becameFreeAt != null) belongs to the NOW_FREE stream only —
-      // this guard is what keeps one chapter from notifying twice.
-      if (c.access !== 'LOCKED' && c.becameFreeAt == null && newAt >= since) {
+      // NEW_CHAPTER = a genuine new arrival a poll discovered (announcedAt set) — readable, never
+      // locked, and not a formerly-locked chapter (that belongs to the NOW_FREE stream). Keying off
+      // announcedAt, not discoveredAt, is what keeps add/backfill imports out of the feed (mirrors
+      // push, which fires from poll effects, never from bulk imports).
+      if (c.announcedAt != null && c.access !== 'LOCKED' && c.becameFreeAt == null && c.announcedAt >= since) {
         events.push({
           kind: 'NEW_CHAPTER',
-          at: newAt,
+          at: c.announcedAt,
           seriesId: s.id,
           seriesTitle: s.title,
           chapterNumber: c.number,

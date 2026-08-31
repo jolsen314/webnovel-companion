@@ -194,6 +194,7 @@ function pollPorts(
                   number: c.number ?? null,
                   publishedAt: c.publishedAt ?? null,
                   access: c.access ?? 'UNKNOWN',
+                  announcedAt: now, // WP-28c: poll-discovered → a genuine new arrival (add/backfill leave this null)
                 })),
                 skipDuplicates: true,
               }),
