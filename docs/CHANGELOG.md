@@ -2,6 +2,15 @@
 
 Append-only history, moved out of [PLAN.md](../PLAN.md). Newest first.
 
+- **2026-08-31** — **Two WPs filed from a B15 diagnosis (WP-59, WP-60).** A B15 source sat `LIKELY_DOWN` while the
+  site was fine in-browser: the host tightened Cloudflare and now 403s **Vercel's datacenter IP even via render**
+  (residential unaffected; 15/16 other RENDER sources healthy → not our render config). Filed **WP-59** (add via a
+  site-wide feed with `PATH_PREFIX` isolation when the page is CF-blocked but the feed stays open — incl. a flat-slug
+  matcher fix: B15's flat `/<slug>-chapter-N/` posts need the prefix without the trailing-slash `seriesPath`) and
+  **WP-60** (residential TOC hand-off — an owner-authed `ingest-toc` endpoint that runs `parseToc` on uploaded HTML to
+  seed/repair chapters, bypassing the IP block for the initial fill). A live experiment (a link-only B15 source
+  converted to FEED+`PATH_PREFIX`) is testing whether B15's `/feed/` is Vercel-reachable; a background watcher
+  auto-reverts it to link-only if gated.
 - **2026-08-31** — **WP-28c shipped: feed (digest) home + shelf tab.** `/` is now a cross-series digest of readable
   new-chapter + now-free events across READING series (newest-first, day-grouped; known-locked new chapters excluded;
   a formerly-locked chapter notifies once, as now-free), with a consolidated source-down "needs attention" strip and
