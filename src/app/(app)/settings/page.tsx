@@ -87,7 +87,7 @@ export default function SettingsPage() {
       <ThemeScene variant="appwide" />
       <section className="settings">
       <Link href="/" className="detail__back">
-        ← Library
+        ← Home
       </Link>
       <p className="settings__eyebrow">Settings</p>
       <h1 className="settings__title">Notifications</h1>
