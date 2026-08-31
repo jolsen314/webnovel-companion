@@ -1829,6 +1829,31 @@ describe('getFeed (real DB)', () => {
     expect(feed.groups[0]!.label).toBe('Today');
   });
 
+  test('computes the read flag from reading progress (chapters at/before the pointer are read)', async () => {
+    const userId = getCurrentUserId();
+    const at = new Date('2026-08-30T06:00:00Z');
+    const series = await db.series.create({
+      data: {
+        userId,
+        title: 'Progress Series',
+        status: 'READING',
+        chapters: {
+          create: [
+            { title: 'prog-read', url: 'https://ex.test/prog/1', access: 'FREE', number: 1, discoveredAt: at },
+            { title: 'prog-unread', url: 'https://ex.test/prog/2', access: 'FREE', number: 2, discoveredAt: at },
+          ],
+        },
+      },
+      include: { chapters: true },
+    });
+    const first = series.chapters.find((c) => c.title === 'prog-read')!;
+    await db.readingProgress.create({ data: { userId, seriesId: series.id, lastReadChapterId: first.id } });
+
+    const items = (await getFeed(new Date('2026-08-30T12:00:00Z'))).groups.flatMap((g) => g.items);
+    expect(items.find((i) => i.chapterTitle === 'prog-read')?.read).toBe(true); // at/before the pointer
+    expect(items.find((i) => i.chapterTitle === 'prog-unread')?.read).toBe(false); // after the pointer
+  });
+
   test('surfaces a LIKELY_DOWN source of a READING series as an attention row', async () => {
     const userId = getCurrentUserId();
     await db.series.create({

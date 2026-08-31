@@ -55,13 +55,23 @@ function dayLabel(d: Date, now: Date): string {
   return `${WEEKDAY[d.getUTCDay()]}, ${MONTH[d.getUTCMonth()]} ${d.getUTCDate()}`;
 }
 
-/** Newest-first, day-grouped feed. Ties break by series title then chapter url (deterministic). */
-export function buildFeed(inputs: FeedInputs, now: Date): Feed {
-  const events = [...inputs.events].sort((a, b) => {
+/** Newest-first, day-grouped feed. On an exact-timestamp tie (e.g. a batch insert stamping many
+ *  chapters at one instant) the order stays deterministic: same series grouped together, then the
+ *  higher chapter number first (newest-first, as a reader expects), with the url only as a final
+ *  stable fallback for null/equal numbers. `limit`, when given, caps to the newest N *after*
+ *  sorting, so which events survive the cap is decided by this same tie-break, not by input order. */
+export function buildFeed(inputs: FeedInputs, now: Date, limit?: number): Feed {
+  const sorted = [...inputs.events].sort((a, b) => {
     if (b.at.getTime() !== a.at.getTime()) return b.at.getTime() - a.at.getTime();
     if (a.seriesTitle !== b.seriesTitle) return a.seriesTitle < b.seriesTitle ? -1 : 1;
+    if (a.chapterNumber !== b.chapterNumber) {
+      if (a.chapterNumber == null) return 1; // nulls last
+      if (b.chapterNumber == null) return -1;
+      return b.chapterNumber - a.chapterNumber; // higher (newer) chapter number first
+    }
     return a.chapterUrl < b.chapterUrl ? -1 : a.chapterUrl > b.chapterUrl ? 1 : 0;
   });
+  const events = limit != null ? sorted.slice(0, limit) : sorted;
 
   const groups: FeedDayGroup[] = [];
   for (const ev of events) {

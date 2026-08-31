@@ -11,7 +11,7 @@ const ev = (over: { at: string } & Partial<Omit<FeedEvent, 'at'>>): FeedEvent =>
   read: false,
   ...over,
   at: new Date(over.at),
-} as FeedEvent);
+});
 
 const NOW = new Date('2026-08-30T12:00:00Z');
 
@@ -60,6 +60,47 @@ describe('buildFeed', () => {
     const feed = buildFeed({ events: [], downSources: down }, NOW);
     expect(feed.attention.map((d) => d.seriesTitle)).toEqual(['Alpha', 'Beta']);
     expect(feed.groups).toEqual([]);
+  });
+
+  test('same-timestamp events order by higher chapter number first (newest-first intent)', () => {
+    const feed = buildFeed(
+      {
+        events: [
+          ev({ at: '2026-08-30T03:00:00Z', chapterNumber: 3, chapterTitle: 'lower' }),
+          ev({ at: '2026-08-30T03:00:00Z', chapterNumber: 7, chapterTitle: 'higher' }),
+        ],
+        downSources: [],
+      },
+      NOW,
+    );
+    expect(feed.groups.flatMap((g) => g.items.map((i) => i.chapterTitle))).toEqual(['higher', 'lower']);
+  });
+
+  test('limit caps to the newest N; a same-timestamp tie keeps the higher (newer) chapter number', () => {
+    const feed = buildFeed(
+      {
+        events: [
+          ev({ at: '2026-08-30T05:00:00Z', chapterNumber: 9, chapterUrl: 'https://ex.test/newest' }),
+          // Two events share a timestamp; the higher chapter number (newer) must win the cap.
+          ev({ at: '2026-08-30T03:00:00Z', chapterNumber: 3, chapterUrl: 'https://ex.test/lo' }),
+          ev({ at: '2026-08-30T03:00:00Z', chapterNumber: 7, chapterUrl: 'https://ex.test/hi' }),
+        ],
+        downSources: [],
+      },
+      NOW,
+      2,
+    );
+    const nums = feed.groups.flatMap((g) => g.items.map((i) => i.chapterNumber));
+    // newest by time (9), then of the two time-tied the higher number (7) survives; 3 is dropped.
+    expect(nums).toEqual([9, 7]);
+  });
+
+  test('no limit → keeps every event', () => {
+    const feed = buildFeed(
+      { events: [ev({ at: '2026-08-30T05:00:00Z' }), ev({ at: '2026-08-30T03:00:00Z' })], downSources: [] },
+      NOW,
+    );
+    expect(feed.groups.flatMap((g) => g.items)).toHaveLength(2);
   });
 
   test('pure: does not mutate inputs', () => {

@@ -82,7 +82,6 @@ export async function getFeed(now: Date = new Date()): Promise<Feed> {
     }
   }
 
-  // Cap to the newest MAX_EVENTS before grouping; buildFeed sorts authoritatively.
-  events.sort((a, b) => b.at.getTime() - a.at.getTime());
-  return buildFeed({ events: events.slice(0, MAX_EVENTS), downSources }, now);
+  // buildFeed sorts (with its deterministic tie-break) and caps to the newest MAX_EVENTS.
+  return buildFeed({ events, downSources }, now, MAX_EVENTS);
 }
