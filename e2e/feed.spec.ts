@@ -52,8 +52,37 @@ test('WP-28c: shelf card shows a chapter count and hides unread on non-reading',
   await expect(page.locator('.card__latest')).toHaveCount(0); // latest-chapter line removed
 });
 
-test('WP-28c: ?added highlights the target shelf card', async ({ page }) => {
-  const { id } = await seedSeries({ title: 'Fresh Add', status: 'READING', chapters: [{ title: 'c', url: 'https://ex.test/f/1' }] });
-  await page.goto(`/shelf?added=${id}`);
+test('WP-28c: adding a series lands on /shelf with the new card highlighted (through the add flow)', async ({ page }) => {
+  // A real series on the shelf; stub the add POST to resolve to it (E2E has no external network).
+  const { id } = await seedSeries({ title: 'Added Via Flow', status: 'READING', chapters: [{ title: 'c', url: 'https://ex.test/av/1' }] });
+  await page.route('**/api/series', (route) =>
+    route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({ seriesId: id, title: 'Added Via Flow', sourceType: 'FEED', chapters: 1, alreadyExisting: false }),
+    }),
+  );
+
+  await page.goto('/add');
+  await page.getByRole('textbox').first().fill('https://ex.test/av/');
+  await page.getByRole('button', { name: 'Add series' }).click();
+
+  // The add flow itself redirected to the shelf with ?added, and that drives the highlight.
+  await expect(page).toHaveURL(`/shelf?added=${id}`);
   await expect(page.locator(`#series-${id}`)).toHaveClass(/card-wrap--added/);
+});
+
+test('WP-28c: ?added scrolls the target card into view when it would be below the fold', async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 600 });
+  // 15 series with recent chapters sort above; the target has no chapters, so 'recent' sorts it last.
+  for (let i = 0; i < 15; i++) {
+    await seedSeries({ title: `Filler ${String(i).padStart(2, '0')}`, status: 'READING', chapters: [{ title: 'c', url: `https://ex.test/fill/${i}` }] });
+  }
+  const { id } = await seedSeries({ title: 'Way Down Below', status: 'READING' }); // no chapters → last
+
+  await page.goto(`/shelf?added=${id}`);
+  const card = page.locator(`#series-${id}`);
+  await expect(card).toHaveClass(/card-wrap--added/);
+  // Without the scrollIntoView this card would be far below the fold; toBeInViewport proves it scrolled.
+  await expect(card).toBeInViewport();
 });
