@@ -1875,9 +1875,9 @@ describe('getFeed (real DB)', () => {
     expect(feed.attention.some((a) => a.host === 'down.test' && a.seriesTitle === 'Down Series')).toBe(true);
   });
 
-  test('surfaces down sources for every non-DROPPED status (a red dot on the shelf ⇒ a strip entry)', async () => {
+  test('surfaces down sources for still-active statuses; excludes Completed + Dropped', async () => {
     const userId = getCurrentUserId();
-    const downSeries = (title: string, status: 'PAUSED' | 'COMPLETED' | 'DROPPED') =>
+    const downSeries = (title: string, status: 'PAUSED' | 'PLANNED' | 'COMPLETED' | 'DROPPED') =>
       db.series.create({
         data: {
           userId,
@@ -1887,13 +1887,15 @@ describe('getFeed (real DB)', () => {
         },
       });
     await downSeries('paused', 'PAUSED');
+    await downSeries('planned', 'PLANNED');
     await downSeries('completed', 'COMPLETED');
     await downSeries('dropped', 'DROPPED');
 
     const hosts = (await getFeed(new Date('2026-08-30T12:00:00Z'))).attention.map((a) => a.host);
-    expect(hosts).toContain('paused.test'); // non-reading still surfaces the down alert
-    expect(hosts).toContain('completed.test');
-    expect(hosts).not.toContain('dropped.test'); // dropped is silenced
+    expect(hosts).toContain('paused.test'); // still-active → a down source is actionable
+    expect(hosts).toContain('planned.test');
+    expect(hosts).not.toContain('completed.test'); // finished works don't need new chapters
+    expect(hosts).not.toContain('dropped.test'); // dropped on purpose
   });
 
   test('does not surface a link-only or healthy source', async () => {
