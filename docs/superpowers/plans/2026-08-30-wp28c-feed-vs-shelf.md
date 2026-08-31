@@ -172,11 +172,14 @@ describe('buildFeed', () => {
     expect(feed.groups[1].items.map((i) => i.chapterTitle)).toEqual(['yesterday']);
   });
 
-  test('keeps both event kinds (a locked→unlocked chapter yields two rows)', () => {
+  test('orders mixed event kinds newest-first (two distinct chapters)', () => {
+    // buildFeed is agnostic — it orders whatever events it's given. The
+    // no-double-notify rule (a single chapter never produces both kinds) is
+    // enforced upstream in getFeed, so these are two DIFFERENT chapters.
     const feed = buildFeed(
       {
         events: [
-          ev({ at: '2026-08-20T00:00:00Z', kind: 'NEW_CHAPTER', chapterUrl: 'https://ex.test/c9' }),
+          ev({ at: '2026-08-20T00:00:00Z', kind: 'NEW_CHAPTER', chapterUrl: 'https://ex.test/c8' }),
           ev({ at: '2026-08-30T00:00:00Z', kind: 'NOW_FREE', chapterUrl: 'https://ex.test/c9' }),
         ],
         downSources: [],
@@ -361,7 +364,7 @@ Append to `tests/integration/services.test.ts`. Add `getFeed` to the import list
 
 ```ts
 describe('getFeed (real DB)', () => {
-  test('new-chapter + now-free rows for READING series, newest-first; excludes locked + non-reading', async () => {
+  test('new-chapter + now-free for READING series; excludes locked + non-reading; a formerly-locked chapter notifies once', async () => {
     const userId = getCurrentUserId();
     const now = new Date('2026-08-30T12:00:00Z');
     const recent = new Date('2026-08-30T06:00:00Z');
@@ -377,6 +380,8 @@ describe('getFeed (real DB)', () => {
             { title: 'free-recent', url: 'https://ex.test/r/2', access: 'FREE', discoveredAt: recent },
             { title: 'free-older', url: 'https://ex.test/r/1', access: 'FREE', discoveredAt: older },
             { title: 'locked', url: 'https://ex.test/r/3', access: 'LOCKED', discoveredAt: recent },
+            // Discovered locked, now unlocked → access FREE + becameFreeAt set.
+            { title: 'unlocked', url: 'https://ex.test/r/4', access: 'FREE', discoveredAt: older, becameFreeAt: recent },
           ],
         },
       },
@@ -391,8 +396,19 @@ describe('getFeed (real DB)', () => {
     });
 
     const feed = await getFeed(now);
-    const titles = feed.groups.flatMap((g) => g.items.map((i) => i.chapterTitle));
-    expect(titles).toEqual(['free-recent', 'free-older']); // newest-first, no 'locked', no 'done'
+    const items = feed.groups.flatMap((g) => g.items);
+    const titles = items.map((i) => i.chapterTitle);
+
+    // The formerly-locked chapter surfaces exactly once, as NOW_FREE (no double-notify).
+    const unlocked = items.filter((i) => i.chapterTitle === 'unlocked');
+    expect(unlocked).toHaveLength(1);
+    expect(unlocked[0].kind).toBe('NOW_FREE');
+
+    // Readable-from-the-start chapters are NEW_CHAPTER; still-locked + non-reading excluded.
+    expect(items.find((i) => i.chapterTitle === 'free-recent')?.kind).toBe('NEW_CHAPTER');
+    expect(titles).toContain('free-older');
+    expect(titles).not.toContain('locked');
+    expect(titles).not.toContain('done');
     expect(feed.groups[0].label).toBe('Today');
   });
 
@@ -477,7 +493,10 @@ export async function getFeed(now: Date = new Date()): Promise<Feed> {
 
     for (const c of s.chapters) {
       const newAt = c.publishedAt ?? c.discoveredAt;
-      if (c.access !== 'LOCKED' && newAt >= since) {
+      // NEW_CHAPTER = readable from the start, never locked. A chapter that ever
+      // became free (becameFreeAt != null) belongs to the NOW_FREE stream only —
+      // this guard is what keeps one chapter from notifying twice.
+      if (c.access !== 'LOCKED' && c.becameFreeAt == null && newAt >= since) {
         events.push({
           kind: 'NEW_CHAPTER',
           at: newAt,

@@ -136,9 +136,12 @@ export function buildFeed(inputs: FeedInputs, now: Date): Feed;
   (consistent with `relativeTime`), labels each day, and passes `downSources`
   through as `attention`. Pure and deterministic: `now` is injected, no
   `Date.now()`.
-- A chapter discovered locked and later unlocked yields **two** events (a
-  `NEW_CHAPTER` at discovery, a `NOW_FREE` at unlock) at different times. That is
-  correct; no dedup.
+- **A single chapter never yields two events.** A chapter that was ever locked
+  (i.e. `becameFreeAt != null`, whose access is now `FREE`) surfaces **only** as
+  its `NOW_FREE` event — it is *not* also counted as a `NEW_CHAPTER`. The
+  `NEW_CHAPTER` stream is chapters that were readable from the start and never
+  locked. `buildFeed` itself is agnostic (it orders whatever it's given); the
+  no-double-notify guarantee lives in `getFeed`'s event construction (below).
 
 ### Service — `src/server/services/feed.ts` → `getFeed()`
 
@@ -148,7 +151,9 @@ calls `buildFeed`:
 - **new chapter** — chapters whose `publishedAt ?? discoveredAt` falls in the
   window (~30 days), capped (~150 events total across both kinds), **excluding
   `access = 'LOCKED'`** (readable events only; `UNKNOWN` is included since it
-  can't be judged locked). Mirrors the push filter.
+  can't be judged locked) **and excluding any chapter with `becameFreeAt != null`**
+  (a formerly-locked chapter belongs to the *now free* stream — this is what keeps
+  a single chapter from notifying twice). Mirrors the push filter.
 - **now free** — chapters with `becameFreeAt` in the window, timestamped at
   `becameFreeAt`.
 - **read flag** — from each series' reading order (`orderChaptersForReading`)
@@ -213,7 +218,8 @@ it. Acceptable for v1; note it, don't special-case.
 
 - **Unit (TDD) — `lib/feed.ts`**: newest-first ordering; day grouping and
   Today/Yesterday/date labels across a day boundary with injected `now`;
-  both event kinds mapped; the locked→unlocked chapter yielding two events;
+  both event kinds ordered together; a formerly-locked (now-free) chapter
+  yielding exactly one event (NOW_FREE, not also NEW_CHAPTER);
   window and cap; empty input.
 - **Unit — `lib/shelf.ts`**: the new `'added'` sort mode (newest `createdAt`
   first, title tie-break).
