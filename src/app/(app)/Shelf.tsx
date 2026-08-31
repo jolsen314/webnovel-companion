@@ -35,7 +35,7 @@ function isStatusFilter(v: string | null): v is SeriesStatus | 'ALL' {
   return v === 'ALL' || (v != null && (SERIES_STATUSES as readonly string[]).includes(v));
 }
 
-function SeriesCard({ series, now, highlight }: { series: SeriesRow; now: Date; highlight: boolean }) {
+function SeriesCard({ series, highlight }: { series: SeriesRow; highlight: boolean }) {
   const { unread } = series;
   const showUnread = series.status === 'READING' && unread > 0;
   const count = series.chapterCount;
@@ -78,7 +78,7 @@ function SeriesCard({ series, now, highlight }: { series: SeriesRow; now: Date; 
   );
 }
 
-export function Shelf({ rows, now }: { rows: SeriesRow[]; now: Date }) {
+export function Shelf({ rows }: { rows: SeriesRow[] }) {
   // Defaults match the server render for hydration safety; stored prefs applied in the mount effect.
   const [sort, setSort] = useState<ShelfSort>('recent');
   const [statusFilter, setStatusFilter] = useState<SeriesStatus | 'ALL'>('ALL');
@@ -207,7 +207,7 @@ export function Shelf({ rows, now }: { rows: SeriesRow[]; now: Date }) {
       ) : (
         <div className="stream__list">
           {visible.map((s) => (
-            <SeriesCard key={s.id} series={s} now={now} highlight={s.id === addedId} />
+            <SeriesCard key={s.id} series={s} highlight={s.id === addedId} />
           ))}
         </div>
       )}

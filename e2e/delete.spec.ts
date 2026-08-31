@@ -10,7 +10,7 @@ test.describe('delete series', () => {
     await page.goto(`/series/${id}`);
     await page.getByRole('button', { name: 'Delete series' }).click();
     await page.getByRole('button', { name: 'Delete forever' }).click();
-    await expect(page).toHaveURL('/');
+    await expect(page).toHaveURL(/\/shelf/);
     await expect(page.getByRole('heading', { name: 'Delete Me' })).toHaveCount(0);
   });
 

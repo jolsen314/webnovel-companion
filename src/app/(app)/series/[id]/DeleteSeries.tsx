@@ -7,7 +7,7 @@ export function DeleteSeries(props: { id: string; title: string; chapterCount: n
   const router = useRouter();
   const { confirming, busy, error, open, cancel, confirm } = useDeleteSeries({
     id: props.id,
-    onDeleted: () => router.push('/'), // series page is gone → back to the shelf
+    onDeleted: () => router.push('/shelf'), // series page is gone → back to the library shelf
     failMessage: 'Could not delete the series.',
   });
 

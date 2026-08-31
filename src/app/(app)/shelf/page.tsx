@@ -11,7 +11,7 @@ export default async function ShelfPage() {
   return (
     <>
       <ThemeScene variant="appwide" />
-      <Shelf rows={series} now={new Date()} />
+      <Shelf rows={series} />
     </>
   );
 }
