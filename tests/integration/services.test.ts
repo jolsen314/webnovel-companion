@@ -15,6 +15,7 @@ import {
   reclassifySource,
   setApiDescriptor,
   switchToPageWatch,
+  getFeed,
   type FetchImpl,
 } from '../../src/server/services';
 import { db } from '../../src/server/db';
@@ -1776,5 +1777,76 @@ describe('backfillWithEscalation (real DB, WP-34)', () => {
     expect(res.added).toBe(1);
     const src = await db.source.findFirstOrThrow({ where: { seriesId } });
     expect(src.fetchMode).toBe('PLAIN');
+  });
+});
+
+describe('getFeed (real DB)', () => {
+  test('new-chapter + now-free for READING series; excludes locked + non-reading; a formerly-locked chapter notifies once', async () => {
+    const userId = getCurrentUserId();
+    const now = new Date('2026-08-30T12:00:00Z');
+    const recent = new Date('2026-08-30T06:00:00Z');
+    const older = new Date('2026-08-29T06:00:00Z');
+
+    await db.series.create({
+      data: {
+        userId,
+        title: 'Reading One',
+        status: 'READING',
+        chapters: {
+          create: [
+            { title: 'free-recent', url: 'https://ex.test/r/2', access: 'FREE', discoveredAt: recent },
+            { title: 'free-older', url: 'https://ex.test/r/1', access: 'FREE', discoveredAt: older },
+            { title: 'locked', url: 'https://ex.test/r/3', access: 'LOCKED', discoveredAt: recent },
+            // Discovered locked, now unlocked → access FREE + becameFreeAt set.
+            { title: 'unlocked', url: 'https://ex.test/r/4', access: 'FREE', discoveredAt: older, becameFreeAt: recent },
+          ],
+        },
+      },
+    });
+    await db.series.create({
+      data: {
+        userId,
+        title: 'Completed One',
+        status: 'COMPLETED',
+        chapters: { create: [{ title: 'done', url: 'https://ex.test/c/1', access: 'FREE', discoveredAt: recent }] },
+      },
+    });
+
+    const feed = await getFeed(now);
+    const items = feed.groups.flatMap((g) => g.items);
+    const titles = items.map((i) => i.chapterTitle);
+
+    // The formerly-locked chapter surfaces exactly once, as NOW_FREE (no double-notify).
+    const unlocked = items.filter((i) => i.chapterTitle === 'unlocked');
+    expect(unlocked).toHaveLength(1);
+    expect(unlocked[0]!.kind).toBe('NOW_FREE');
+
+    // Readable-from-the-start chapters are NEW_CHAPTER; still-locked + non-reading excluded.
+    expect(items.find((i) => i.chapterTitle === 'free-recent')?.kind).toBe('NEW_CHAPTER');
+    expect(titles).toContain('free-older');
+    expect(titles).not.toContain('locked');
+    expect(titles).not.toContain('done');
+    expect(feed.groups[0]!.label).toBe('Today');
+  });
+
+  test('surfaces a LIKELY_DOWN source of a READING series as an attention row', async () => {
+    const userId = getCurrentUserId();
+    await db.series.create({
+      data: {
+        userId,
+        title: 'Down Series',
+        status: 'READING',
+        sources: {
+          create: {
+            url: 'https://down.test/novel/',
+            host: 'down.test',
+            type: 'PAGE_WATCH',
+            health: 'LIKELY_DOWN',
+          },
+        },
+      },
+    });
+    const feed = await getFeed(new Date('2026-08-30T12:00:00Z'));
+    expect(feed.attention.some((a) => a.host === 'down.test' && a.seriesTitle === 'Down Series')).toBe(true);
   });
 });
