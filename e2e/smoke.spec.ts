@@ -6,6 +6,6 @@ test('the shelf renders a seeded series', async ({ page }) => {
     title: 'Smoke Saga',
     chapters: [{ title: 'Chapter 1', url: 'https://translator.example/smoke/c1' }],
   });
-  await page.goto('/');
+  await page.goto('/shelf');
   await expect(page.getByRole('heading', { name: 'Smoke Saga' })).toBeVisible();
 });

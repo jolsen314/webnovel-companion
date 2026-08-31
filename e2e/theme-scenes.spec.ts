@@ -52,7 +52,7 @@ test.describe('WP-28h: scroll — petals + wax badge', () => {
       ],
     });
     await setTheme(page, 'scroll');
-    await page.goto('/');
+    await page.goto('/shelf');
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'scroll');
     await expect(page.getByRole('heading', { name: 'Scroll Badge Series' })).toBeVisible();
 
