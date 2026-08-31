@@ -14,6 +14,13 @@ test.describe('delete series', () => {
     await expect(page.getByRole('heading', { name: 'Delete Me' })).toHaveCount(0);
   });
 
+  test('detail "← Shelf" back link returns to the shelf, not the feed', async ({ page }) => {
+    const { id } = await seedSeries({ title: 'Back Link', chapters: [{ title: 'C1', url: 'https://translator.example/bl/c1' }] });
+    await page.goto(`/series/${id}`);
+    await page.locator('.detail__back').click();
+    await expect(page).toHaveURL(/\/shelf$/); // the label says Shelf → it must land on /shelf
+  });
+
   test('detail delete Cancel dismisses the confirm and deletes nothing', async ({ page }) => {
     const { id } = await seedSeries({
       title: 'Spare Me',
