@@ -86,3 +86,22 @@ test('WP-28c: ?added scrolls the target card into view when it would be below th
   // Without the scrollIntoView this card would be far below the fold; toBeInViewport proves it scrolled.
   await expect(card).toBeInViewport();
 });
+
+test('WP-28c: ?added does not scroll when a saved filter hides the new series', async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 600 });
+  // Saved filter = Planned only (set before load). The new series is READING → the filter hides it,
+  // so we must NOT scroll to where it briefly sat in the pre-hydration default (unfiltered) render.
+  await page.addInitScript(() => window.localStorage.setItem('shelfStatus', 'PLANNED'));
+  for (let i = 0; i < 15; i++) {
+    await seedSeries({ title: `Planned ${String(i).padStart(2, '0')}`, status: 'PLANNED', chapters: [{ title: 'c', url: `https://ex.test/pl/${i}` }] });
+  }
+  // No chapters → under 'recent' it sorts LAST, i.e. below the fold in the pre-hydration render,
+  // so the old buggy scroll would jump to the bottom before the filter removed it.
+  const { id } = await seedSeries({ title: 'New Reading', status: 'READING' });
+
+  await page.goto(`/shelf?added=${id}`);
+  await expect(page.locator(`#series-${id}`)).toHaveCount(0); // hidden by the Planned filter
+  await expect(page.locator('.card__title').first()).toBeVisible(); // shelf rendered
+  await page.waitForTimeout(600); // let any (buggy) smooth-scroll settle
+  expect(await page.evaluate(() => window.scrollY)).toBeLessThan(50); // stayed at the top
+});

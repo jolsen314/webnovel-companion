@@ -86,6 +86,9 @@ export function Shelf({ rows }: { rows: SeriesRow[] }) {
   // Query is intentionally transient — not persisted, resets on reload.
   const [query, setQuery] = useState('');
 
+  // Saved shelf prefs are applied client-side after mount; `hydrated` gates the ?added scroll
+  // until they're in effect, so we never scroll to a card the saved filter ends up hiding.
+  const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
     const storedSort = window.localStorage.getItem(SORT_KEY);
     if (isSort(storedSort)) setSort(storedSort);
@@ -94,6 +97,7 @@ export function Shelf({ rows }: { rows: SeriesRow[] }) {
     const storedRating = window.localStorage.getItem(MIN_RATING_KEY);
     const parsed = storedRating ? Number(storedRating) : NaN;
     if (Number.isInteger(parsed) && parsed >= 1 && parsed <= 5) setMinRating(parsed);
+    setHydrated(true);
   }, []);
 
   function chooseSort(next: ShelfSort) {
@@ -118,10 +122,12 @@ export function Shelf({ rows }: { rows: SeriesRow[] }) {
   const params = useSearchParams();
   const addedId = params.get('added');
   useEffect(() => {
-    if (!addedId) return;
+    if (!hydrated || !addedId) return;
+    // Only scroll if the card survived the (now-applied) saved filter — otherwise it isn't in the
+    // DOM, and we must not scroll to where it briefly sat during the pre-hydration default render.
     const el = document.getElementById(`series-${addedId}`);
     if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-  }, [addedId, visible]);
+  }, [hydrated, addedId, visible]);
 
   const filtering = statusFilter !== 'ALL' || query.trim() !== '' || minRating != null;
   const unreadTotal = rows.reduce((n, s) => n + s.unread, 0);
