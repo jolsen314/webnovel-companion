@@ -31,7 +31,7 @@ test('a no-chapters add offers a link-only confirm, and Add anyway creates the e
   await expect(title).toHaveValue('Some Page');
 
   await page.getByRole('button', { name: 'Add anyway' }).click();
-  await expect(page).toHaveURL('/'); // landed on the shelf after the confirmed add
+  await expect(page).toHaveURL('/shelf?added=s1'); // landed on the shelf, new card highlighted
 });
 
 test('Cancel on the no-chapters confirm returns to the plain add form (no add happens)', async ({ page }) => {

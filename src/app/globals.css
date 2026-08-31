@@ -915,17 +915,10 @@ body {
   border-radius: 999px;
   flex: none;
 }
-.card__latest {
+.card__count {
   color: var(--color-muted);
   font-size: 0.9rem;
   margin: 0.35rem 0 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.card__latest b {
-  color: var(--color-paper);
-  font-weight: 500;
 }
 .card__meta {
   display: flex;
@@ -1258,12 +1251,8 @@ body {
 :root[data-theme="scroll"] .card__num {
   color: var(--color-glow);
 }
-:root[data-theme="scroll"] .card__latest {
+:root[data-theme="scroll"] .card__count {
   color: #5c5140;
-}
-:root[data-theme="scroll"] .card__latest b {
-  color: #3a2c18;
-  font-weight: 600;
 }
 :root[data-theme="scroll"] .card__meta {
   color: #6f6650;
@@ -1307,12 +1296,8 @@ body {
 :root[data-theme="sci-fi"] .card__num {
   color: #7fb6ff;
 }
-:root[data-theme="sci-fi"] .card__latest {
+:root[data-theme="sci-fi"] .card__count {
   color: #a7c4d6;
-}
-:root[data-theme="sci-fi"] .card__latest b {
-  color: #eaf6fb;
-  font-weight: 600;
 }
 :root[data-theme="sci-fi"] .card__meta {
   color: #7f9bb2;
@@ -1803,3 +1788,250 @@ body {
 :root[data-theme="scroll"] .card__unread--noseal { width: 34px; height: 34px; background: #9e2b25; border-radius: 50%; }
 :root[data-theme="scroll"] .card__unread-num { position: relative; z-index: 1; color: #fbeee2; font-family: var(--font-display); font-weight: 700;
   text-shadow: 0 1px 2px rgba(60,10,8,.8), 0 0 3px rgba(0,0,0,.5); }
+
+/* ── WP-28c: view tabs (feed ↔ shelf) ── */
+.viewtabs {
+  display: flex;
+  gap: 0.4rem;
+  border-bottom: 1px solid var(--color-line);
+}
+.viewtabs__tab {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.02em;
+  color: var(--color-muted);
+  text-decoration: none;
+  padding: 0.5rem 0.2rem;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+}
+.viewtabs__tab.is-active {
+  color: var(--color-paper);
+  border-bottom-color: var(--color-glow);
+}
+
+/* ── WP-28c: feed (digest) ── */
+.feed {
+  display: flex;
+  flex-direction: column;
+  gap: 1.4rem;
+}
+.feed-empty,
+.feed-day__label {
+  color: var(--color-muted);
+}
+.feed-empty {
+  font-size: 0.9rem;
+  padding: 2rem 0;
+  text-align: center;
+}
+.feed-day__label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  margin: 0 0 0.5rem;
+}
+.feed-day__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.feed-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.6rem 0.85rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+}
+.feed-row--read {
+  opacity: 0.55;
+}
+.feed-row__main {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  text-decoration: none;
+  color: var(--color-paper);
+  min-width: 0;
+}
+.feed-row__tag {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-on-glow);
+  background: var(--color-glow);
+  border-radius: 999px;
+  padding: 0.08rem 0.4rem;
+  flex: none;
+}
+.feed-row__num {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--color-glow);
+  flex: none;
+}
+.feed-row__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.feed-row__check {
+  color: var(--color-muted);
+  flex: none;
+}
+.feed-row__meta {
+  display: flex;
+  gap: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--color-muted);
+}
+.feed-row__series {
+  color: var(--color-muted);
+  text-decoration: none;
+}
+.feed-row__series:hover {
+  color: var(--color-paper);
+}
+.feed-divider {
+  list-style: none;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  border-top: 1px dashed var(--color-line);
+  padding-top: 0.5rem;
+  margin-top: 0.2rem;
+}
+.feed-attention {
+  border: 1px solid var(--color-down);
+  border-radius: 10px;
+  padding: 0.6rem 0.85rem;
+  background: color-mix(in oklab, var(--color-down) 10%, var(--color-surface));
+}
+.feed-attention__head {
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--color-paper);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+.feed-attention__list {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.82rem;
+}
+
+/* ── WP-28c feed items, per-theme (extends the WP-28h card signatures) ── */
+
+/* sci-fi: each row is a holographic panel — angled clip + a masked holo-gradient edge
+   over translucent cyan glass, the same recipe as the sci-fi card at row scale. */
+:root[data-theme="sci-fi"] .feed-row,
+:root[data-theme="sci-fi"] .feed-attention {
+  position: relative;
+  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
+  border: none;
+  border-radius: 0;
+  backdrop-filter: blur(6px) saturate(1.2);
+}
+:root[data-theme="sci-fi"] .feed-row {
+  background: linear-gradient(150deg, rgba(55, 205, 215, 0.13), rgba(90, 160, 225, 0.16));
+}
+:root[data-theme="sci-fi"] .feed-attention {
+  background: linear-gradient(150deg, rgba(255, 107, 138, 0.12), rgba(169, 139, 255, 0.14));
+}
+:root[data-theme="sci-fi"] .feed-row::after,
+:root[data-theme="sci-fi"] .feed-attention::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
+  padding: 1px;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+:root[data-theme="sci-fi"] .feed-row::after {
+  background: linear-gradient(120deg, var(--holo-1), var(--holo-2) 40%, var(--holo-3) 70%, var(--holo-4));
+}
+:root[data-theme="sci-fi"] .feed-attention::after {
+  background: linear-gradient(120deg, var(--color-down), var(--holo-4) 70%, var(--holo-3));
+}
+:root[data-theme="sci-fi"] .feed-row__num {
+  color: #7fb6ff;
+}
+:root[data-theme="sci-fi"] .feed-row__tag {
+  background: linear-gradient(100deg, var(--color-glow), var(--holo-3));
+  color: #04121a;
+  border-radius: 3px;
+  box-shadow: 0 0 9px -1px rgba(90, 166, 255, 0.7);
+}
+:root[data-theme="sci-fi"] .feed-divider {
+  color: var(--color-glow);
+  border-top-color: color-mix(in oklab, var(--color-glow) 45%, transparent);
+}
+
+/* scroll: each row reads like a parchment strip — the accent lives in cinnabar INK
+   (the chapter number, the "now free" stamp, the day marker are red text), not a
+   coloured border; the row edge stays a quiet aged-paper line. */
+:root[data-theme="scroll"] .feed-row {
+  background: linear-gradient(180deg, #f4ecd6, #efe3c4);
+  border: 1px solid color-mix(in oklab, var(--color-line) 65%, transparent);
+  border-radius: 3px 10px 4px 9px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), inset 0 0 26px rgba(120, 90, 40, 0.05);
+}
+:root[data-theme="scroll"] .feed-row__main {
+  color: var(--color-paper);
+}
+:root[data-theme="scroll"] .feed-row__num {
+  color: var(--color-glow);
+  font-weight: 600;
+}
+:root[data-theme="scroll"] .feed-row__tag {
+  background: transparent;
+  color: var(--color-glow);
+  padding-inline: 0;
+  font-weight: 700;
+}
+:root[data-theme="scroll"] .feed-row__meta,
+:root[data-theme="scroll"] .feed-row__series {
+  color: #6f6650;
+}
+:root[data-theme="scroll"] .feed-day__label,
+:root[data-theme="scroll"] .feed-attention__head {
+  color: var(--color-glow);
+}
+:root[data-theme="scroll"] .feed-divider {
+  color: var(--color-glow);
+  border-top-color: color-mix(in oklab, var(--color-glow) 40%, transparent);
+}
+:root[data-theme="scroll"] .feed-attention {
+  background: linear-gradient(180deg, #f4ecd6, #efe3c4);
+  border: 1px solid color-mix(in oklab, var(--color-glow) 40%, transparent);
+  border-radius: 3px 10px 4px 9px;
+}
+
+@keyframes cardAddedPulse {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  30% { box-shadow: 0 0 0 3px var(--color-glow); }
+}
+.card-wrap--added .card {
+  border-color: var(--color-glow);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .card-wrap--added .card {
+    animation: cardAddedPulse 1.6s ease-out 2;
+  }
+}

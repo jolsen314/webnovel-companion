@@ -86,7 +86,7 @@ test.describe('main pass — asset base set (NEXT_PUBLIC_THEME_ASSET_BASE=/theme
         });
         await applyView(page, view);
         await setTheme(page, theme);
-        await page.goto('/');
+        await page.goto('/shelf');
         await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
         await expect(page.getByRole('heading', { name: `${theme} Shelf One` })).toBeVisible();
         await expect(page.locator('.card__unread').first()).toBeVisible();
@@ -176,7 +176,7 @@ test.describe('fallback pass — asset base unset/unreachable', () => {
       });
       await applyView(page, view);
       await setTheme(page, 'scroll');
-      await page.goto('/');
+      await page.goto('/shelf');
       await expect(page.locator('html')).toHaveAttribute('data-theme', 'scroll');
       await expect(page.getByRole('heading', { name: 'Fallback Series' })).toBeVisible();
       await expect(page.locator('.card__unread--noseal')).toBeVisible();

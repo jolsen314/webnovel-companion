@@ -46,16 +46,19 @@ uncommitted notes." Real names/URLs live only in those local notes and in scratc
 
 ## Current focus
 
-> **NEXT: WP-28c — Feed page vs library split.** Decide + build a cross-series "what's new across everything" river
-> distinct from the per-series library grid (an IA decision before a build — needs a brainstorm up front). WP-28 was
-> split into pickup-able children (2026-08-20) after its long-title readability facet shipped; the shelf-ordering facet
-> (WP-28a) landed **expanded** into full shelf **sort + filter**, **WP-28b** (theme system) shipped, **WP-28h**
-> (per-theme scenes/cards/detail — scroll's ink-tree+petals+rolled-scroll+wax-seal, sci-fi's holo env) shipped as a
-> side effort, and **WP-28i** (private theme-asset proxy — WP-28h's licensed images served through an auth-gated
-> `api/theme-asset` route off a private Blob store) shipped 2026-08-29. Still queued: **WP-28c** (feed vs library
-> split, NEXT), **WP-28e** (shelf delete affordance), and **WP-28j** (no-flash shelf sort/filter — a flash of the
-> unsorted shelf on nav when a filter/sort is saved) — priority = the **▶ Active queue** table, reorderable by the
-> owner. WP-28b's spike
+> **NEXT: WP-28e — Shelf delete affordance.** Replace the always-visible per-card delete trash on touch with two
+> better-hidden affordances (**both** wanted): an iOS-Mail-style **swipe-left-to-reveal-Delete** gesture, and an
+> **"Edit" mode toggle** on the shelf head (also the non-touch / keyboard / a11y path) — desktop keeps its existing
+> hover reveal. WP-28 was split into pickup-able children (2026-08-20) after its long-title readability facet
+> shipped; the shelf-ordering facet (WP-28a) landed **expanded** into full shelf **sort + filter**, **WP-28b** (theme
+> system) shipped, **WP-28h** (per-theme scenes/cards/detail — scroll's ink-tree+petals+rolled-scroll+wax-seal,
+> sci-fi's holo env) shipped as a side effort, **WP-28i** (private theme-asset proxy — WP-28h's licensed images
+> served through an auth-gated `api/theme-asset` route off a private Blob store) shipped 2026-08-29, and
+> **[WP-28c](docs/PLAN-archive.md#wp-28c--feed-digest-home-and-shelf-tab-done-2026-08-31)** (feed digest home + shelf
+> tab — `/` became a cross-series "what's new" digest, day-grouped and read-dimmed, with the per-series shelf moved
+> to `/shelf`; filed **WP-TAGS** for genre tags) shipped 2026-08-31. Still queued: **WP-28e** (shelf delete
+> affordance, NEXT) and **WP-28j** (no-flash shelf sort/filter — a flash of the unsorted shelf on nav when a
+> filter/sort is saved) — priority = the **▶ Active queue** table, reorderable by the owner. WP-28b's spike
 > also surfaced a fourth theme candidate + two low-pri extensions, filed as **WP-28f** (bookshelf theme), **WP-28g**
 > (header quick-switch), and **WP-THEMESYNC** (cross-device persistence).
 >
@@ -98,10 +101,10 @@ later-tier tables are reference only. `⭐` = load-bearing.
 
 | ID | Work package | Status | Depends on |
 |----|--------------|--------|------------|
-| WP-28c | Feed page vs library split — a cross-series "what's new across everything" river vs the per-series grid (decide one view or two) | `NEXT` | WP-10 |
-| WP-28e | Shelf delete affordance — hide the always-visible per-card delete (WP-51) by default and expose it two ways (**both** wanted): (1) an iOS-Mail-style **swipe-left-to-reveal-Delete** on touch, and (2) an **"Edit" mode toggle** on the shelf head that reveals the per-card delete buttons (also the non-touch / keyboard / a11y path). Keep the confirm + the tap-through guard on both | `TODO` | WP-10, WP-51, WP-28a |
+| WP-28e | Shelf delete affordance — hide the always-visible per-card delete (WP-51) by default and expose it two ways (**both** wanted): (1) an iOS-Mail-style **swipe-left-to-reveal-Delete** on touch, and (2) an **"Edit" mode toggle** on the shelf head that reveals the per-card delete buttons (also the non-touch / keyboard / a11y path). Keep the confirm + the tap-through guard on both | `NEXT` | WP-10, WP-51, WP-28a |
 | WP-28f | Bookshelf theme — gothic/Victorian palette + book-stack shelf layout | `TODO` | WP-28b, WP-28a, WP-28e |
 | WP-28j | No-flash shelf sort/filter — navigating to `/` with a saved sort/filter briefly shows the unsorted/unfiltered shelf before it snaps to the persisted view. The control state lives in `localStorage` and is applied client-side after mount; pre-apply it before paint (reuse WP-28b's no-flash pattern) or render the shelf from the persisted state | `TODO` | WP-28a, WP-28b |
+| WP-TAGS | Series tags (genre) — a detail-page tag editor (like notes/rating) + shelf-card display of the first tag(s) in the slot **WP-28c** frees (the dropped latest-chapter line) + a tag filter on the shelf; a feed use later. Filed by WP-28c. **UI-only — the `tags String[]` column already exists on `Series` (unused), so no migration / no WP-04 pause.** | `TODO` | WP-10, WP-28c, WP-28a |
 | WP-55 | Decode HTML entities in **API-source** chapter titles — `decodeHTML` in `parseApiChapters` (feed/TOC paths already decode) + a one-off script to fix stored API-source rows | `TODO` | WP-45 |
 | WP-56 | Fix `parseToc` lock-detection false positives — **`LOCK_CLASS` matches "lock" inside "b`lock`"** so *every WordPress block-theme source* (`wp-block-*` classes) marks **all** chapters `LOCKED`; also `LOCK_TEXT` matches generic title words ("coin"/"premium" in a chapter title) and the lock **scope** is a whole shared content `<div>` (bare-anchor TOCs) that taints every row. Use class-**token boundaries** (not substring), gate lock state on markers not free text, and don't treat a giant shared container as a per-chapter row. **Data-correctness** (a real source had 556 free chapters all shown locked; fixed in prod by hand). **Drivers (local IDs):** block→lock confirmed on B01 (×5 series) + B02 (`wp-block` classes, 0 real lock markers); B03 is a **non-block variant** (0 `wp-block` — a shared big scope + a stray `LOCK_TEXT` token elsewhere on the page taints all rows) | `TODO` | WP-17, WP-20 |
 | WP-57 | `parseToc` must exclude **recommendation / "other novels" widgets** and **series-scope** to the novel's own chapter links — "you-may-also-like" / "popular" / "site-latest" cards are `/novel/<other-slug>` links whose "… Chapters: N" text trips `CHAPTER_TEXT`, so a JS/SPA source whose render captured only the shell scrapes the widget as chapters (and its `<h1>` as the title). Extends WP-36 (region scoping) with a **cross-series-card** exclusion + slug-family scoping to the series' own chapters. **Data-correctness** (wrong series' chapters ingested). **Drivers (local IDs):** B07 (×2), B08; also the 2026-08-22 XHR-SPA source (16 recommendation cards as "chapters") | `TODO` | WP-36, WP-17 |
@@ -141,7 +144,8 @@ WP-52 (poll-time hard-fail render escalation — PAGE_WATCH PLAIN + Cloudflare 4
 WP-28a (shelf sort + filter — pure `lib/shelf.ts` [4 sort modes + status/title/min-rating filter] behind a client control bar, localStorage-persisted; **subsumes WP-15** `lib/search.ts`) ·
 WP-28b (theme system — `[data-theme]` token architecture + pre-paint inline-script/localStorage no-flash + settings picker; night/scroll/sci-fi; `--color-on-glow` tokenized) ·
 WP-28h (per-theme scenes/cards/detail — scroll ink-tree+petals+rolled-scroll cards+wax-seal badge+opened-scroll detail; sci-fi holo env: glassy chrome + grid/binary-flicker/glitch/shimmer + HUD glass cards/detail; hydration-safe deterministic scatter; reduced-motion-gated; licensed assets via Vercel Blob with tree-hidden/red-circle onError fallback; hero "here" de-emphasized — the one night-visible change). ·
-WP-28i (private theme-asset proxy — WP-28h's licensed images moved to a **private** Blob store, served only through the auth-gated `api/theme-asset/[name]` route: exact-match allowlist [`themeAssetBlobPath`, pure/tested], stream-through with `Cache-Control: private` + ETag/304, any failure → 404 so the WP-28h `onError` fallback holds; upload script flipped to `access:'private'`, prod base = `/api/theme-asset`).
+WP-28i (private theme-asset proxy — licensed images via an auth-gated Blob route) ·
+WP-28c (feed digest home + shelf tab — cross-series new/now-free digest at `/`, shelf moved to `/shelf`; filed WP-TAGS).
 
 ### ⏭ Later tiers (M2–M4)
 
@@ -294,10 +298,10 @@ wax-seal badge+opened-scroll detail, sci-fi's full holo env of glassy chrome + g
 HUD glass cards/detail; hydration-safe deterministic scatter, reduced-motion-gated, licensed assets served via Vercel
 Blob with a tree-hidden/red-circle `onError` fallback, and the one night-visible change — the hero "here" no longer
 emphasized; detail in [docs/superpowers/plans/2026-08-28-wp28h-theme-scenes.md](docs/superpowers/plans/2026-08-28-wp28h-theme-scenes.md),
-no `### WP-28h` PLAN section since it didn't reorder the active queue); the
-remaining facets are **[WP-28c](#wp-28c--feed-page-vs-library-split)** (feed vs library split, NEXT) and
+no `### WP-28h` PLAN section since it didn't reorder the active queue); **[WP-28c](docs/PLAN-archive.md#wp-28c--feed-digest-home-and-shelf-tab-done-2026-08-31)** (feed digest home + shelf
+tab, DONE) has now shipped too; the remaining facet is
 **[WP-28e](#wp-28e--shelf-delete-affordance-swipe-to-delete--edit-mode)** (shelf delete affordance — swipe-to-delete +
-edit mode) — plus a later add, **[WP-28d](docs/PLAN-archive.md#wp-28d--locked-chapter-display-dim--marker--filtersort-done-2026-08-21)**
+edit mode, NEXT) — plus a later add, **[WP-28d](docs/PLAN-archive.md#wp-28d--locked-chapter-display-dim--marker--filtersort-done-2026-08-21)**
 (locked-chapter display / filter / sort, DONE). WP-28b's design pass also spawned **[WP-28f](#wp-28f--bookshelf-theme)**
 (bookshelf theme, spiked feasible) and two low-priority owner-requested extensions, **WP-28g** (header quick-switch) and
 **WP-THEMESYNC** (cross-device theme persistence). All use `frontend-design` (primary) + `ai-toolkit:design-workflow` for
@@ -339,18 +343,6 @@ fix — same file.**)** **(b) catch-all — decode at display** in the
 library/detail title render, which fixes rows already stored encoded without waiting for a re-extract. Belongs partly
 in the data layer, filed here because the visible symptom + the display-decode safety net are frontend; stays under
 WP-28 (the residual display-decode half; root-cause extraction decode shipped as WP-30b).
-
-### WP-28c — Feed page vs library split
-
-**Goal:** decide and build a cross-series **"what's new across everything"** river, distinct from the per-series
-**library grid** — the most conceptual of the three (it's an information-architecture decision before it's a build).
-
-**Scope to design when picked up:** **one view or two?** — a chronological feed of newly-seen chapters across *all*
-series (grouped by day / by series?) versus the current per-series card shelf ([`(app)/page.tsx`](<src/app/(app)/page.tsx>)).
-Decide **navigation** (tabs vs separate routes), the **default landing** view, and what the feed row shows (series +
-chapter + unlock/now-free events from WP-20). Needs a **brainstorm on IA** up front. **Skills:** `frontend-design`.
-**Depends:** WP-10 (done). **DoD:** decided IA documented in its spec; the feed view (if built) lists cross-series new
-chapters in time order and links through to the chapter/detail.
 
 ### WP-28e — Shelf delete affordance (swipe-to-delete + edit mode)
 
@@ -426,6 +418,25 @@ cross-device idea) so SSR can render the correct view directly. Keep it hydratio
 reuse, done). **DoD:** navigating to `/` with a non-default saved sort/filter shows the saved view on the first
 painted frame (no flash of the default order); no hydration-mismatch warnings; the controls still persist + apply on
 change as before.
+
+### WP-TAGS — Series tags (genre)
+
+**Goal (owner, 2026-08-30; filed by WP-28c):** user-assigned tags on a series — mainly genre — that show on the shelf
+card in the slot WP-28c frees (it drops the latest-chapter line and, in this WP, fills that space with the first tag(s)
+that fit).
+
+**UI-only — no migration.** The `tags String[]` column already exists on `Series` (line ~112 of the schema, currently
+unused), so this WP touches no schema and the WP-04 pause does **not** apply.
+
+**Scope to design when picked up:** a **detail-page tag editor** alongside notes/rating (add/remove, free-text with
+light normalization); **shelf-card display** of the first N tags in the WP-28c slot (truncate to fit, one line); a **tag
+filter** on the shelf control bar (extends WP-28a's `lib/shelf.ts` filter); and a **later feed use** (e.g. group/annotate
+digest rows by genre) noted but not built here. Keep `lib/shelf.ts` pure and test-first. (If tags should later be
+shared/renameable across series, a `Tag`/join model is a *future* migration — out of this WP's UI-only scope.)
+
+**Skills:** `frontend-design` (editor + shelf display). **Depends:** WP-10 (detail UI, done), WP-28c (frees + reserves
+the shelf slot), WP-28a (shelf filter to extend). **DoD:** tags are assignable on the detail page and persist; the shelf
+card shows the first tag(s) in the freed slot; the shelf can filter by tag; existing shelf sort/filter/delete still work.
 
 ### WP-31 — Tab-structured premium TOCs (renderer tab capture + tab-membership access)
 

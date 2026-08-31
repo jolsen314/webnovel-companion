@@ -9,7 +9,7 @@ test('WP-28a: shelf sort reorders the grid and persists across reload', async ({
   await seedSeries({ title: 'Alpha Tale', chapters: [{ title: 'c1', url: 'https://ex.test/a/1' }] });
   await seedSeries({ title: 'Mid Tale', chapters: [{ title: 'c1', url: 'https://ex.test/m/1' }] });
 
-  await page.goto('/');
+  await page.goto('/shelf');
   await expect(page.locator('.card__title')).toHaveCount(3);
 
   // A–Z sort → deterministic title order.
@@ -27,7 +27,7 @@ test('WP-28a: status, rating, and search filters narrow the grid and update the 
   await seedSeries({ title: 'Planned Two', status: 'PLANNED', rating: 2, chapters: [{ title: 'c', url: 'https://ex.test/p/1' }] });
   await seedSeries({ title: 'Reading Unrated', status: 'READING', chapters: [{ title: 'c', url: 'https://ex.test/u/1' }] });
 
-  await page.goto('/');
+  await page.goto('/shelf');
   await expect(page.locator('.card__title')).toHaveCount(3);
 
   // Status filter → only the PLANNED series; the count line reflects the narrowing.

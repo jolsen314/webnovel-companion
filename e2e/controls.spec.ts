@@ -12,7 +12,7 @@ test('library grid renders and detail controls persist', async ({ page }) => {
   });
 
   // Library grid renders the seeded card.
-  await page.goto('/');
+  await page.goto('/shelf');
   await expect(page.getByRole('heading', { name: 'Ctrl Series' })).toBeVisible();
 
   // Detail: the chapters render as clickable links pointing at their real URLs.

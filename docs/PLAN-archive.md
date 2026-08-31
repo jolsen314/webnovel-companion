@@ -208,6 +208,47 @@ quick-switch (settings-page only — filed as **WP-28g**), no cross-device sync 
 **WP-THEMESYNC**), no per-theme mono font (shared Plex Mono). A fourth theme, **bookshelf** (gothic/Victorian palette +
 book-stack shelf layout), was spiked but scoped out to its own WP — filed as **WP-28f** with the spike findings.
 
+### WP-28c — Feed digest home and shelf tab (DONE 2026-08-31)
+
+**Shipped:** decided the "one view or two?" IA question as **two views behind a shared tab control** — a new
+cross-series **feed digest at `/`** and the existing per-series card grid moved to **`/shelf`** — rather than merging
+them into one river. Design spec + implementation plan:
+[`docs/superpowers/specs/2026-08-29-wp28c-feed-vs-shelf-design.md`](../docs/superpowers/specs/2026-08-29-wp28c-feed-vs-shelf-design.md),
+[`docs/superpowers/plans/2026-08-30-wp28c-feed-vs-shelf.md`](../docs/superpowers/plans/2026-08-30-wp28c-feed-vs-shelf.md).
+
+**What shipped:**
+- **Pure digest core** — [`src/lib/feed.ts`](../src/lib/feed.ts): `buildFeed(inputs, now)` orders `FeedEvent`s
+  (`NEW_CHAPTER` | `NOW_FREE`) newest-first, groups them into UTC day buckets with human labels ("Today" /
+  "Yesterday" / weekday-date), and `countNewSince(events, watermark)` for the per-device "seen" count. A chapter that
+  ever unlocked (`becameFreeAt != null`) surfaces **only** as its `NOW_FREE` event, never also as `NEW_CHAPTER` — the
+  guard that keeps one chapter from double-notifying. Next-/Prisma-free, unit-tested
+  ([`tests/unit/feed.test.ts`](../tests/unit/feed.test.ts)).
+- **`getFeed()` service** — [`src/server/services/feed.ts`](../src/server/services/feed.ts): READING-series only, a
+  30-day / 150-event bounded window, `access === 'LOCKED'` chapters excluded (mirrors the push-notify filter — a
+  still-locked new chapter isn't a readable event), each series' read/unread split via `orderChaptersForReading` +
+  `lastReadChapterId`, and a consolidated **`downSources`** list (active, non-link-only, `health === 'LIKELY_DOWN'`)
+  for the attention strip. Derived on read from existing `Chapter`/`Source` columns — **no schema change**.
+  Integration-tested ([`tests/integration/services.test.ts`](../tests/integration/services.test.ts)).
+- **Feed UI** — [`Feed.tsx`](../src/app/(app)/Feed.tsx) renders the source-down "needs attention" strip, day-grouped
+  rows (chapter title/number primary, series name secondary, click-through to the chapter URL), a per-device **seen
+  divider** (`localStorage` watermark, SSR-safe mount pattern — no hydration mismatch), already-read rows dimmed, and
+  an empty state distinct from the shelf's. `/` ([`page.tsx`](<../src/app/(app)/page.tsx>)) now renders it behind a
+  shared **[`ViewTabs.tsx`](../src/app/(app)/ViewTabs.tsx)** control also mounted on the new
+  [`/shelf`](<../src/app/(app)/shelf/page.tsx>) route, which took over the prior shelf grid render.
+- **Shelf card simplified:** the latest-chapter line + relative time dropped in favor of a plain **chapter count**
+  (the WP-28c slot later reserved for **WP-TAGS**); the unread badge is now hidden on non-READING series (`Shelf.tsx`,
+  `globals.css`).
+- **Post-add + sort:** [`add/page.tsx`](<../src/app/(app)/add/page.tsx>) now redirects a successful add to
+  `/shelf?added=<id>` with the new card highlighted, instead of landing on the feed; a new **"Recently added"** sort
+  mode (`createdAt` desc) was added to `lib/shelf.ts` / `SORT_OPTIONS`, with `listSeries` now selecting `createdAt`.
+- **Filed WP-TAGS** — series genre tags (detail-page editor + shelf-card display in the freed slot + a shelf filter)
+  was scoped out as its own UI-only WP (the `tags String[]` column already exists on `Series`, unused — no
+  migration).
+
+**Testing:** unit (`feed.test.ts`, `shelf.test.ts` sort addition), integration (`getFeed` in `services.test.ts`), and
+Playwright E2E (`e2e/feed.spec.ts`, plus `controls.spec.ts`/`delete.spec.ts`/`link-only-add.spec.ts`/`shelf.spec.ts`/
+`smoke.spec.ts`/theme-scene specs repointed from `/` to `/shelf` where they exercise the shelf grid).
+
 ### WP-28d — Locked-chapter display (dim / marker) + filter/sort (DONE 2026-08-21)
 
 **Shipped (2026-08-21):** lucide `Lock` marker on `LOCKED` rows (accent glyph, no dim) + a persisted **"Hide locked"**

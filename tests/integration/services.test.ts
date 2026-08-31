@@ -15,6 +15,7 @@ import {
   reclassifySource,
   setApiDescriptor,
   switchToPageWatch,
+  getFeed,
   type FetchImpl,
 } from '../../src/server/services';
 import { db } from '../../src/server/db';
@@ -1776,5 +1777,147 @@ describe('backfillWithEscalation (real DB, WP-34)', () => {
     expect(res.added).toBe(1);
     const src = await db.source.findFirstOrThrow({ where: { seriesId } });
     expect(src.fetchMode).toBe('PLAIN');
+  });
+});
+
+describe('getFeed (real DB)', () => {
+  test('new-chapter + now-free for READING series; excludes locked + non-reading; a formerly-locked chapter notifies once', async () => {
+    const userId = getCurrentUserId();
+    const now = new Date('2026-08-30T12:00:00Z');
+    const recent = new Date('2026-08-30T06:00:00Z');
+    const older = new Date('2026-08-29T06:00:00Z');
+
+    await db.series.create({
+      data: {
+        userId,
+        title: 'Reading One',
+        status: 'READING',
+        chapters: {
+          create: [
+            { title: 'free-recent', url: 'https://ex.test/r/2', access: 'FREE', discoveredAt: recent },
+            { title: 'free-older', url: 'https://ex.test/r/1', access: 'FREE', discoveredAt: older },
+            { title: 'locked', url: 'https://ex.test/r/3', access: 'LOCKED', discoveredAt: recent },
+            // Discovered locked, now unlocked → access FREE + becameFreeAt set.
+            { title: 'unlocked', url: 'https://ex.test/r/4', access: 'FREE', discoveredAt: older, becameFreeAt: recent },
+          ],
+        },
+      },
+    });
+    await db.series.create({
+      data: {
+        userId,
+        title: 'Completed One',
+        status: 'COMPLETED',
+        chapters: { create: [{ title: 'done', url: 'https://ex.test/c/1', access: 'FREE', discoveredAt: recent }] },
+      },
+    });
+
+    const feed = await getFeed(now);
+    const items = feed.groups.flatMap((g) => g.items);
+    const titles = items.map((i) => i.chapterTitle);
+
+    // The formerly-locked chapter surfaces exactly once, as NOW_FREE (no double-notify).
+    const unlocked = items.filter((i) => i.chapterTitle === 'unlocked');
+    expect(unlocked).toHaveLength(1);
+    expect(unlocked[0]!.kind).toBe('NOW_FREE');
+
+    // Readable-from-the-start chapters are NEW_CHAPTER; still-locked + non-reading excluded.
+    expect(items.find((i) => i.chapterTitle === 'free-recent')?.kind).toBe('NEW_CHAPTER');
+    expect(titles).toContain('free-older');
+    expect(titles).not.toContain('locked');
+    expect(titles).not.toContain('done');
+    expect(feed.groups[0]!.label).toBe('Today');
+  });
+
+  test('computes the read flag from reading progress (chapters at/before the pointer are read)', async () => {
+    const userId = getCurrentUserId();
+    const at = new Date('2026-08-30T06:00:00Z');
+    const series = await db.series.create({
+      data: {
+        userId,
+        title: 'Progress Series',
+        status: 'READING',
+        chapters: {
+          create: [
+            { title: 'prog-read', url: 'https://ex.test/prog/1', access: 'FREE', number: 1, discoveredAt: at },
+            { title: 'prog-unread', url: 'https://ex.test/prog/2', access: 'FREE', number: 2, discoveredAt: at },
+          ],
+        },
+      },
+      include: { chapters: true },
+    });
+    const first = series.chapters.find((c) => c.title === 'prog-read')!;
+    await db.readingProgress.create({ data: { userId, seriesId: series.id, lastReadChapterId: first.id } });
+
+    const items = (await getFeed(new Date('2026-08-30T12:00:00Z'))).groups.flatMap((g) => g.items);
+    expect(items.find((i) => i.chapterTitle === 'prog-read')?.read).toBe(true); // at/before the pointer
+    expect(items.find((i) => i.chapterTitle === 'prog-unread')?.read).toBe(false); // after the pointer
+  });
+
+  test('surfaces a LIKELY_DOWN source of a READING series as an attention row', async () => {
+    const userId = getCurrentUserId();
+    await db.series.create({
+      data: {
+        userId,
+        title: 'Down Series',
+        status: 'READING',
+        sources: {
+          create: {
+            url: 'https://down.test/novel/',
+            host: 'down.test',
+            type: 'PAGE_WATCH',
+            health: 'LIKELY_DOWN',
+          },
+        },
+      },
+    });
+    const feed = await getFeed(new Date('2026-08-30T12:00:00Z'));
+    expect(feed.attention.some((a) => a.host === 'down.test' && a.seriesTitle === 'Down Series')).toBe(true);
+  });
+
+  test('surfaces down sources for still-active statuses; excludes Completed + Dropped', async () => {
+    const userId = getCurrentUserId();
+    const downSeries = (title: string, status: 'PAUSED' | 'PLANNED' | 'COMPLETED' | 'DROPPED') =>
+      db.series.create({
+        data: {
+          userId,
+          title,
+          status,
+          sources: { create: { url: `https://${title}.test/novel/`, host: `${title}.test`, type: 'PAGE_WATCH', health: 'LIKELY_DOWN' } },
+        },
+      });
+    await downSeries('paused', 'PAUSED');
+    await downSeries('planned', 'PLANNED');
+    await downSeries('completed', 'COMPLETED');
+    await downSeries('dropped', 'DROPPED');
+
+    const hosts = (await getFeed(new Date('2026-08-30T12:00:00Z'))).attention.map((a) => a.host);
+    expect(hosts).toContain('paused.test'); // still-active → a down source is actionable
+    expect(hosts).toContain('planned.test');
+    expect(hosts).not.toContain('completed.test'); // finished works don't need new chapters
+    expect(hosts).not.toContain('dropped.test'); // dropped on purpose
+  });
+
+  test('does not surface a link-only or healthy source', async () => {
+    const userId = getCurrentUserId();
+    await db.series.create({
+      data: {
+        userId,
+        title: 'Link Only Down',
+        status: 'READING',
+        sources: { create: { url: 'https://lo.test/novel/', host: 'lo.test', type: 'PAGE_WATCH', health: 'LIKELY_DOWN', linkOnly: true } },
+      },
+    });
+    await db.series.create({
+      data: {
+        userId,
+        title: 'Healthy',
+        status: 'READING',
+        sources: { create: { url: 'https://ok.test/novel/', host: 'ok.test', type: 'PAGE_WATCH', health: 'HEALTHY' } },
+      },
+    });
+    const hosts = (await getFeed(new Date('2026-08-30T12:00:00Z'))).attention.map((a) => a.host);
+    expect(hosts).not.toContain('lo.test'); // link-only → no health alert (matches the shelf dot gating)
+    expect(hosts).not.toContain('ok.test'); // healthy → not down
   });
 });

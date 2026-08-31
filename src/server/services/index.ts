@@ -36,6 +36,7 @@ import { classifyPushFailure, sendPushMessages, type PushSendPorts, type SendSum
 import { getNotificationPrefs } from './notificationPrefs';
 
 export { listSeries, getSeries, updateSeries } from './series';
+export { getFeed } from './feed';
 export { savePushSubscription } from './push';
 export { getNotificationPrefs, updateNotificationPrefs, type NotificationPrefsView } from './notificationPrefs';
 export {

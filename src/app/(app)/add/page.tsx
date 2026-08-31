@@ -9,7 +9,7 @@ import { ThemeScene } from '../ThemeScene';
  *  added-but-similar (possible duplicate), or a plain add. Replaces three progressive `as` casts. */
 type AddSeriesResponse =
   | { needsConfirm: true; reason: 'blocked' | 'no-chapters'; suggestedTitle: string; url: string }
-  | { needsConfirm?: false; title?: string; similarTo?: { id: string; title: string } };
+  | { needsConfirm?: false; seriesId?: string; title?: string; similarTo?: { id: string; title: string } };
 
 /** POST a body to `/api/series`. `ok` carries the typed success union; a failure distinguishes a
  *  server response (`reached: true`, with any `error` string) from an unreachable server. */
@@ -35,9 +35,11 @@ export default function AddSeriesPage() {
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [similar, setSimilar] = useState<{ addedTitle: string; existing: { id: string; title: string } } | null>(
-    null,
-  );
+  const [similar, setSimilar] = useState<{
+    addedId?: string;
+    addedTitle: string;
+    existing: { id: string; title: string };
+  } | null>(null);
   const [confirm, setConfirm] = useState<{ reason: 'blocked' | 'no-chapters'; suggestedTitle: string; url: string } | null>(null);
   const [confirmTitle, setConfirmTitle] = useState('');
 
@@ -60,12 +62,12 @@ export default function AddSeriesPage() {
       return;
     }
     if (data.similarTo) {
-      // Non-blocking: the series WAS added; just flag a possible duplicate.
-      setSimilar({ addedTitle: data.title ?? 'the series', existing: data.similarTo });
+      // Non-blocking: the series WAS added; flag a possible duplicate but still let them jump to it.
+      setSimilar({ addedId: data.seriesId, addedTitle: data.title ?? 'the series', existing: data.similarTo });
       setBusy(false);
       return;
     }
-    router.push('/');
+    router.push(data.seriesId ? `/shelf?added=${data.seriesId}` : '/shelf');
     router.refresh();
   }
 
@@ -79,7 +81,8 @@ export default function AddSeriesPage() {
       title: confirmTitle.trim() || confirm.suggestedTitle,
     });
     if (result.ok) {
-      router.push('/');
+      const sid = result.data.needsConfirm ? undefined : result.data.seriesId;
+      router.push(sid ? `/shelf?added=${sid}` : '/shelf');
       router.refresh();
       return;
     }
@@ -103,7 +106,7 @@ export default function AddSeriesPage() {
             <Link href={`/series/${similar.existing.id}`} className="btn">
               Open “{similar.existing.title}”
             </Link>
-            <Link href="/" className="btn btn--primary" onClick={() => router.refresh()}>
+            <Link href={similar.addedId ? `/shelf?added=${similar.addedId}` : '/shelf'} className="btn btn--primary" onClick={() => router.refresh()}>
               Keep both, go to library
             </Link>
           </div>

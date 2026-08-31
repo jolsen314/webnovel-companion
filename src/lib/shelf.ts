@@ -13,9 +13,11 @@ export interface ShelfSeries {
   status: SeriesStatus;
   /** Latest chapter's activity time, or null for a series with no chapters yet. */
   latestChapter: { at: Date } | null;
+  /** Series creation time — for the "Recently added" sort. */
+  createdAt: Date;
 }
 
-export type ShelfSort = 'recent' | 'unread' | 'title' | 'rating';
+export type ShelfSort = 'recent' | 'unread' | 'title' | 'rating' | 'added';
 
 export interface ShelfFilter {
   status: SeriesStatus | 'ALL';
@@ -68,6 +70,12 @@ export function sortSeries<T extends ShelfSeries>(rows: readonly T[], mode: Shel
         const ra = a.rating ?? -Infinity;
         const rb = b.rating ?? -Infinity;
         if (rb !== ra) return rb - ra;
+        break;
+      }
+      case 'added': {
+        const ca = a.createdAt.getTime();
+        const cb = b.createdAt.getTime();
+        if (ca !== cb) return cb - ca;
         break;
       }
       case 'title':
