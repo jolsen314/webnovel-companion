@@ -102,7 +102,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 | WP-28e | Shelf delete affordance — hide the always-visible per-card delete (WP-51) by default and expose it two ways (**both** wanted): (1) an iOS-Mail-style **swipe-left-to-reveal-Delete** on touch, and (2) an **"Edit" mode toggle** on the shelf head that reveals the per-card delete buttons (also the non-touch / keyboard / a11y path). Keep the confirm + the tap-through guard on both | `TODO` | WP-10, WP-51, WP-28a |
 | WP-28f | Bookshelf theme — gothic/Victorian palette + book-stack shelf layout | `TODO` | WP-28b, WP-28a, WP-28e |
 | WP-28j | No-flash shelf sort/filter — navigating to `/` with a saved sort/filter briefly shows the unsorted/unfiltered shelf before it snaps to the persisted view. The control state lives in `localStorage` and is applied client-side after mount; pre-apply it before paint (reuse WP-28b's no-flash pattern) or render the shelf from the persisted state | `TODO` | WP-28a, WP-28b |
-| WP-TAGS | Series tags (genre) — a `tags` field on `Series` + a detail-page tag editor (like notes/rating) + shelf-card display of the first tag(s) in the slot **WP-28c** frees (the dropped latest-chapter line) + a tag filter on the shelf; a feed use later. Filed by WP-28c. **Schema change → the WP-04 schema/migration pause applies (pick DB skills + check in first).** | `TODO` | WP-10, WP-28c, WP-28a |
+| WP-TAGS | Series tags (genre) — a detail-page tag editor (like notes/rating) + shelf-card display of the first tag(s) in the slot **WP-28c** frees (the dropped latest-chapter line) + a tag filter on the shelf; a feed use later. Filed by WP-28c. **UI-only — the `tags String[]` column already exists on `Series` (unused), so no migration / no WP-04 pause.** | `TODO` | WP-10, WP-28c, WP-28a |
 | WP-55 | Decode HTML entities in **API-source** chapter titles — `decodeHTML` in `parseApiChapters` (feed/TOC paths already decode) + a one-off script to fix stored API-source rows | `TODO` | WP-45 |
 | WP-56 | Fix `parseToc` lock-detection false positives — **`LOCK_CLASS` matches "lock" inside "b`lock`"** so *every WordPress block-theme source* (`wp-block-*` classes) marks **all** chapters `LOCKED`; also `LOCK_TEXT` matches generic title words ("coin"/"premium" in a chapter title) and the lock **scope** is a whole shared content `<div>` (bare-anchor TOCs) that taints every row. Use class-**token boundaries** (not substring), gate lock state on markers not free text, and don't treat a giant shared container as a per-chapter row. **Data-correctness** (a real source had 556 free chapters all shown locked; fixed in prod by hand). **Drivers (local IDs):** block→lock confirmed on B01 (×5 series) + B02 (`wp-block` classes, 0 real lock markers); B03 is a **non-block variant** (0 `wp-block` — a shared big scope + a stray `LOCK_TEXT` token elsewhere on the page taints all rows) | `TODO` | WP-17, WP-20 |
 | WP-57 | `parseToc` must exclude **recommendation / "other novels" widgets** and **series-scope** to the novel's own chapter links — "you-may-also-like" / "popular" / "site-latest" cards are `/novel/<other-slug>` links whose "… Chapters: N" text trips `CHAPTER_TEXT`, so a JS/SPA source whose render captured only the shell scrapes the widget as chapters (and its `<h1>` as the title). Extends WP-36 (region scoping) with a **cross-series-card** exclusion + slug-family scoping to the series' own chapters. **Data-correctness** (wrong series' chapters ingested). **Drivers (local IDs):** B07 (×2), B08; also the 2026-08-22 XHR-SPA source (16 recommendation cards as "chapters") | `TODO` | WP-36, WP-17 |
@@ -434,17 +434,18 @@ change as before.
 card in the slot WP-28c frees (it drops the latest-chapter line and, in this WP, fills that space with the first tag(s)
 that fit).
 
-**Scope to design when picked up:** a `tags` field on `Series` (**schema change → the standing WP-04 pause applies:
-pick DB skills + check in with the owner before the migration**; likely a `String[]` column, or a `Tag`/join model if
-tags should be shared/renameable across series); a **detail-page tag editor** alongside notes/rating (add/remove,
-free-text with light normalization); **shelf-card display** of the first N tags in the WP-28c slot (truncate to fit,
-one line); a **tag filter** on the shelf control bar (extends WP-28a's `lib/shelf.ts` filter); and a **later feed use**
-(e.g. group/annotate digest rows by genre) noted but not built here. Keep `lib/shelf.ts` pure and test-first.
+**UI-only — no migration.** The `tags String[]` column already exists on `Series` (line ~112 of the schema, currently
+unused), so this WP touches no schema and the WP-04 pause does **not** apply.
 
-**Skills:** `frontend-design` (editor + shelf display) + `mattpocock-skills:domain-modeling` (tag vocabulary / whether
-`String[]` vs. a `Tag` model). **Depends:** WP-10 (detail UI, done), WP-28c (frees + reserves the shelf slot), WP-28a
-(shelf filter to extend). **DoD:** tags are assignable on the detail page and persist; the shelf card shows the first
-tag(s) in the freed slot; the shelf can filter by tag; existing shelf sort/filter/delete still work.
+**Scope to design when picked up:** a **detail-page tag editor** alongside notes/rating (add/remove, free-text with
+light normalization); **shelf-card display** of the first N tags in the WP-28c slot (truncate to fit, one line); a **tag
+filter** on the shelf control bar (extends WP-28a's `lib/shelf.ts` filter); and a **later feed use** (e.g. group/annotate
+digest rows by genre) noted but not built here. Keep `lib/shelf.ts` pure and test-first. (If tags should later be
+shared/renameable across series, a `Tag`/join model is a *future* migration — out of this WP's UI-only scope.)
+
+**Skills:** `frontend-design` (editor + shelf display). **Depends:** WP-10 (detail UI, done), WP-28c (frees + reserves
+the shelf slot), WP-28a (shelf filter to extend). **DoD:** tags are assignable on the detail page and persist; the shelf
+card shows the first tag(s) in the freed slot; the shelf can filter by tag; existing shelf sort/filter/delete still work.
 
 ### WP-31 — Tab-structured premium TOCs (renderer tab capture + tab-membership access)
 

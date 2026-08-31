@@ -40,10 +40,11 @@ newly added series is easy to find.
   (`nextDueRelease`) is fire-once and stamps `scheduleLastNotifiedAt`, so a
   clean derivation isn't available. It returns with the materialized log,
   alongside the WP-21 "planned fully ready" event.
-- **Genre tags are not built here, but this WP files their WP.** No tag field
-  exists on `Series` yet; the shelf slot freed below is reserved for the first
-  assigned tags. This WP adds **WP-TAGS** to PLAN.md (schema field + detail-page
-  tag editor + shelf display in the freed slot + tag filter; later a feed use).
+- **Genre tags are not built here, but this WP files their WP.** A `tags
+  String[]` field already exists on `Series` (unused), so **WP-TAGS is UI-only —
+  no migration**: a detail-page tag editor, shelf display in the freed slot, a
+  tag filter, and later a feed use. The shelf slot freed below is reserved for
+  the first assigned tags. This WP adds WP-TAGS to PLAN.md.
 - **No read-state changes.** The feed reads reading progress; it never writes
   it.
 - **Paying-subscriber series (future, very low priority).** For a series the
