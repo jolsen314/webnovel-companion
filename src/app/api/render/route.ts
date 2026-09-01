@@ -26,11 +26,13 @@ export async function POST(request: Request) {
 
   const body = await readJson(request);
   if (!body.ok) return jsonError(body.error);
-  const value = body.value as { url?: unknown; pagination?: unknown };
+  const value = body.value as { url?: unknown; pagination?: unknown; capture?: unknown };
   const url = value?.url;
   if (typeof url !== 'string') {
     return jsonError('A "url" string is required.');
   }
+  // WP-54: capture mode returns the JSON XHRs the page fires (for the apiInfer detector).
+  const capture = value.capture === true;
   // Shallow-validate: a well-formed PaginationSpec needs a string pageParam (the query-param
   // NAME to increment) + numeric perPage. Anything else (missing, malformed) is treated as
   // "no pagination" — the single-page JSON detect.
@@ -49,7 +51,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    return NextResponse.json(await renderPage(url, { pagination }));
+    return NextResponse.json(await renderPage(url, { pagination, capture }));
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'render failed' }, { status: 500 });
   }

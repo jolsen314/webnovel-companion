@@ -48,6 +48,7 @@ export {
   listSeriesForCleanup,
   reclassifySource,
   setApiDescriptor,
+  getSourceForProbe,
 } from './cleanup';
 import { reclassifySource } from './cleanup';
 

@@ -1,5 +1,6 @@
 import type { PoliteResult } from './fetch';
 import type { PaginationSpec } from './apiAdapter';
+import type { ApiCapture } from './apiInfer';
 
 /**
  * Adapter to the headless renderer service (WP-17b). It POSTs a URL to the render
@@ -91,5 +92,49 @@ export function makeRenderFetch(
       lastModified: null,
       finalUrl: payload.finalUrl ?? url,
     };
+  };
+}
+
+export interface RenderCaptureResult {
+  ok: boolean;
+  finalUrl?: string;
+  /** The JSON XHR/fetch responses the page fired while rendering. */
+  captures: ApiCapture[];
+  error?: string;
+}
+
+/**
+ * WP-54: ask the render service to load a page and hand back the JSON XHR/fetch responses it fired
+ * (`POST <endpoint> { url, capture: true }` → `{ finalUrl, captures }`), so the `apiInfer` detector
+ * can find the runtime chapters API that the static-HTML `probeForApi` can't see. Never throws — a
+ * service/network failure surfaces as `{ ok: false, captures: [] }`. HTTP injected for testability.
+ */
+export function makeRenderCapture(
+  config: RenderFetchConfig,
+  httpImpl: RenderHttp = globalThis.fetch as unknown as RenderHttp,
+): (url: string) => Promise<RenderCaptureResult> {
+  return async (url) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), config.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+    try {
+      const res = await httpImpl(config.endpoint, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          ...(config.secret ? { authorization: `Bearer ${config.secret}` } : {}),
+        },
+        body: JSON.stringify({ url, capture: true }),
+        signal: controller.signal,
+      });
+      if (!res.ok || res.status >= 400) {
+        return { ok: false, captures: [], error: `renderer returned ${res.status}` };
+      }
+      const payload = (await res.json()) as { finalUrl?: string; captures?: ApiCapture[] };
+      return { ok: true, finalUrl: payload.finalUrl, captures: payload.captures ?? [] };
+    } catch (e) {
+      return { ok: false, captures: [], error: e instanceof Error ? e.message : 'render capture failed' };
+    } finally {
+      clearTimeout(timer);
+    }
   };
 }

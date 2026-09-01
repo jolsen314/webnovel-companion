@@ -21,9 +21,12 @@ import {
   backfillFromToc,
   reclassifySource,
   setApiDescriptor,
+  getSourceForProbe,
   renderPort,
 } from '../src/server/services/index';
-import type { ApiDescriptor } from '../src/lib/feeds/apiAdapter';
+import { parseApiChapters, type ApiDescriptor } from '../src/lib/feeds/apiAdapter';
+import { makeRenderCapture } from '../src/lib/feeds/renderFetch';
+import { inferApiDescriptors, UNCONFIRMED_PREFIX } from '../src/lib/feeds/apiInfer';
 
 export class UsageError extends Error {}
 
@@ -40,6 +43,7 @@ Commands:
   backfill <seriesId> [--render]
   reclassify-source <sourceId> [--render]
   set-api-descriptor <sourceId> --endpoint <url> --map <json> [--render]
+  probe-api <sourceId> [--render] [--apply]
 
 Without --apply, mutating commands print a dry-run plan and make no changes.
 "list" is always read-only.
@@ -255,6 +259,77 @@ async function cmdBackfill(seriesId: string | undefined, render: boolean, apply:
   console.log(`Backfill complete: added ${result.added} chapter(s), reconciled ${result.reconciled}.`);
 }
 
+async function cmdProbeApi(args: string[], render: boolean, apply: boolean): Promise<void> {
+  const sourceId = args[0];
+  if (!sourceId) throw new UsageError('probe-api requires <sourceId>');
+  const endpoint = process.env.RENDER_URL;
+  if (!endpoint) {
+    throw new UsageError('probe-api needs RENDER_URL (+ RENDER_SECRET) in the env (point it at the deployed /api/render).');
+  }
+  const source = await getSourceForProbe(sourceId);
+  if (!source) {
+    console.log(`No source ${sourceId} for the current user.`);
+    return;
+  }
+
+  console.log(`Rendering ${source.url} to capture its runtime chapter API…`);
+  const capture = makeRenderCapture({ endpoint, secret: process.env.RENDER_SECRET, timeoutMs: 60_000 });
+  const result = await capture(source.url);
+  if (!result.ok) {
+    console.log(`Render capture failed: ${result.error ?? 'unknown error'}`);
+    return;
+  }
+
+  const candidates = inferApiDescriptors(result.captures);
+  if (candidates.length === 0) {
+    console.log(`Captured ${result.captures.length} JSON response(s), but none looked like a chapter list.`);
+    console.log('Inspect by hand: DevTools → Network → Fetch/XHR → reload (see docs/api-sources.md).');
+    return;
+  }
+
+  console.log(`\nFound ${candidates.length} candidate chapter API(s):\n`);
+  candidates.forEach((c, i) => {
+    // Sanity-count: run the inferred descriptor against the captured body it came from.
+    const cap = result.captures.find((x) => x.url.split('?')[0] === c.apiUrl.split('?')[0]);
+    let parsed = c.sampleCount;
+    if (cap) {
+      let origin = c.apiUrl;
+      try {
+        origin = new URL(cap.url).origin;
+      } catch {
+        // keep the apiUrl as the resolution base
+      }
+      parsed = parseApiChapters(cap.body, c.descriptor, origin).length;
+    }
+    console.log(`[${i + 1}] ${c.apiUrl}`);
+    console.log(`    items in capture: ${c.sampleCount}  ·  parsed by descriptor: ${parsed}`);
+    console.log(`    map: ${JSON.stringify(c.descriptor)}`);
+    for (const n of c.notes) console.log(`    ⚠ ${n}`);
+  });
+
+  const top = candidates[0]!;
+  const unconfirmed = top.descriptor.urlTemplate?.includes(UNCONFIRMED_PREFIX) ?? false;
+  if (!apply) {
+    console.log(`\n[dry run] Re-run with --apply to wire candidate [1] onto source ${sourceId} (fetchMode ${render ? 'RENDER' : 'PLAIN'}).`);
+    if (unconfirmed) {
+      console.log('Note: candidate [1] needs its reader-URL prefix filled in first (see ⚠) — wire it via set-api-descriptor once you know the path.');
+    }
+    return;
+  }
+  if (unconfirmed) {
+    throw new UsageError(
+      `candidate [1] has an unconfirmed reader-URL prefix (${UNCONFIRMED_PREFIX}). Open a real chapter, then wire it with:\n` +
+        `  set-api-descriptor ${sourceId} --endpoint '${top.apiUrl}' --map '<edited map>'${render ? ' --render' : ''} --apply`,
+    );
+  }
+  const res = await setApiDescriptor(sourceId, { endpoint: top.apiUrl, map: top.descriptor, render });
+  console.log(
+    res.updated
+      ? `Wired candidate [1] onto source ${sourceId} (API, fetchMode ${render ? 'RENDER' : 'PLAIN'}).`
+      : `No source ${sourceId} for the current user.`,
+  );
+}
+
 export async function run(argv: string[]): Promise<void> {
   const [, , cmd, ...rest] = argv;
   const apply = rest.includes('--apply');
@@ -280,6 +355,8 @@ export async function run(argv: string[]): Promise<void> {
       return cmdReclassifySource(args[0], render, apply);
     case 'set-api-descriptor':
       return cmdSetApiDescriptor(args, render, apply);
+    case 'probe-api':
+      return cmdProbeApi(args, render, apply);
     default:
       throw new UsageError(cmd ? `Unknown command: ${cmd}` : 'No command given');
   }

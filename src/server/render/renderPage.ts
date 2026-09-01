@@ -2,6 +2,7 @@ import chromium from '@sparticuz/chromium';
 import puppeteer from 'puppeteer-core';
 import { assertPublicUrl } from './ssrfGuard';
 import { collectJsonResult } from './renderJson';
+import { shouldCaptureResponse, type ApiCapture } from '../../lib/feeds/apiInfer';
 import type { PaginationSpec } from '../../lib/feeds/apiAdapter';
 
 /**
@@ -43,10 +44,14 @@ async function jsonPageFetch(u: string): Promise<{ status: number; body: string 
   }
 }
 
+/** Politeness/safety bounds on what a WP-54 capture run collects. */
+const MAX_CAPTURES = 25;
+const MAX_CAPTURE_BYTES = 3_000_000;
+
 export async function renderPage(
   url: string,
-  opts: { pagination?: PaginationSpec } = {},
-): Promise<{ status: number; finalUrl: string; html: string }> {
+  opts: { pagination?: PaginationSpec; capture?: boolean } = {},
+): Promise<{ status: number; finalUrl: string; html: string; captures?: ApiCapture[] }> {
   let browser: Awaited<ReturnType<typeof puppeteer.launch>> | undefined;
   try {
     browser = await puppeteer.launch({
@@ -77,8 +82,42 @@ export async function renderPage(
       }
     });
 
+    // WP-54 capture mode: collect the JSON XHR/fetch responses the page fires at runtime, so the
+    // `apiInfer` detector can find a chapters API the static-HTML `probeForApi` can't see. Each
+    // body is read via an async task tracked in `pending` (response events fire concurrently);
+    // we await them after the page settles. Bounded in count + per-body size.
+    const captures: ApiCapture[] = [];
+    const pending: Promise<void>[] = [];
+    if (opts.capture) {
+      page.on('response', (resp) => {
+        if (captures.length + pending.length >= MAX_CAPTURES) return;
+        const headers = resp.headers();
+        if (!shouldCaptureResponse({ resourceType: resp.request().resourceType(), contentType: headers['content-type'] })) {
+          return;
+        }
+        pending.push(
+          (async () => {
+            try {
+              const body = await resp.text();
+              if (body.length <= MAX_CAPTURE_BYTES && captures.length < MAX_CAPTURES) {
+                captures.push({ url: resp.url(), body, headers });
+              }
+            } catch {
+              // a body we can't read (redirect/streamed/aborted) — skip it
+            }
+          })(),
+        );
+      });
+    }
+
     const resp = await page.goto(url, { waitUntil: 'networkidle2', timeout: 45_000 });
     await new Promise((r) => setTimeout(r, 2_000)); // let client-rendered lists settle
+
+    if (opts.capture) {
+      await Promise.allSettled(pending);
+      const html = await page.content();
+      return { status: resp?.status() ?? 200, finalUrl: page.url(), html, captures };
+    }
 
     // WP-45b: JSON resource. `page.content()` on a JSON navigation is the browser's JSON-VIEWER
     // HTML, not the raw body. Once `goto` has (for a CF-gated endpoint) triggered + solved the

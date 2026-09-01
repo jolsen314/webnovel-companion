@@ -136,6 +136,26 @@ describe('cleanup-series CLI (black box, real DB)', () => {
           ),
         ).rejects.toThrow(UsageError);
       });
+
+      // WP-54: urlTemplate satisfies the url requirement in place of urlField.
+      test('--map with urlTemplate (no urlField) passes validation (dry-run, no throw)', async () => {
+        await expect(
+          cli(
+            'set-api-descriptor',
+            'some-id',
+            '--endpoint',
+            'https://api.example/chapters',
+            '--map',
+            JSON.stringify({ urlTemplate: '/novel/{slug}', titleField: 't' }),
+          ),
+        ).resolves.toBeUndefined();
+      });
+    });
+
+    describe('probe-api', () => {
+      test('no id rejects', async () => {
+        await expect(cli('probe-api')).rejects.toThrow(UsageError);
+      });
     });
   });
 

@@ -99,6 +99,13 @@ export async function setApiDescriptor(
   return { updated: true };
 }
 
+/** WP-54: the owned source's page URL to render for an API probe (or null if not the user's). */
+export async function getSourceForProbe(sourceId: string): Promise<{ url: string; type: string } | null> {
+  if (!(await ownsSource(sourceId))) return null;
+  const source = await db.source.findUnique({ where: { id: sourceId }, select: { url: true, type: true } });
+  return source ? { url: source.url, type: source.type } : null;
+}
+
 /**
  * Fold a duplicate series (`from`) into the correct one (`into`): unique chapters (by
  * canonical URL) move over, duplicates are dropped with `from`, and `from` is deleted —
