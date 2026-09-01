@@ -215,7 +215,9 @@ async function cmdSetApiDescriptor(args: string[], render: boolean, apply: boole
   } catch {
     throw new UsageError('--map must be valid JSON');
   }
-  if (!map.urlField || !map.titleField) throw new UsageError('--map needs at least urlField and titleField');
+  if ((!map.urlField && !map.urlTemplate) || !map.titleField) {
+    throw new UsageError('--map needs titleField and one of urlField or urlTemplate');
+  }
   if (map.pagination) {
     const { pageParam, perPage } = map.pagination;
     if (!(typeof pageParam === 'string' && typeof perPage === 'number' && perPage > 0)) {

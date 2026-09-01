@@ -112,7 +112,8 @@ The `--map` value is JSON describing how to read one chapter item out of the API
 
 | Field | Required | Meaning |
 |---|---|---|
-| `urlField` | ✅ | Item key → the chapter URL / permalink (resolved absolute against the endpoint origin). |
+| `urlField` | ✅* | Item key → the chapter URL / permalink (resolved absolute against the endpoint origin). |
+| `urlTemplate` | ✅* | *(alternative to `urlField`)* Build the reader URL from a template when the item carries only a bare slug/id, not a full URL — see below. |
 | `titleField` | ✅ | Item key → the chapter title. |
 | `numberField` | | Item key → the chapter number. Absent/non-numeric → parsed from the title, then the URL. |
 | `isFreeField` | | Item key → a free/locked flag. **Absent → every chapter is treated FREE.** |
@@ -120,9 +121,35 @@ The `--map` value is JSON describing how to read one chapter item out of the API
 | `listPath` | | Dot-path to the chapter array in the JSON (e.g. `"data.chapters"`). Absent → the JSON root is the array. |
 | `pagination` | | Present → the API is paginated; fetch every page and union (see below). Absent → one fetch = the whole list. |
 
+\* Supply **one of** `urlField` or `urlTemplate` (plus `titleField`). When both are set, `urlTemplate` wins.
+
 Example: an API returning `[{ "title": …, "permalink": …, "locked": true/false }]` maps to
 `urlField:"permalink"`, `titleField:"title"`, `isFreeField:"locked"`, `isFreeWhen:"falsy"` (a
 `locked:true` chapter is LOCKED).
+
+#### `urlTemplate` — reader URLs from a bare slug/id
+
+Some APIs return only a bare chapter **slug or id**, not a full permalink — and the chapter page
+often lives under a **different path than the API endpoint**, so `urlField` can't reach it. Use
+`urlTemplate` instead: a path (resolved absolute against the endpoint origin) with `{fieldPath}`
+placeholders substituted **per item** via the same dot-path lookup as the other fields.
+
+- **Per-item placeholder** — the item carries a slug field:
+  `urlTemplate:"/novel/{slug}"` → `item.slug = "the-beginning"` → `…/novel/the-beginning`.
+- **Baked series constant + per-item placeholder** — the item carries only `{order, title}` and the
+  series slug lives in the **API query** (e.g. `?slug=my-series`), not each item. Since the descriptor
+  is per-source, bake the series slug in as a **literal** segment:
+  `urlTemplate:"/novel/my-series/{order}"` → `item.order = 2` → `…/novel/my-series/2`.
+
+An item whose placeholder is missing/empty is skipped, exactly like a missing `urlField`.
+
+*(Future extension, not built: a `{field+N}` arithmetic offset for a site whose reader URL is
+`ch_{index+1}`. Plain `{field}` templates are unaffected when it lands.)*
+
+> **Confirm the URL pattern by opening one real chapter.** The API's endpoint path and its item
+> fields don't necessarily tell you the reader URL — open a chapter in the browser, read its address
+> bar, and template *that*. Beware "200-but-wrong" pages (an SPA route that returns a valid 200 but
+> renders "undefined" for a bad slug).
 
 ### `pagination` — fetch + union multiple pages
 
