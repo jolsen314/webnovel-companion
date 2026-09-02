@@ -96,4 +96,11 @@ describe('makeRenderCapture', () => {
     const res = await makeRenderCapture(config, h.fn)('u');
     expect(res).toMatchObject({ ok: true, captures: [] });
   });
+
+  test('extraHeaders are merged into the POST (e.g. a Vercel preview bypass)', async () => {
+    const h = http({ status: 200, ok: true, payload: { status: 200, finalUrl: 'u', captures: [] } });
+    await makeRenderCapture({ ...config, extraHeaders: { 'x-vercel-protection-bypass': 'bp' } }, h.fn)('u');
+    expect(h.calls[0]!.init.headers['x-vercel-protection-bypass']).toBe('bp');
+    expect(h.calls[0]!.init.headers.authorization).toBe('Bearer sek'); // still sent
+  });
 });

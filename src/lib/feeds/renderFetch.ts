@@ -31,6 +31,9 @@ export interface RenderFetchConfig {
   endpoint: string;
   secret?: string;
   timeoutMs?: number;
+  /** Extra request headers merged into the POST — e.g. a Vercel `x-vercel-protection-bypass` to
+   *  reach a protected preview deployment. Populated by the caller from the env, never read here. */
+  extraHeaders?: Record<string, string>;
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -57,6 +60,7 @@ export function makeRenderFetch(
         headers: {
           'content-type': 'application/json',
           ...(config.secret ? { authorization: `Bearer ${config.secret}` } : {}),
+          ...(config.extraHeaders ?? {}),
         },
         body: JSON.stringify({ url, ...(opts?.pagination ? { pagination: opts.pagination } : {}) }),
         signal: controller.signal,
@@ -122,6 +126,7 @@ export function makeRenderCapture(
         headers: {
           'content-type': 'application/json',
           ...(config.secret ? { authorization: `Bearer ${config.secret}` } : {}),
+          ...(config.extraHeaders ?? {}),
         },
         body: JSON.stringify({ url, capture: true }),
         signal: controller.signal,

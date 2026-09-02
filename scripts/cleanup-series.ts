@@ -273,7 +273,15 @@ async function cmdProbeApi(args: string[], render: boolean, apply: boolean): Pro
   }
 
   console.log(`Rendering ${source.url} to capture its runtime chapter API…`);
-  const capture = makeRenderCapture({ endpoint, secret: process.env.RENDER_SECRET, timeoutMs: 60_000 });
+  // A protected Vercel preview deployment needs the automation-bypass header to get past the
+  // platform SSO gate before our route's RENDER_SECRET check runs.
+  const bypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  const capture = makeRenderCapture({
+    endpoint,
+    secret: process.env.RENDER_SECRET,
+    timeoutMs: 60_000,
+    extraHeaders: bypass ? { 'x-vercel-protection-bypass': bypass, 'x-vercel-set-bypass-cookie': 'true' } : undefined,
+  });
   const result = await capture(source.url);
   if (!result.ok) {
     console.log(`Render capture failed: ${result.error ?? 'unknown error'}`);
