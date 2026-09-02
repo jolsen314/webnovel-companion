@@ -207,9 +207,9 @@ npm run db:cleanup -- probe-api <sourceId> --apply            # wire the top can
 npm run db:cleanup -- probe-api <sourceId> --render --apply   # + mark the source CF-gated to fetch
 ```
 
-It even nudges lazily-loaded lists — it dispatches hover/focus on chapter-list-ish controls (never a
-click, so it can't navigate away) to trigger an interaction-gated XHR. But that heuristic isn't
-perfect, so **three things it can't do:**
+It even nudges lazily-loaded lists — it drives a real (trusted) hover on chapter-list-ish controls
+(and a guarded click on non-anchor ones, so it won't navigate away) to trigger an interaction-gated
+XHR. But that heuristic isn't perfect, so **three things it can't do:**
 
 - **Interaction-gated APIs it doesn't guess.** If the request only fires on an interaction the nudge
   doesn't match (an odd control label, a scroll, a multi-step flow), `probe-api` sees nothing. Fall

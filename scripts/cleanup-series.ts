@@ -275,12 +275,15 @@ async function cmdProbeApi(args: string[], render: boolean, apply: boolean): Pro
   console.log(`Rendering ${source.url} to capture its runtime chapter API…`);
   // A protected Vercel preview deployment needs the automation-bypass header to get past the
   // platform SSO gate before our route's RENDER_SECRET check runs.
+  // The bypass header alone grants access for this single POST; do NOT set the bypass *cookie*
+  // (`x-vercel-set-bypass-cookie`) — that makes Vercel redirect to set a cookie we don't carry
+  // back, so undici loops until "redirect count exceeded".
   const bypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
   const capture = makeRenderCapture({
     endpoint,
     secret: process.env.RENDER_SECRET,
     timeoutMs: 60_000,
-    extraHeaders: bypass ? { 'x-vercel-protection-bypass': bypass, 'x-vercel-set-bypass-cookie': 'true' } : undefined,
+    extraHeaders: bypass ? { 'x-vercel-protection-bypass': bypass } : undefined,
   });
   const result = await capture(source.url);
   if (!result.ok) {
@@ -290,8 +293,13 @@ async function cmdProbeApi(args: string[], render: boolean, apply: boolean): Pro
 
   const candidates = inferApiDescriptors(result.captures);
   if (candidates.length === 0) {
-    console.log(`Captured ${result.captures.length} JSON response(s), but none looked like a chapter list.`);
-    console.log('Inspect by hand: DevTools → Network → Fetch/XHR → reload (see docs/api-sources.md).');
+    console.log(`Captured ${result.captures.length} JSON response(s), but none looked like a chapter list:`);
+    for (const c of result.captures) {
+      const preview = c.body.replace(/\s+/g, ' ').slice(0, 200);
+      console.log(`  - ${c.url}  (${c.body.length} bytes)\n      ${preview}`);
+    }
+    console.log('\nIf the chapter-list request is missing above, the render didn’t trigger it — it may need a');
+    console.log('different interaction. Inspect by hand: DevTools → Network → Fetch/XHR → reload (docs/api-sources.md).');
     return;
   }
 

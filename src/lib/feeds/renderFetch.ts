@@ -137,7 +137,12 @@ export function makeRenderCapture(
       const payload = (await res.json()) as { finalUrl?: string; captures?: ApiCapture[] };
       return { ok: true, finalUrl: payload.finalUrl, captures: payload.captures ?? [] };
     } catch (e) {
-      return { ok: false, captures: [], error: e instanceof Error ? e.message : 'render capture failed' };
+      // undici wraps network errors as a bare "fetch failed"; the real reason is in `.cause`.
+      const msg = e instanceof Error ? e.message : 'render capture failed';
+      const cause = (e as { cause?: unknown })?.cause;
+      const causeMsg = cause instanceof Error ? cause.message : cause != null ? String(cause) : undefined;
+      const aborted = controller.signal.aborted ? ' (client timeout)' : '';
+      return { ok: false, captures: [], error: causeMsg ? `${msg}: ${causeMsg}${aborted}` : `${msg}${aborted}` };
     } finally {
       clearTimeout(timer);
     }

@@ -116,20 +116,29 @@ export async function renderPage(
     await new Promise((r) => setTimeout(r, 2_000)); // let client-rendered lists settle
 
     if (opts.capture) {
-      // Some sites fire the chapter-list XHR only on interaction (e.g. hovering a "chapter list"
-      // control), so goto+settle alone misses it. Nudge those controls with hover/focus events —
-      // never a click, so we can't navigate away and lose the captures — then let them settle.
+      // Some sites fire the chapter-list XHR only on interaction (e.g. a "chapter list" control:
+      // a Next.js <Link> that prefetches on hover, or a button that opens an in-page panel on
+      // click), so goto+settle alone misses it. Tag the matching controls, then drive REAL
+      // (trusted) Puppeteer hover + click — synthetic dispatched events aren't trusted and many
+      // frameworks ignore them. Only non-anchor controls are clicked, so we can't navigate away
+      // and lose the captures; anchors are hovered only (enough for a <Link> prefetch).
       await page.evaluate((pattern) => {
         const re = new RegExp(pattern, 'i');
         const hits = [...document.querySelectorAll('a, button, [role="tab"], [role="button"], summary')]
           .filter((e) => re.test((e.textContent || '').trim()) && (e as HTMLElement).offsetParent !== null)
-          .slice(0, 10);
-        for (const el of hits) {
-          for (const type of ['pointerenter', 'mouseenter', 'mouseover', 'focus']) {
-            el.dispatchEvent(new Event(type, { bubbles: true }));
-          }
-        }
+          .slice(0, 8);
+        hits.forEach((el, i) => el.setAttribute('data-probe-nudge', el.tagName === 'A' ? `hover-${i}` : `click-${i}`));
       }, CHAPTER_LIST_HINT);
+      for (const handle of await page.$$('[data-probe-nudge]')) {
+        try {
+          await handle.hover();
+          const mode = await handle.evaluate((el) => el.getAttribute('data-probe-nudge') ?? '');
+          if (mode.startsWith('click')) await handle.click({ delay: 20 });
+          await new Promise((r) => setTimeout(r, 700));
+        } catch {
+          // control detached / not clickable — skip it
+        }
+      }
       await new Promise((r) => setTimeout(r, 2_000));
       await Promise.allSettled(pending);
       const html = await page.content();
