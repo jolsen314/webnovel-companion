@@ -209,7 +209,15 @@ npm run db:cleanup -- probe-api <sourceId> --render --apply   # + mark the sourc
 
 It even nudges lazily-loaded lists — it drives a real (trusted) hover on chapter-list-ish controls
 (and a guarded click on non-anchor ones, so it won't navigate away) to trigger an interaction-gated
-XHR. But that heuristic isn't perfect, so **three things it can't do:**
+XHR. But that heuristic isn't perfect, so **four things it can't do:**
+
+- **Capture an interaction-gated XHR on an SPA that doesn't hydrate in the serverless renderer.**
+  The probe renders on Vercel's headless chromium; some client apps that hydrate fine in a normal
+  browser don't execute their client JS there (you'll see the diagnostic report a large rendered
+  `html` that *contains* the control text, but no app-driven requests captured — only third-party
+  scripts). If the request only fires *after* hydration + interaction, the probe can't reach it.
+  Fall back to reading the endpoint by hand (DevTools) and wiring it with `set-api-descriptor` — the
+  API itself is usually a plain fetch that works regardless.
 
 - **Interaction-gated APIs it doesn't guess.** If the request only fires on an interaction the nudge
   doesn't match (an odd control label, a scroll, a multi-step flow), `probe-api` sees nothing. Fall

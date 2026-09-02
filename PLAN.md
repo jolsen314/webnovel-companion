@@ -122,7 +122,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 | WP-27b | Per-status positive notify rules — PLANNED paid → fire at 0 LOCKED; PLANNED free → fire at targetChapterCount; wire with WP-20/WP-21 | `TODO` | WP-20, WP-21, WP-13 |
 | WP-14 | `lib/dedup.ts` (pure) — "already read this?" | `TODO` | WP-00 |
 | WP-EXPORT | One-click data export (`/api/export` → JSON) — own-your-data insurance | `TODO` | WP-AUTH |
-| WP-54 | **API-source auto-probe + human docs for the API switchover** — the add-time `probeForApi` (WP-45) auto-detects only the **static-JSON SPA** shape (`data-*` → `.json`), not an **XHR-fetched** REST chapters API behind CF (the `…/v1/chapters?category=<id>` shape — manual today: render, watch the network tab, hand-build `--map`, `set-api-descriptor`; a `/local/` helper now scripts it for one site). Add a **render/XHR API detector** (infer url/title/lock fields + pagination + per-series id) + a **`db:cleanup probe-api <sourceId>`** command, and a **human guide** (new `docs/` page linked from README): the CF taxonomy, how to spot a usable JSON chapter API, the field-map/pagination/`per_page` gotchas, and a "can this site leverage the API path?" checklist. *(Auto-probe is convenience; the docs are the priority.)* **Drivers (local IDs):** B27, B08 — both **XHR-plain**, slug-keyed REST chapter APIs (B08: `GET /api/novel/chapter-list?slug=<slug>` → `{order,title,published_at}`, plain 200) that the static-JSON probe misses; both also need the `urlTemplate` enhancement below. | `TODO` | WP-45, WP-53 |
+| WP-61 | *(low — sibling to WP-31)* **Serverless-render hydration for interaction-gated captures** — surfaced live-testing WP-54's `probe-api`: some client SPAs that hydrate in a normal browser **don't execute their client JS on Vercel's `@sparticuz/chromium`** (the rendered SSR HTML is full and contains the control, but the app's own on-load XHRs never fire — only third-party scripts do), so a chapter-list request gated behind hydration + interaction can't be captured *there* even though the detector + nudge work locally end-to-end. Not gating (page renders 200, no CF challenge) and not the SSRF guard (mirrored locally, still hydrates). Options to probe: longer settle / `waitForFunction` on a hydration signal / different chromium flags / a hydration-wait before the nudge. Affects `probe-api` capture + any future render-interaction (WP-31). Workaround today: read the endpoint by hand + wire via `set-api-descriptor` (the API fetch itself is unaffected). **Driver:** the WP-54 Next.js SPA driver (589-ch list captured locally, 0 app XHRs on the deployed render). | `TODO` | WP-17b, WP-54 |
 | WP-RETRY | *(low)* Retry / auto-upgrade a link-only source — a manual "retry fetching chapters" that re-runs resolution on a `linkOnly` source and upgrades it to a tracked FEED/PAGE_WATCH source when the site becomes reachable (renderer added, feed appears, URL fixed) | `TODO` | WP-50, WP-17b |
 | WP-28g | *(low)* Theme header quick-switch — a header control to cycle/menu themes from anywhere, instead of only via the settings page. Owner-requested extension. **Fold in (noted from WP-28b final review):** re-sync the `theme-color` meta on client-side *soft* navigation — Next re-asserts the root `viewport.themeColor` on soft nav, briefly reverting the browser/PWA status-bar tint to night until a hard reload (app UI stays correctly themed); a header control that owns theme state is the natural place to re-apply it | `TODO` | WP-28b |
 | WP-THEMESYNC | *(low)* Cross-device theme persistence — persist the theme choice server-side (e.g. alongside notification prefs) so it follows the user across devices instead of per-origin localStorage. Owner-requested extension | `TODO` | WP-28b, WP-AUTH |
@@ -147,7 +147,8 @@ WP-28b (theme system — `[data-theme]` token architecture + pre-paint inline-sc
 WP-28h (per-theme scenes/cards/detail — scroll ink-tree+petals+rolled-scroll cards+wax-seal badge+opened-scroll detail; sci-fi holo env: glassy chrome + grid/binary-flicker/glitch/shimmer + HUD glass cards/detail; hydration-safe deterministic scatter; reduced-motion-gated; licensed assets via Vercel Blob with tree-hidden/red-circle onError fallback; hero "here" de-emphasized — the one night-visible change). ·
 WP-28i (private theme-asset proxy — licensed images via an auth-gated Blob route) ·
 WP-28c (feed digest home + shelf tab — cross-series new/now-free digest at `/`, shelf moved to `/shelf`; filed WP-TAGS) ·
-WP-57 (`parseToc` cross-series-card exclusion + series-slug scoping).
+WP-57 (`parseToc` cross-series-card exclusion + series-slug scoping) ·
+WP-54 (API-source auto-probe [`urlTemplate` + render/XHR detector + `db:cleanup probe-api`] + [api-sources.md](docs/api-sources.md) guide; serverless-render gap → WP-61).
 
 ### ⏭ Later tiers (M2–M4)
 
@@ -577,64 +578,6 @@ and was never taught the branch. So an API source can *only* be populated by a p
 
 Test-first (the API branch in `runBackfill`; the button-visibility change). Small, self-contained. Unblocks
 one-shot population/repair of API sources (today they wait for the next poll).
-
-### WP-54 — API-source auto-probe + human docs for the API switchover
-
-**Motivation (owner, 2026-08-21):** converting a CF-gated data-API site to the API path is a manual dance — find the
-per-series id (`category=<id>`) by rendering the page and watching the Network tab, hand-build the `--map` JSON, then
-`set-api-descriptor` (a gitignored `/local/` helper now scripts it end-to-end for one site: it queries prod for
-not-yet-API sources, renders each to capture the chapters request + total, and runs the CLI). The add-time
-`probeForApi` (WP-45) only auto-detects the **static-JSON SPA** shape (a `data-*` attr → a `.json` file, the
-Cloudflare-Pages case); it can't see an API the page fetches via **XHR** (the WP-REST `…/v1/chapters?category=<id>`
-shape), because that only appears at runtime, behind CF.
-
-**Update (owner testing, 2026-08-22) — two refinements from a new driver (a JS-SPA source whose chapters load via XHR):**
-- **The XHR variant isn't always CF-gated.** This source fetches its chapter list via a **plain** XHR (a bare
-  authenticated-optional `GET` to a per-series chapters endpoint — no CF, no auth). So render is needed only to
-  *discover* the endpoint, not to *fetch* it; the detector must **not assume CF**, and the add-flow should prefer a
-  plain API fetch when the discovered endpoint is un-gated. (Taxonomy: static-JSON auto-detected · **XHR-plain** ·
-  XHR-CF-gated.) With no auto-detect + no CF signal, the add just fell through to render+parseToc — which scraped the
-  page's **"recommendations" widget** (other-novel cards whose "Chapters: N" text trips `CHAPTER_TEXT`) as the
-  chapters, and took the **widget `<h1>`** as the title.
-- **Blocking descriptor gap → bare-slug URLs (a WP-45 adapter enhancement, prerequisite).** This API returns only a
-  **bare chapter slug/id**, not a full `permalink` like the earlier API sites — and `ApiDescriptor.urlField` merely
-  resolves a field *value* via `new URL(value, endpoint)`, so there's **no way to build the real chapter-page URL**
-  (a different path prefix than the API endpoint). Needs a **`urlTemplate`** on the descriptor (e.g.
-  `/<prefix>/{slugField}`, resolved against origin) before such a source can be wired **at all** — manual
-  `set-api-descriptor` or auto-probe. Until then these sources can't use the API path; deactivate them.
-  **(2nd driver, B08, 2026-08-31):** a slug-keyed API whose items carry only `{id, order, title, published_at}` (no url
-  field) — the reader URL must be templated `/<prefix>/{slug}/{order}`, i.e. a **two-field** `urlTemplate` (path slug +
-  `order`), reinforcing the need. A site that *migrated* from a separate-TOC page (WP-37b) to this in-page API.
-
-**Work:**
-1. **Render/XHR API detector.** A probe step that renders the page (clearing CF) and captures the chapter-list **XHR** —
-   endpoint, per-series id, and JSON shape — then **infers the `ApiDescriptor`**: url/title fields, a lock field (+
-   `isFreeWhen`), and pagination (`pageParam` + `perPage`, reading the total-count / `x-wp-totalpages` headers and
-   probing the site's per-page cap). Host-agnostic (no site names), returns candidate hits like the existing detector.
-2. **`db:cleanup probe-api <sourceId> [--render] [--apply]`** — render, detect, print the inferred descriptor + a
-   chapter-count sanity check, and on `--apply` `set-api-descriptor`. Productizes the `/local/` helper (which stays as
-   the interim tool). Idempotent (skips already-API sources).
-3. **Human guide (docs) — the priority half.** A new human-facing page (e.g. `docs/api-sources.md`, linked from the
-   README) for a person evaluating a new site: the **CF taxonomy** (plain-static / render-clearable / anti-headless —
-   render can't beat a managed challenge); **how to tell if a site has a usable JSON chapter API** and find its
-   endpoint / per-series id / fields (DevTools Network → the chapters request); the **field-map + pagination +
-   `per_page`-in-two-places + `isFreeWhen:falsy`** gotchas (deep operator detail stays in `docs/db-cleanup-cli.md`);
-   and a short **"can this site leverage the API path?" checklist** (JSON chapter-list endpoint? carries lock state?
-   CF render-clearable? per-series id findable?). **Two durable gotchas (from the 2026-08-22 driver):**
-   - **Determining the chapter-page URL for the field-map.** The API's endpoint path and its item fields don't
-     necessarily give you the reader URL — an item may carry a **bare slug/id** and the chapter page may live under a
-     **different path than the API**. So **open one real chapter and confirm its URL pattern**, and beware
-     **"200-but-wrong" pages** (a valid 200 that isn't the chapter — e.g. an SPA route that renders "undefined"). True
-     whether the descriptor uses `urlField` or `urlTemplate`.
-   - **Not all data-APIs are HTML-advertised or CF-gated.** Some are a plain **runtime XHR** (no `.json` in the HTML,
-     no CF) — the DevTools → Network → **Fetch/XHR** → reload discovery step is the same either way.
-
-   Anonymized — placeholders only (no-real-site-names).
-
-**Why:** the API path is the best source when it exists (complete list + native WP-20 lock state, cheaper than DOM
-scraping), but spotting and wiring it is expert-only today. This makes it discoverable/repeatable and lets a human
-triage a new site without reverse-engineering the pipeline. *(Auto-probe is convenience — the manual flow + `/local/`
-helper work today; the docs are the real deliverable. Priority owner's call.)*
 
 ### WP-55 — Decode HTML entities in API-source chapter titles
 

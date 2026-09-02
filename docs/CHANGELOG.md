@@ -2,6 +2,27 @@
 
 Append-only history, moved out of [PLAN.md](../PLAN.md). Newest first.
 
+- **2026-09-02** — **WP-54 shipped: API-source auto-probe + the human guide for the API switchover.** Three
+  deliverables on one branch, plus the blocking `urlTemplate` prerequisite. (1) **`ApiDescriptor.urlTemplate`** —
+  builds a reader URL from a bare slug/id when the API carries no full permalink: `{fieldPath}` placeholders resolve
+  per-item, literal segments stay literal (so a series-level slug is baked in), `urlField` becomes optional and
+  `urlTemplate` wins when both are set; syntax left forward-compatible for a future `{field+N}` offset. (2) **The
+  render/XHR detector** — `apiInfer.inferApiDescriptors(captures)` infers a descriptor (listPath, title, url-or-
+  `urlTemplate`, number, lock polarity, pagination) from JSON XHRs captured while rendering; `renderPage` gained a
+  capture mode that collects JSON `xhr`/`fetch` responses and drives a real hover + guarded click on chapter-list
+  controls (incl. bare `<span>`) to fire an interaction-gated request; `db:cleanup probe-api <sourceId>` renders,
+  infers, prints candidates + a `parseApiChapters` sanity count, and refuses `--apply` while the reader-path prefix
+  is unconfirmed. (3) **The human guide** ([docs/api-sources.md](api-sources.md), the priority half) — CF tier
+  taxonomy + how to tell which tier, the static-JSON/XHR-plain/XHR-CF-gated delivery taxonomy, DevTools discovery
+  (incl. interacting to fire lazy XHRs), the reader-URL and server-clamped-`per_page` gotchas, worked
+  `set-api-descriptor` commands, and a "can this site use the API path?" checklist; linked from the README, with a
+  4th pagination gotcha added to db-cleanup-cli.md. Also: `setApiDescriptor` now **un-gates a link-only source**
+  (`linkOnly:false`, `isActive:true`) on the flip, or the poll would keep skipping it. **Live-tested against a real
+  Next.js SPA driver:** the detector + nudge capture the 589-item list and infer the correct descriptor **locally**;
+  on Vercel's serverless chromium the same SPA doesn't hydrate (its own on-load `/api` calls never fire), so the
+  interaction-gated capture can't complete there — a serverless-render limitation filed as **WP-61**, not a detector
+  bug. The driver was wired via the manual `set-api-descriptor` path (which the probe would have produced). urlField/
+  detector/renderFetch under unit tests; the link-only un-gate under integration.
 - **2026-08-31** — **WP-57 shipped: `parseToc` excludes cross-series recommendation cards + series-scopes to the
   novel's own chapters.** When the series URL has a `/<collection>/<slug>/…` shape (collection ∈ a known keyword
   set — `novel`/`series`/`manga`/… — which gates the logic off for bare `/toc/` or Blogger date-path bases), a
