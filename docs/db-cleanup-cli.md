@@ -160,7 +160,7 @@ An item whose placeholder is missing/empty is skipped, exactly like a missing `u
 | `maxPages` | | Runaway backstop (**default 20**). Raise it for very long series (e.g. 1.3k chapters at 200/page = 7 pages). |
 | `listPath` | | Per-page array path; falls back to the top-level `listPath`. |
 
-**The three pagination gotchas:**
+**The four pagination gotchas:**
 
 1. **`perPage` is set in two places and they must match.** The `per_page=<N>` in `--endpoint`
    controls how many items the API returns per page; the `perPage:<N>` in the descriptor is the
@@ -178,6 +178,17 @@ An item whose placeholder is missing/empty is skipped, exactly like a missing `u
 3. **Leave `page` out of `--endpoint`.** The loop sets/increments it. Bake the *fixed* params
    (`category`, `order`, `per_page`) into the URL; prefer `order=asc` so the unioned list is in
    reading order.
+
+4. **The API may silently cap `per_page` below what you ask — and *that* cap is the number both
+   values must equal.** Matching your endpoint's `per_page` to the descriptor's `perPage` (gotcha #1)
+   isn't enough if the *server* clamps `per_page` to a different value: request `per_page=500` and a
+   WordPress REST API (for one) returns **100** and ignores the rest. Now the endpoint *says* 500,
+   the descriptor *says* 500, but every page is really 100 — so the loop sees a 100-item page as
+   "short" (100 < 500), **stops after page 1**, and silently drops the rest of the series. The fix is
+   to discover the site's **real** cap and set *both* values to it: page through by hand (or watch
+   the total-count header, e.g. `x-wp-total`) and confirm the page size the server actually returns,
+   then use that number in the endpoint **and** the descriptor. Symptom to watch for: the source
+   fills to exactly one page's worth of chapters (100, 200, …) and no more.
 
 ### `--render`
 

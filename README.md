@@ -32,6 +32,8 @@ Two independent tracks meet at your library:
 
 The interesting logic — feed diffing, TOC parsing, the source-health state machine — lives in `src/lib/**`, kept pure and framework-free so it unit-tests without a browser or database. Route handlers stay thin and call `src/server/services`. Fetching user-supplied URLs goes through an SSRF guard.
 
+Some sites expose a JSON **chapter API** that's a better source than scraping the TOC (complete list + native lock state). [docs/api-sources.md](docs/api-sources.md) is the human guide to spotting one and wiring it (with the `db:cleanup probe-api` / `set-api-descriptor` tooling); [docs/db-cleanup-cli.md](docs/db-cleanup-cli.md) is the full CLI reference.
+
 ## Running it locally
 
 Requires Node 22+ and a local Postgres.

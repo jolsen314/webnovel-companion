@@ -47,6 +47,8 @@ async function jsonPageFetch(u: string): Promise<{ status: number; body: string 
 /** Politeness/safety bounds on what a WP-54 capture run collects. */
 const MAX_CAPTURES = 25;
 const MAX_CAPTURE_BYTES = 3_000_000;
+/** Visible-text of controls that lazily trigger a chapter-list XHR on hover/focus (no site names). */
+const CHAPTER_LIST_HINT = 'chapter list|full chapter|table of contents|all chapters|chapters|view chapters|read chapters';
 
 export async function renderPage(
   url: string,
@@ -114,6 +116,21 @@ export async function renderPage(
     await new Promise((r) => setTimeout(r, 2_000)); // let client-rendered lists settle
 
     if (opts.capture) {
+      // Some sites fire the chapter-list XHR only on interaction (e.g. hovering a "chapter list"
+      // control), so goto+settle alone misses it. Nudge those controls with hover/focus events —
+      // never a click, so we can't navigate away and lose the captures — then let them settle.
+      await page.evaluate((pattern) => {
+        const re = new RegExp(pattern, 'i');
+        const hits = [...document.querySelectorAll('a, button, [role="tab"], [role="button"], summary')]
+          .filter((e) => re.test((e.textContent || '').trim()) && (e as HTMLElement).offsetParent !== null)
+          .slice(0, 10);
+        for (const el of hits) {
+          for (const type of ['pointerenter', 'mouseenter', 'mouseover', 'focus']) {
+            el.dispatchEvent(new Event(type, { bubbles: true }));
+          }
+        }
+      }, CHAPTER_LIST_HINT);
+      await new Promise((r) => setTimeout(r, 2_000));
       await Promise.allSettled(pending);
       const html = await page.content();
       return { status: resp?.status() ?? 200, finalUrl: page.url(), html, captures };
