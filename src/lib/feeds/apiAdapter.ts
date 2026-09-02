@@ -26,8 +26,21 @@ export interface PaginationSpec {
 export interface ApiDescriptor {
   /** Dot-path to the chapter array in the JSON (e.g. "data.chapters"). Absent → the root is the array. */
   listPath?: string;
-  /** Item key/path → chapter url or permalink (resolved absolute against the endpoint origin). */
-  urlField: string;
+  /**
+   * Item key/path → chapter url or permalink (resolved absolute against the endpoint origin).
+   * Optional when `urlTemplate` is supplied instead. When both are set, `urlTemplate` wins.
+   */
+  urlField?: string;
+  /**
+   * WP-54: build the reader URL from a template when the API carries only a bare slug/id and no
+   * full permalink field. `{fieldPath}` placeholders resolve per-item via the same dot-path
+   * lookup as the other fields (e.g. `/novel/{slug}`); literal segments stay literal, so a
+   * series-level constant that lives outside each item (e.g. the series slug carried in the API
+   * query) is baked in directly (e.g. `/novel/my-series/{order}`) — the descriptor is per-source.
+   * Resolved absolute against the endpoint origin. An item whose placeholder is missing/empty is
+   * skipped, exactly like a missing `urlField`.
+   */
+  urlTemplate?: string;
   /** Item key/path → chapter number. Absent/non-numeric → parsed from the title, then the url. */
   numberField?: string;
   /** Item key/path → chapter title. */
@@ -47,6 +60,30 @@ function getPath(obj: unknown, path: string): unknown {
     }
     return undefined;
   }, obj);
+}
+
+/**
+ * Resolve a `urlTemplate` against an item: substitute each `{fieldPath}` with the item's value
+ * (stringified). Returns null if any placeholder is missing/empty — the caller skips such items,
+ * mirroring a missing `urlField`.
+ *
+ * Forward-compatible extension point: a `{field+N}`/`{field-N}` arithmetic offset (for a site whose
+ * reader URL is `ch_{index+1}`) can be added here later by parsing an optional signed-int suffix off
+ * the placeholder name — no change to any existing plain `{field}` template.
+ */
+function resolveTemplate(template: string, item: Record<string, unknown>): string | null {
+  let missing = false;
+  const out = template.replace(/\{([^}]+)\}/g, (_m, path: string) => {
+    const value = getPath(item, path.trim());
+    if (value == null || (typeof value !== 'string' && typeof value !== 'number')) {
+      missing = true;
+      return '';
+    }
+    const s = String(value).trim();
+    if (s === '') missing = true;
+    return s;
+  });
+  return missing ? null : out;
 }
 
 function toBool(v: unknown): boolean {
@@ -78,7 +115,12 @@ export function parseApiChapters(body: string, descriptor: ApiDescriptor, baseUr
   const chapters: TocChapter[] = [];
   for (const item of list) {
     if (item == null || typeof item !== 'object') continue;
-    const rawUrl = getPath(item, descriptor.urlField);
+    // urlTemplate (bare-slug reader URLs) takes precedence over urlField when present.
+    const rawUrl = descriptor.urlTemplate
+      ? resolveTemplate(descriptor.urlTemplate, item as Record<string, unknown>)
+      : descriptor.urlField
+        ? getPath(item, descriptor.urlField)
+        : null;
     if (typeof rawUrl !== 'string' || rawUrl.trim() === '') continue;
     let url: string;
     try {

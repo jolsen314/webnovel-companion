@@ -72,4 +72,70 @@ describe('parseApiChapters', () => {
     const m: ApiDescriptor = { urlField: 'link', titleField: 'title' };
     expect(parseApiChapters(body, m, BASE).map((c) => c.url)).toEqual(['https://api.example/r/2']);
   });
+
+  // WP-54: urlTemplate — build the reader URL from a per-item slug and/or a baked series
+  // constant when the API carries only a bare slug/id (no full permalink field).
+  describe('urlTemplate (bare-slug reader URLs)', () => {
+    test('per-item {slug} placeholder resolves from the item', () => {
+      const body = JSON.stringify([
+        { slug: 'the-beginning', title: 'Ch 1', order: 1 },
+        { slug: 'the-next-one', title: 'Ch 2', order: 2 },
+      ]);
+      const m: ApiDescriptor = {
+        urlTemplate: '/novel/{slug}',
+        numberField: 'order',
+        titleField: 'title',
+      };
+      expect(parseApiChapters(body, m, BASE).map((c) => c.url)).toEqual([
+        'https://api.example/novel/the-beginning',
+        'https://api.example/novel/the-next-one',
+      ]);
+    });
+
+    test('literal series slug + per-item {order} placeholder', () => {
+      // Items carry only {order, title}; the series slug lives in the API query, so it is
+      // baked into the template as a literal path segment (descriptor is per-source).
+      const body = JSON.stringify([
+        { order: 1, title: 'Ch 1' },
+        { order: 2, title: 'Ch 2' },
+      ]);
+      const m: ApiDescriptor = {
+        urlTemplate: '/novel/my-series/{order}',
+        numberField: 'order',
+        titleField: 'title',
+      };
+      expect(parseApiChapters(body, m, BASE).map((c) => c.url)).toEqual([
+        'https://api.example/novel/my-series/1',
+        'https://api.example/novel/my-series/2',
+      ]);
+    });
+
+    test('urlTemplate takes precedence over urlField when both are set', () => {
+      const body = JSON.stringify([{ slug: 'from-template', link: '/from-field/9', title: 'Ch 9' }]);
+      const m: ApiDescriptor = {
+        urlTemplate: '/novel/{slug}',
+        urlField: 'link',
+        titleField: 'title',
+      };
+      expect(parseApiChapters(body, m, BASE)[0]!.url).toBe('https://api.example/novel/from-template');
+    });
+
+    test('an item whose template placeholder is missing/empty is skipped', () => {
+      const body = JSON.stringify([
+        { title: 'Ch 1' }, // no slug → cannot build URL
+        { slug: '', title: 'Ch 2' }, // empty slug → cannot build URL
+        { slug: 'ok', title: 'Ch 3' },
+      ]);
+      const m: ApiDescriptor = { urlTemplate: '/novel/{slug}', titleField: 'title' };
+      expect(parseApiChapters(body, m, BASE).map((c) => c.url)).toEqual([
+        'https://api.example/novel/ok',
+      ]);
+    });
+
+    test('a numeric placeholder value is stringified', () => {
+      const body = JSON.stringify([{ id: 42, title: 'Ch 1' }]);
+      const m: ApiDescriptor = { urlTemplate: '/read/{id}', titleField: 'title' };
+      expect(parseApiChapters(body, m, BASE)[0]!.url).toBe('https://api.example/read/42');
+    });
+  });
 });

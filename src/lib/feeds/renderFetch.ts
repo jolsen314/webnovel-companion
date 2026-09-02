@@ -1,5 +1,6 @@
 import type { PoliteResult } from './fetch';
 import type { PaginationSpec } from './apiAdapter';
+import type { ApiCapture } from './apiInfer';
 
 /**
  * Adapter to the headless renderer service (WP-17b). It POSTs a URL to the render
@@ -30,6 +31,9 @@ export interface RenderFetchConfig {
   endpoint: string;
   secret?: string;
   timeoutMs?: number;
+  /** Extra request headers merged into the POST — e.g. a Vercel `x-vercel-protection-bypass` to
+   *  reach a protected preview deployment. Populated by the caller from the env, never read here. */
+  extraHeaders?: Record<string, string>;
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -56,6 +60,7 @@ export function makeRenderFetch(
         headers: {
           'content-type': 'application/json',
           ...(config.secret ? { authorization: `Bearer ${config.secret}` } : {}),
+          ...(config.extraHeaders ?? {}),
         },
         body: JSON.stringify({ url, ...(opts?.pagination ? { pagination: opts.pagination } : {}) }),
         signal: controller.signal,
@@ -91,5 +96,57 @@ export function makeRenderFetch(
       lastModified: null,
       finalUrl: payload.finalUrl ?? url,
     };
+  };
+}
+
+export interface RenderCaptureResult {
+  ok: boolean;
+  finalUrl?: string;
+  /** The JSON XHR/fetch responses the page fired while rendering. */
+  captures: ApiCapture[];
+  /** The rendered DOM (for diagnosing an empty/challenge page when nothing captured). */
+  html?: string;
+  error?: string;
+}
+
+/**
+ * WP-54: ask the render service to load a page and hand back the JSON XHR/fetch responses it fired
+ * (`POST <endpoint> { url, capture: true }` → `{ finalUrl, captures }`), so the `apiInfer` detector
+ * can find the runtime chapters API that the static-HTML `probeForApi` can't see. Never throws — a
+ * service/network failure surfaces as `{ ok: false, captures: [] }`. HTTP injected for testability.
+ */
+export function makeRenderCapture(
+  config: RenderFetchConfig,
+  httpImpl: RenderHttp = globalThis.fetch as unknown as RenderHttp,
+): (url: string) => Promise<RenderCaptureResult> {
+  return async (url) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), config.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+    try {
+      const res = await httpImpl(config.endpoint, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          ...(config.secret ? { authorization: `Bearer ${config.secret}` } : {}),
+          ...(config.extraHeaders ?? {}),
+        },
+        body: JSON.stringify({ url, capture: true }),
+        signal: controller.signal,
+      });
+      if (!res.ok || res.status >= 400) {
+        return { ok: false, captures: [], error: `renderer returned ${res.status}` };
+      }
+      const payload = (await res.json()) as { finalUrl?: string; captures?: ApiCapture[]; html?: string };
+      return { ok: true, finalUrl: payload.finalUrl, captures: payload.captures ?? [], html: payload.html };
+    } catch (e) {
+      // undici wraps network errors as a bare "fetch failed"; the real reason is in `.cause`.
+      const msg = e instanceof Error ? e.message : 'render capture failed';
+      const cause = (e as { cause?: unknown })?.cause;
+      const causeMsg = cause instanceof Error ? cause.message : cause != null ? String(cause) : undefined;
+      const aborted = controller.signal.aborted ? ' (client timeout)' : '';
+      return { ok: false, captures: [], error: causeMsg ? `${msg}: ${causeMsg}${aborted}` : `${msg}${aborted}` };
+    } finally {
+      clearTimeout(timer);
+    }
   };
 }

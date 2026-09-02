@@ -76,7 +76,10 @@ export async function reclassifySource(
 
 /** WP-45: point an owned source at a chapter data API — set type=API, the endpoint, and the
  *  field descriptor; drop the now-irrelevant feed matcher + stale validators. `render` marks a
- *  CF-gated API that must be fetched through the headless browser (WP-45b). */
+ *  CF-gated API that must be fetched through the headless browser (WP-45b). Pointing a source at a
+ *  working API makes it trackable, so a link-only source (WP-50) is un-gated (`linkOnly:false`,
+ *  `isActive:true`) here — otherwise the poll, which selects `linkOnly:false` sources, would keep
+ *  skipping it after the flip. */
 export async function setApiDescriptor(
   sourceId: string,
   opts: { endpoint: string; map: ApiDescriptor; render?: boolean },
@@ -93,10 +96,19 @@ export async function setApiDescriptor(
       matchValue: null,
       etag: null,
       lastModified: null,
+      linkOnly: false,
+      isActive: true,
       fetchMode: opts.render ? 'RENDER' : 'PLAIN',
     },
   });
   return { updated: true };
+}
+
+/** WP-54: the owned source's page URL to render for an API probe (or null if not the user's). */
+export async function getSourceForProbe(sourceId: string): Promise<{ url: string; type: string } | null> {
+  if (!(await ownsSource(sourceId))) return null;
+  const source = await db.source.findUnique({ where: { id: sourceId }, select: { url: true, type: true } });
+  return source ? { url: source.url, type: source.type } : null;
 }
 
 /**

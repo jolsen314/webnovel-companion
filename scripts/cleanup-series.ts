@@ -21,9 +21,12 @@ import {
   backfillFromToc,
   reclassifySource,
   setApiDescriptor,
+  getSourceForProbe,
   renderPort,
 } from '../src/server/services/index';
-import type { ApiDescriptor } from '../src/lib/feeds/apiAdapter';
+import { parseApiChapters, type ApiDescriptor } from '../src/lib/feeds/apiAdapter';
+import { makeRenderCapture } from '../src/lib/feeds/renderFetch';
+import { inferApiDescriptors, UNCONFIRMED_PREFIX } from '../src/lib/feeds/apiInfer';
 
 export class UsageError extends Error {}
 
@@ -40,6 +43,7 @@ Commands:
   backfill <seriesId> [--render]
   reclassify-source <sourceId> [--render]
   set-api-descriptor <sourceId> --endpoint <url> --map <json> [--render]
+  probe-api <sourceId> [--render] [--apply]
 
 Without --apply, mutating commands print a dry-run plan and make no changes.
 "list" is always read-only.
@@ -215,7 +219,9 @@ async function cmdSetApiDescriptor(args: string[], render: boolean, apply: boole
   } catch {
     throw new UsageError('--map must be valid JSON');
   }
-  if (!map.urlField || !map.titleField) throw new UsageError('--map needs at least urlField and titleField');
+  if ((!map.urlField && !map.urlTemplate) || !map.titleField) {
+    throw new UsageError('--map needs titleField and one of urlField or urlTemplate');
+  }
   if (map.pagination) {
     const { pageParam, perPage } = map.pagination;
     if (!(typeof pageParam === 'string' && typeof perPage === 'number' && perPage > 0)) {
@@ -253,6 +259,100 @@ async function cmdBackfill(seriesId: string | undefined, render: boolean, apply:
   console.log(`Backfill complete: added ${result.added} chapter(s), reconciled ${result.reconciled}.`);
 }
 
+async function cmdProbeApi(args: string[], render: boolean, apply: boolean): Promise<void> {
+  const sourceId = args[0];
+  if (!sourceId) throw new UsageError('probe-api requires <sourceId>');
+  const endpoint = process.env.RENDER_URL;
+  if (!endpoint) {
+    throw new UsageError('probe-api needs RENDER_URL (+ RENDER_SECRET) in the env (point it at the deployed /api/render).');
+  }
+  const source = await getSourceForProbe(sourceId);
+  if (!source) {
+    console.log(`No source ${sourceId} for the current user.`);
+    return;
+  }
+
+  console.log(`Rendering ${source.url} to capture its runtime chapter API…`);
+  // A protected Vercel preview deployment needs the automation-bypass header to get past the
+  // platform SSO gate before our route's RENDER_SECRET check runs.
+  // The bypass header alone grants access for this single POST; do NOT set the bypass *cookie*
+  // (`x-vercel-set-bypass-cookie`) — that makes Vercel redirect to set a cookie we don't carry
+  // back, so undici loops until "redirect count exceeded".
+  const bypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  const capture = makeRenderCapture({
+    endpoint,
+    secret: process.env.RENDER_SECRET,
+    timeoutMs: 60_000,
+    extraHeaders: bypass ? { 'x-vercel-protection-bypass': bypass } : undefined,
+  });
+  const result = await capture(source.url);
+  if (!result.ok) {
+    console.log(`Render capture failed: ${result.error ?? 'unknown error'}`);
+    return;
+  }
+
+  const candidates = inferApiDescriptors(result.captures);
+  if (candidates.length === 0) {
+    console.log(`Captured ${result.captures.length} JSON response(s), but none looked like a chapter list:`);
+    for (const c of result.captures) {
+      const preview = c.body.replace(/\s+/g, ' ').slice(0, 200);
+      console.log(`  - ${c.url}  (${c.body.length} bytes)\n      ${preview}`);
+    }
+    // Diagnose whether the page even ran: an empty/challenge shell means the render was gated
+    // (CF/bot-block on the datacenter IP) or didn't hydrate — distinct from a nudge that missed.
+    const html = result.html ?? '';
+    const gated = /just a moment|cf-mitigated|attention required|enable javascript|verify you are human/i.test(html);
+    console.log(`\nrendered page: finalUrl=${result.finalUrl ?? '?'}  html=${html.length} bytes`);
+    console.log(`  contains "chapter list" text: ${/chapter\s*list/i.test(html)}`);
+    if (gated) console.log('  ⚠ looks like a Cloudflare/JS challenge — the datacenter IP is likely gated (tier 3).');
+    console.log('\nIf the chapter-list request is missing above, the render didn’t trigger it — CF-gating on the');
+    console.log('datacenter IP, no hydration, or a different interaction. Inspect: DevTools → Network (docs/api-sources.md).');
+    return;
+  }
+
+  console.log(`\nFound ${candidates.length} candidate chapter API(s):\n`);
+  candidates.forEach((c, i) => {
+    // Sanity-count: run the inferred descriptor against the captured body it came from.
+    const cap = result.captures.find((x) => x.url.split('?')[0] === c.apiUrl.split('?')[0]);
+    let parsed = c.sampleCount;
+    if (cap) {
+      let origin = c.apiUrl;
+      try {
+        origin = new URL(cap.url).origin;
+      } catch {
+        // keep the apiUrl as the resolution base
+      }
+      parsed = parseApiChapters(cap.body, c.descriptor, origin).length;
+    }
+    console.log(`[${i + 1}] ${c.apiUrl}`);
+    console.log(`    items in capture: ${c.sampleCount}  ·  parsed by descriptor: ${parsed}`);
+    console.log(`    map: ${JSON.stringify(c.descriptor)}`);
+    for (const n of c.notes) console.log(`    ⚠ ${n}`);
+  });
+
+  const top = candidates[0]!;
+  const unconfirmed = top.descriptor.urlTemplate?.includes(UNCONFIRMED_PREFIX) ?? false;
+  if (!apply) {
+    console.log(`\n[dry run] Re-run with --apply to wire candidate [1] onto source ${sourceId} (fetchMode ${render ? 'RENDER' : 'PLAIN'}).`);
+    if (unconfirmed) {
+      console.log('Note: candidate [1] needs its reader-URL prefix filled in first (see ⚠) — wire it via set-api-descriptor once you know the path.');
+    }
+    return;
+  }
+  if (unconfirmed) {
+    throw new UsageError(
+      `candidate [1] has an unconfirmed reader-URL prefix (${UNCONFIRMED_PREFIX}). Open a real chapter, then wire it with:\n` +
+        `  set-api-descriptor ${sourceId} --endpoint '${top.apiUrl}' --map '<edited map>'${render ? ' --render' : ''} --apply`,
+    );
+  }
+  const res = await setApiDescriptor(sourceId, { endpoint: top.apiUrl, map: top.descriptor, render });
+  console.log(
+    res.updated
+      ? `Wired candidate [1] onto source ${sourceId} (API, fetchMode ${render ? 'RENDER' : 'PLAIN'}).`
+      : `No source ${sourceId} for the current user.`,
+  );
+}
+
 export async function run(argv: string[]): Promise<void> {
   const [, , cmd, ...rest] = argv;
   const apply = rest.includes('--apply');
@@ -278,6 +378,8 @@ export async function run(argv: string[]): Promise<void> {
       return cmdReclassifySource(args[0], render, apply);
     case 'set-api-descriptor':
       return cmdSetApiDescriptor(args, render, apply);
+    case 'probe-api':
+      return cmdProbeApi(args, render, apply);
     default:
       throw new UsageError(cmd ? `Unknown command: ${cmd}` : 'No command given');
   }

@@ -7,6 +7,38 @@ index lives in PLAN.md's ✅ Completed table.
 
 ---
 
+### WP-54 — API-source auto-probe + human docs for the API switchover (DONE 2026-09-02)
+
+**DONE (2026-09-02).** Shipped three deliverables + the `urlTemplate` prerequisite on one branch:
+
+1. **`ApiDescriptor.urlTemplate`** ([`apiAdapter.ts`](../src/lib/feeds/apiAdapter.ts)) — builds the reader URL from a
+   bare slug/id when the API carries no full permalink. `{fieldPath}` placeholders resolve per-item; literal segments
+   stay literal (a series-level slug is baked in, e.g. `/novel/<slug>/{order}`); `urlField` became optional and
+   `urlTemplate` wins when both are set; an item with an unresolved placeholder is skipped. Syntax left
+   forward-compatible for a future `{field+N}` arithmetic offset (deferred — not built).
+2. **Render/XHR detector** ([`apiInfer.ts`](../src/lib/feeds/apiInfer.ts)) — `inferApiDescriptors(captures)` infers a
+   descriptor (listPath, title, url-or-`urlTemplate`, number, lock polarity, pagination from total-pages headers) from
+   JSON XHRs captured while rendering; `shouldCaptureResponse` gates which responses to keep. `renderPage` gained a
+   **capture mode** that collects JSON `xhr`/`fetch` bodies and drives a real (trusted) hover + guarded click on
+   chapter-list controls (incl. bare `<span>`/`<div>`) to fire an interaction-gated request; `makeRenderCapture`
+   POSTs `{url,capture:true}` (with a `x-vercel-protection-bypass` header for protected previews) and surfaces the
+   underlying error cause + rendered-page diagnostics. **`db:cleanup probe-api <sourceId> [--render] [--apply]`**
+   renders, infers, prints candidates + a `parseApiChapters` sanity count, and refuses `--apply` while the reader-path
+   prefix is unconfirmed (`CONFIRM-READER-PATH`).
+3. **Human guide** ([docs/api-sources.md](api-sources.md), the priority half) — CF tier taxonomy + how to tell which
+   tier, the static-JSON/XHR-plain/XHR-CF-gated delivery taxonomy, DevTools discovery (incl. interacting to fire lazy
+   XHRs), the reader-URL and server-clamped-`per_page` gotchas, worked `set-api-descriptor` commands (full-URL and
+   bare-slug), and a "can this site use the API path?" checklist. Linked from the README; a 4th pagination gotcha
+   added to [db-cleanup-cli.md](db-cleanup-cli.md).
+
+Also: `setApiDescriptor` **un-gates a link-only source** (`linkOnly:false`, `isActive:true`) on the flip — otherwise
+the poll (which selects `linkOnly:false`) would keep skipping it. **Live-tested against a real Next.js SPA driver:** the
+detector + nudge capture the 589-item list and infer the correct descriptor **locally**; on Vercel's serverless
+chromium that SPA doesn't hydrate (its own on-load `/api` calls never fire — only a third-party ad script ran), so the
+interaction-gated capture can't complete *there* — a serverless-render limitation filed as **WP-61**, not a detector
+bug. The driver was wired via the manual `set-api-descriptor` path (the descriptor the probe would have produced).
+Detector/adapter/renderFetch under unit tests; the link-only un-gate under integration. Drivers: B27, B08.
+
 ### WP-57 — `parseToc` cross-series-card exclusion + series-slug scoping (DONE 2026-08-31)
 
 **DONE (2026-08-31).** `parseToc` ([`pageWatch.ts`](../src/lib/feeds/pageWatch.ts)) no longer scrapes

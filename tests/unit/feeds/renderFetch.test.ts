@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { makeRenderFetch, type RenderHttp } from '../../../src/lib/feeds/renderFetch';
+import { makeRenderFetch, makeRenderCapture, type RenderHttp } from '../../../src/lib/feeds/renderFetch';
 
 const config = { endpoint: 'https://renderer.example/render', secret: 'sek' };
 
@@ -65,5 +65,42 @@ describe('makeRenderFetch', () => {
     const rf = makeRenderFetch({ endpoint: 'https://r.example' }, http);
     await rf('https://api.example/ch', { pagination: { pageParam: 'page', perPage: 200 } });
     expect(JSON.parse(sentBody)).toMatchObject({ url: 'https://api.example/ch', pagination: { pageParam: 'page', perPage: 200 } });
+  });
+});
+
+describe('makeRenderCapture', () => {
+  test('POSTs capture:true + bearer and returns the captured responses', async () => {
+    const captures = [{ url: 'https://x.example/api/ch?slug=a', body: '[]', headers: { 'content-type': 'application/json' } }];
+    const h = http({ status: 200, ok: true, payload: { status: 200, finalUrl: 'https://x.example/a', captures } });
+    const res = await makeRenderCapture(config, h.fn)('https://x.example/a');
+
+    expect(res).toEqual({ ok: true, finalUrl: 'https://x.example/a', captures });
+    expect(JSON.parse(h.calls[0]!.init.body)).toEqual({ url: 'https://x.example/a', capture: true });
+    expect(h.calls[0]!.init.headers.authorization).toBe('Bearer sek');
+  });
+
+  test('a renderer-service failure surfaces as { ok: false }', async () => {
+    const h = http({ status: 401, ok: false, payload: { error: 'Unauthorized' } });
+    expect(await makeRenderCapture(config, h.fn)('u')).toMatchObject({ ok: false });
+  });
+
+  test('a network error surfaces as { ok: false } and never throws', async () => {
+    const fn: RenderHttp = async () => {
+      throw new Error('connection reset');
+    };
+    expect(await makeRenderCapture(config, fn)('u')).toMatchObject({ ok: false });
+  });
+
+  test('a missing captures array defaults to []', async () => {
+    const h = http({ status: 200, ok: true, payload: { status: 200, finalUrl: 'u' } });
+    const res = await makeRenderCapture(config, h.fn)('u');
+    expect(res).toMatchObject({ ok: true, captures: [] });
+  });
+
+  test('extraHeaders are merged into the POST (e.g. a Vercel preview bypass)', async () => {
+    const h = http({ status: 200, ok: true, payload: { status: 200, finalUrl: 'u', captures: [] } });
+    await makeRenderCapture({ ...config, extraHeaders: { 'x-vercel-protection-bypass': 'bp' } }, h.fn)('u');
+    expect(h.calls[0]!.init.headers['x-vercel-protection-bypass']).toBe('bp');
+    expect(h.calls[0]!.init.headers.authorization).toBe('Bearer sek'); // still sent
   });
 });
