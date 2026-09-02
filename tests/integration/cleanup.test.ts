@@ -7,6 +7,7 @@ import {
   setSourceUrl,
   mergeSeries,
   listSeriesForCleanup,
+  setApiDescriptor,
   type FetchImpl,
 } from '../../src/server/services';
 import { db } from '../../src/server/db';
@@ -185,6 +186,36 @@ describe('setSourceUrl (real DB)', () => {
 
     const result = await setSourceUrl(otherSource.id, 'https://other.example/new');
     expect(result).toEqual({ updated: false });
+  });
+});
+
+describe('setApiDescriptor (real DB)', () => {
+  // WP-54: flipping a link-only source (WP-50) to a working API must un-gate it, or the poll
+  // (which selects linkOnly:false) would keep skipping it after the flip.
+  test('un-gates a link-only source when flipping it to API', async () => {
+    const series = await db.series.create({
+      data: {
+        userId: getCurrentUserId(),
+        title: 'Beta',
+        sources: {
+          create: { url: 'https://translator.example/novel/beta', host: 'translator.example', type: 'PAGE_WATCH', linkOnly: true },
+        },
+      },
+      include: { sources: true },
+    });
+    const sourceId = series.sources[0]!.id;
+
+    const result = await setApiDescriptor(sourceId, {
+      endpoint: 'https://translator.example/api/chapters?slug=beta',
+      map: { urlTemplate: '/novel/beta/{order}', titleField: 'title', numberField: 'order', listPath: 'data' },
+    });
+    expect(result).toEqual({ updated: true });
+
+    const updated = await db.source.findUniqueOrThrow({ where: { id: sourceId } });
+    expect(updated.type).toBe('API');
+    expect(updated.linkOnly).toBe(false); // un-gated → now pollable
+    expect(updated.isActive).toBe(true);
+    expect(updated.apiUrl).toBe('https://translator.example/api/chapters?slug=beta');
   });
 });
 
