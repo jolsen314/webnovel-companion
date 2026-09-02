@@ -124,8 +124,14 @@ export async function renderPage(
       // and lose the captures; anchors are hovered only (enough for a <Link> prefetch).
       await page.evaluate((pattern) => {
         const re = new RegExp(pattern, 'i');
-        const hits = [...document.querySelectorAll('a, button, [role="tab"], [role="button"], summary')]
-          .filter((e) => re.test((e.textContent || '').trim()) && (e as HTMLElement).offsetParent !== null)
+        // Match compact controls only — a "Chapter List" toggle is often a bare <span>/<div>, not
+        // an <a>/<button>, so include those but cap the text length to avoid tagging a whole
+        // container that merely contains the phrase.
+        const hits = [...document.querySelectorAll('a, button, [role="tab"], [role="button"], [role="link"], summary, span, li, div')]
+          .filter((e) => {
+            const t = (e.textContent || '').trim();
+            return t.length > 0 && t.length <= 40 && re.test(t) && (e as HTMLElement).offsetParent !== null;
+          })
           .slice(0, 8);
         hits.forEach((el, i) => el.setAttribute('data-probe-nudge', el.tagName === 'A' ? `hover-${i}` : `click-${i}`));
       }, CHAPTER_LIST_HINT);
