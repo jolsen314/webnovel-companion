@@ -104,6 +104,8 @@ export interface RenderCaptureResult {
   finalUrl?: string;
   /** The JSON XHR/fetch responses the page fired while rendering. */
   captures: ApiCapture[];
+  /** The rendered DOM (for diagnosing an empty/challenge page when nothing captured). */
+  html?: string;
   error?: string;
 }
 
@@ -134,8 +136,8 @@ export function makeRenderCapture(
       if (!res.ok || res.status >= 400) {
         return { ok: false, captures: [], error: `renderer returned ${res.status}` };
       }
-      const payload = (await res.json()) as { finalUrl?: string; captures?: ApiCapture[] };
-      return { ok: true, finalUrl: payload.finalUrl, captures: payload.captures ?? [] };
+      const payload = (await res.json()) as { finalUrl?: string; captures?: ApiCapture[]; html?: string };
+      return { ok: true, finalUrl: payload.finalUrl, captures: payload.captures ?? [], html: payload.html };
     } catch (e) {
       // undici wraps network errors as a bare "fetch failed"; the real reason is in `.cause`.
       const msg = e instanceof Error ? e.message : 'render capture failed';

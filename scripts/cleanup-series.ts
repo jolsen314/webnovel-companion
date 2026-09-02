@@ -298,8 +298,15 @@ async function cmdProbeApi(args: string[], render: boolean, apply: boolean): Pro
       const preview = c.body.replace(/\s+/g, ' ').slice(0, 200);
       console.log(`  - ${c.url}  (${c.body.length} bytes)\n      ${preview}`);
     }
-    console.log('\nIf the chapter-list request is missing above, the render didn’t trigger it — it may need a');
-    console.log('different interaction. Inspect by hand: DevTools → Network → Fetch/XHR → reload (docs/api-sources.md).');
+    // Diagnose whether the page even ran: an empty/challenge shell means the render was gated
+    // (CF/bot-block on the datacenter IP) or didn't hydrate — distinct from a nudge that missed.
+    const html = result.html ?? '';
+    const gated = /just a moment|cf-mitigated|attention required|enable javascript|verify you are human/i.test(html);
+    console.log(`\nrendered page: finalUrl=${result.finalUrl ?? '?'}  html=${html.length} bytes`);
+    console.log(`  contains "chapter list" text: ${/chapter\s*list/i.test(html)}`);
+    if (gated) console.log('  ⚠ looks like a Cloudflare/JS challenge — the datacenter IP is likely gated (tier 3).');
+    console.log('\nIf the chapter-list request is missing above, the render didn’t trigger it — CF-gating on the');
+    console.log('datacenter IP, no hydration, or a different interaction. Inspect: DevTools → Network (docs/api-sources.md).');
     return;
   }
 
