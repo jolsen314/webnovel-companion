@@ -198,6 +198,32 @@ poll then render-fetches the API (one browser per poll, looping pages in-page). 
 public API, omit `--render` (plain fetch, cheaper, `304`-able). `--render` needs
 `RENDER_URL`/`RENDER_SECRET` configured for the poll to actually render.
 
+> **Don't infer the fetch mode from your own request — only a datacenter fetch settles it.** Two
+> traps pull in opposite directions, so neither your curl nor how you discovered the endpoint tells
+> you whether the *poll* needs `--render`:
+> - A `curl`/DevTools `200` from **your** machine doesn't prove the poll can fetch it. The poll runs
+>   from Vercel's **datacenter IP**, which Cloudflare gates far more aggressively (browser headers
+>   don't help — it's the IP). So a plain-`200`-for-you API can still `HTTP_4XX` for the poll →
+>   needs `--render`.
+> - Conversely, an API you could only **discover** by rendering the page (an XHR that only appears at
+>   runtime) may still be **plain-fetchable** once you know its URL — discovery-needs-render does
+>   **not** imply fetch-needs-render. Don't add `--render` just because you rendered to find it.
+>
+> **The only reliable signal is whether a *datacenter* fetch of the endpoint succeeds.** Test it
+> directly with a datacenter render-fetch (below); or watch the source after wiring it `PLAIN`.
+>
+> **The silent 0-chapter symptom.** A `PLAIN` API source that's actually datacenter-gated flips to
+> `health: DEGRADED`, `lastFailureType: HTTP_4XX`, `lastSuccessAt: null`, and stays at **0 chapters**
+> — indistinguishable in the app from a healthy-but-quiet source. Confirm and fix by flipping to
+> RENDER (`set-api-descriptor … --render --apply`), then trigger a poll:
+>
+> ```bash
+> # does a datacenter render clear the gate? 200 + JSON body ⇒ the endpoint is gated → use --render
+> curl -s -X POST '<PROD>/api/render' -H "authorization: Bearer $RENDER_SECRET" \
+>   -H 'content-type: application/json' --data '{"url":"<API_URL>"}' \
+>   | python3 -c "import sys,json; d=json.load(sys.stdin); h=d.get('html',''); print('status',d.get('status'),'json?',h.strip()[:1] in '[{')"
+> ```
+
 ### After conversion
 
 Chapters populate on the **next poll**, not immediately. If you're validating on a Vercel *preview*

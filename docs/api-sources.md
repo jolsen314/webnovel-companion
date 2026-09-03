@@ -154,7 +154,15 @@ Once you know the endpoint and the field-map, point the (already-added) source a
 and clears the feed/matcher — the source's human reading `url` is left untouched. **Always run once
 without `--apply`** to see the dry-run plan, then add `--apply`. **Quote both `--endpoint` and
 `--map`** in single quotes so the shell doesn't eat the `&` or the JSON quotes. Add `--render` if the
-endpoint is CF-gated (tier 2) and must be fetched through the headless browser.
+endpoint is CF-gated **from the poll's datacenter IP** and must be fetched through the headless
+browser.
+
+> **PLAIN vs RENDER is about the datacenter, not your machine.** A `curl` `200` from your IP does
+> **not** prove the poll can fetch it — Cloudflare gates Vercel's datacenter IP harder, so a
+> plain-for-you API can `HTTP_4XX` for the poll and sit silently at **0 chapters** (`health:
+> DEGRADED`, `lastSuccessAt: null`). And discovery-needs-render doesn't imply fetch-needs-render (an
+> XHR you rendered to *find* may still fetch plain). Only a **datacenter fetch** settles it — see
+> [db-cleanup-cli.md → `--render`](db-cleanup-cli.md) for the datacenter render-test and the flip.
 
 **Case 1 — items carry a full URL and a lock flag, paginated:**
 
