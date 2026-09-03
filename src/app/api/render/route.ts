@@ -13,7 +13,9 @@ import type { PaginationSpec } from '../../../lib/feeds/apiAdapter';
  */
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
+// 120s (well under Vercel's 300s ceiling) — a WP-54 capture render of a heavy, ad-laden page can
+// spend the full networkidle goto budget plus the interaction nudge; 60s was too tight (timeouts).
+export const maxDuration = 120;
 
 export async function POST(request: Request) {
   // Fail closed: with no secret configured the endpoint is disabled (never an open
