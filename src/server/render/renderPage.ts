@@ -50,6 +50,15 @@ const MAX_CAPTURE_BYTES = 3_000_000;
 /** Visible-text of controls that lazily trigger a chapter-list XHR on hover/focus (no site names). */
 const CHAPTER_LIST_HINT = 'chapter list|full chapter|table of contents|all chapters|chapters|view chapters|read chapters';
 
+/**
+ * Race a browser op against a timeout so a hung interaction or a never-completing response-body read
+ * can't stall a capture past its budget (an ad-heavy page can otherwise run to the function ceiling).
+ * Swallows a late rejection from the abandoned op so it doesn't surface after we've moved on.
+ */
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | undefined> {
+  return Promise.race([p.catch(() => undefined), new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), ms))]);
+}
+
 export async function renderPage(
   url: string,
   opts: { pagination?: PaginationSpec; capture?: boolean } = {},
@@ -117,7 +126,9 @@ export async function renderPage(
     // non-capture (parseToc) path still needs a real navigation, so it rethrows.
     let resp: Awaited<ReturnType<typeof page.goto>> = null;
     try {
-      resp = await page.goto(url, { waitUntil: 'networkidle2', timeout: 45_000 });
+      // Capture uses a shorter idle wait: an ad-heavy page rarely reaches networkidle2, so waiting
+      // the full 45s is wasted — the on-load XHRs we want have fired well before then.
+      resp = await page.goto(url, { waitUntil: 'networkidle2', timeout: opts.capture ? 25_000 : 45_000 });
     } catch (e) {
       if (!opts.capture) throw e;
     }
@@ -145,16 +156,20 @@ export async function renderPage(
       }, CHAPTER_LIST_HINT);
       for (const handle of await page.$$('[data-probe-nudge]')) {
         try {
-          await handle.hover();
-          const mode = await handle.evaluate((el) => el.getAttribute('data-probe-nudge') ?? '');
-          if (mode.startsWith('click')) await handle.click({ delay: 20 });
-          await new Promise((r) => setTimeout(r, 700));
+          // Each interaction is time-boxed: a control obscured by an ad overlay (or a hover/click
+          // that stalls on a heavy page) is skipped rather than hanging the whole capture.
+          await withTimeout(handle.hover(), 2_500);
+          const mode = await handle.evaluate((el) => el.getAttribute('data-probe-nudge') ?? '').catch(() => '');
+          if (mode.startsWith('click')) await withTimeout(handle.click({ delay: 20 }), 2_500);
+          await new Promise((r) => setTimeout(r, 500));
         } catch {
           // control detached / not clickable — skip it
         }
       }
       await new Promise((r) => setTimeout(r, 2_000));
-      await Promise.allSettled(pending);
+      // Bound the body-read wait: a long-lived tracker/XHR response's .text() may never resolve, so
+      // stop waiting after 8s and return whatever completed (the rest is dropped).
+      await withTimeout(Promise.allSettled(pending), 8_000);
       const html = await page.content();
       return { status: resp?.status() ?? 200, finalUrl: page.url(), html, captures };
     }
