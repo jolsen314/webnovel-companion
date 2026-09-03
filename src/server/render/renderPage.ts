@@ -112,7 +112,15 @@ export async function renderPage(
       });
     }
 
-    const resp = await page.goto(url, { waitUntil: 'networkidle2', timeout: 45_000 });
+    // In capture mode, an ad-heavy page may never reach networkidle2 within the budget; a goto
+    // timeout there shouldn't abort the whole probe — proceed and capture whatever loaded. The
+    // non-capture (parseToc) path still needs a real navigation, so it rethrows.
+    let resp: Awaited<ReturnType<typeof page.goto>> = null;
+    try {
+      resp = await page.goto(url, { waitUntil: 'networkidle2', timeout: 45_000 });
+    } catch (e) {
+      if (!opts.capture) throw e;
+    }
     await new Promise((r) => setTimeout(r, 2_000)); // let client-rendered lists settle
 
     if (opts.capture) {

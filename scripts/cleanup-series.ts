@@ -282,7 +282,7 @@ async function cmdProbeApi(args: string[], render: boolean, apply: boolean): Pro
   const capture = makeRenderCapture({
     endpoint,
     secret: process.env.RENDER_SECRET,
-    timeoutMs: 60_000,
+    timeoutMs: 110_000, // under the render route's maxDuration so the server responds before we abort
     extraHeaders: bypass ? { 'x-vercel-protection-bypass': bypass } : undefined,
   });
   const result = await capture(source.url);
@@ -300,8 +300,9 @@ async function cmdProbeApi(args: string[], render: boolean, apply: boolean): Pro
     }
     // Diagnose whether the page even ran: an empty/challenge shell means the render was gated
     // (CF/bot-block on the datacenter IP) or didn't hydrate — distinct from a nudge that missed.
+    // CF-specific markers only — NOT "enable javascript", which appears in many legit SPA <noscript>.
     const html = result.html ?? '';
-    const gated = /just a moment|cf-mitigated|attention required|enable javascript|verify you are human/i.test(html);
+    const gated = /just a moment|cf-mitigated|attention required|verify you are human|cf-browser-verification|challenge-platform/i.test(html);
     console.log(`\nrendered page: finalUrl=${result.finalUrl ?? '?'}  html=${html.length} bytes`);
     console.log(`  contains "chapter list" text: ${/chapter\s*list/i.test(html)}`);
     if (gated) console.log('  ⚠ looks like a Cloudflare/JS challenge — the datacenter IP is likely gated (tier 3).');
