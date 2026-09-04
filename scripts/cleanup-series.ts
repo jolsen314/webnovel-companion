@@ -300,9 +300,14 @@ async function cmdProbeApi(args: string[], render: boolean, apply: boolean): Pro
     }
     // Diagnose whether the page even ran: an empty/challenge shell means the render was gated
     // (CF/bot-block on the datacenter IP) or didn't hydrate — distinct from a nudge that missed.
-    // CF-specific markers only — NOT "enable javascript", which appears in many legit SPA <noscript>.
+    // A real Cloudflare interstitial is a SMALL page whose body IS the challenge, so require both
+    // interstitial *page text* AND a small body. NOT keyed on `challenge-platform`/`cf-mitigated`:
+    // the former is Cloudflare's JS-Detections telemetry script (`/cdn-cgi/challenge-platform/…`)
+    // injected into NORMAL served pages, and the latter is a response header never in the body —
+    // both false-positived fully-served pages.
     const html = result.html ?? '';
-    const gated = /just a moment|cf-mitigated|attention required|verify you are human|cf-browser-verification|challenge-platform/i.test(html);
+    const challengeText = /just a moment|checking your browser|you are human|attention required|cf-browser-verification/i.test(html);
+    const gated = challengeText && html.length < 30_000;
     console.log(`\nrendered page: finalUrl=${result.finalUrl ?? '?'}  html=${html.length} bytes`);
     console.log(`  contains "chapter list" text: ${/chapter\s*list/i.test(html)}`);
     if (gated) console.log('  ⚠ looks like a Cloudflare/JS challenge — the datacenter IP is likely gated (tier 3).');
