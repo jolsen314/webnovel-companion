@@ -39,3 +39,7 @@ screenshots/
 
 # WP-28h licensed theme images — served from Vercel Blob in prod; kept locally for dev only (see public/themes/CREDITS.md)
 /public/themes/*.png
+# Added by `vercel link` (WP-62/63 diagnosis). Its companion `.env*` rule was dropped:
+# .env / .env.local / .env.prod are already listed above, and `.env*` would also mask the
+# tracked .env.example.
+.vercel
