@@ -49,8 +49,10 @@ uncommitted notes." Real names/URLs live only in those local notes and in scratc
 > **NEXT: WP-62 — Skip docs-only deployments.** The Hobby **Functions Storage** allowance was exhausted (27.2 GB vs
 > 230 MB of Deployment Storage — function bundles are 99.2% of it). 72 of the last 113 `main` commits (64%) are
 > markdown-only yet each banks a full ~166 MB bundle, so an Ignored Build Step is the cheapest remaining lever
-> (retention was already cut to ≤14 days on 2026-09-06). See the WP-62 detail; **WP-63** (render split) is filed
-> low and **gated on re-checking Functions Storage first**.
+> (retention was already cut to ≤14 days on 2026-09-06). See the WP-62 detail. Two further storage levers are filed
+> low: **WP-64** (drop the four unused Prisma query engines from the trace — 42.66 MB, cuts *all* 52 lambdas;
+> promote it if storage is still tight after WP-62) and **WP-63** (render split), the latter **gated on
+> re-checking Functions Storage first**.
 >
 > **Then: WP-28e — Shelf delete affordance.** Replace the always-visible per-card delete trash on touch with two
 > better-hidden affordances (**both** wanted): an iOS-Mail-style **swipe-left-to-reveal-Delete** gesture, and an
@@ -140,6 +142,7 @@ later-tier tables are reference only. `⭐` = load-bearing.
 | WP-53 | *(low — convenience; the poll is generally sufficient)* Make backfill API-aware + re-enable its button on API sources — `backfillFromToc`/`backfillPorts` only page-watch `source.url`, so an **API source (WP-45) can't be backfilled** (CLI / route / `switchToPageWatch` seed no-op → `added 0`); only the **poll** populates it. Teach the backfill path the poll's `apiUrl ?? feedUrl ?? tocUrl ?? url` + `apiMap` + `fetchApiPages`/`parseApiChapters`, and un-hide the "Backfill from TOC" button for `type === 'API'` (gated off in `SeriesDetail.tsx` during WP-45) | `TODO` | WP-45, WP-33 |
 | WP-WORKID | *(low, future)* Map a source to a community novel-aggregator's canonical work ID (lists a work's alternative/translated titles) for automatic cross-translation identity — described generically here (no real aggregator name, anonymity rule) | `TODO` | WP-05, WP-17 |
 | WP-31 | Renderer per-host interaction descriptor — clicks Free/Premium **tabs** (+ tab-membership access), **client-side numbered pagination** ("Prev/Next" TOCs that replace ~50/page → click Next & union pages), **and (folded in 2026-08-25) endless-scroll + RSC load-to-completion** — scroll-to-load lists and Next.js RSC lists that render only a partial window need a scroll/settle loop until the count stops growing, then union. **Where a source exposes a chapter API, WP-45 supersedes this**; but the 2026-08-25 batch found **none** of these interaction sources exposes a usable plain API (all RSC / pagination / endless-scroll / auth-gated), so render interaction is the only path for them — a large missing-chapter cluster. **Drivers (local IDs):** B10 (6/1300, RSC), B11 (5/1364, paginate), B12 (47/1215, paginate), B13 (52/152, endless-scroll), B14 (100/~194, load-more incomplete), B05 (partial RSC). **⚠ Hydration prerequisite (WP-61):** *every* WP-31 mechanism (tab click, Next click, scroll, RSC load) only fires if the site's client JS **hydrates on the serverless renderer** — a click/scroll with no handler is a no-op. Unlike WP-45's API path (`renderJson` navigates + in-page-fetches, so the app never runs), WP-31 has **no hydration bypass**. So a non-hydrating driver (WP-61's failure mode) can't be fixed by WP-31 no matter how well it's built — it's a WP-61 (or residential-ingest WP-60) case. **Gate WP-31 per-driver on a hydration check** on the *deployed* renderer (does interaction fire an app request?) before committing; a >0 partial count can be pure SSR first-paint, not proof of hydration. **Probe pass (2026-09-03, WP-54 `probe-api`) bucketed the six drivers:** **B10 → left WP-31 for WP-45** (it exposes a *range-paginated* JSON chapter API — `/api/chapters/<id>?start=1&end=<big>` returns the whole list in one call, id = the URL novel id; wired, no adapter change). **B14 → confirmed hydrating** (the probe captured its own same-origin JSON on load) → WP-31-workable. **B11 + B12 (paginate) and B13 (endless-scroll)** render a server-side first page but their **hydration is untested** — the probe's nudge exercises neither "Next" nor scroll, so the per-driver hydration check is still owed. **B05 → reclassified to WP-61** (a pure client-rendered SPA — served HTML is a ~4KB shell with 0 chapters, so there is no SSR list for WP-31 to act on). Net: WP-31's live targets are the paginate/scroll cluster (B14 confirmed + B11/B12/B13 pending a hydration check); B10 escaped to the API path, B05 is a WP-61 case. | `TODO` | WP-17b, WP-20 |
+| WP-64 | *(low — mechanical, but **runtime-risky**: excluding a file Prisma needs fails at *runtime*, not build)* **Drop the four unused Prisma query engines from the function trace** — `@prisma/client/runtime/` ships base64-inlined WASM engines *and* compilers for cockroachdb / mysql / sqlserver / sqlite as well as postgresql, and Next's tracer can't prune them (Prisma picks the flavor by computed require). Measured: **32 files / 42.66 MB** droppable, with all four `postgresql` variants kept. Lands in the **shared** server chunk, so it cuts all 52 lambdas, not just the DB routes (~9% per deployment) — and shrinks cold starts. Cheaper than WP-63; promote it if storage is still tight after WP-62 | `TODO` | WP-04, WP-62 |
 | WP-63 | *(low — **gated: re-check Functions Storage before picking up**)* **Split `/api/render` into its own Vercel project** — Chromium is ~67 MB of each deployment's ~166 MB (~40%) and barely compresses, while render code changed in only **6 of the last 113 commits (5.3%)**; the `RENDER_URL` / `RENDER_SECRET` seam **already exists**, so this is config + a minimal deployable, not a refactor. **Independent security win:** the browser-driving route stops sharing a project environment with `DATABASE_URL` / `AUTH_SECRET` / VAPID keys. **Don't pick up on projections** — if the ≤14-day retention + WP-62 already cleared the limit, only the security argument remains | `TODO` | WP-17b, WP-62 |
 | WP-SIMPLIFY | *(low, ongoing — pick up opportunistically)* Behavior-preserving code simplification — the backlog of DRY/clarity/consistency refinements found by a read-only `code-simplifier` pass. **Details, ranked tiers, and the explicit "don't touch" list live in [SIMPLIFICATION-PLAN.md](SIMPLIFICATION-PLAN.md)** — not enumerated as WPs here. Both structural items landed (**A1** `backfill` pure-core extraction out of `services/index.ts`; **A2** Puppeteer out of `api/render/route.ts`) and the entire ranked backlog (Tiers B, C, D) is now worked through as of 2026-08-18 — the row stays open only to re-run the `code-simplifier` against future drift. Follow project rituals (TDD for `lib/`, `npm test` + `typecheck` before "done"). | `TODO` | — |
 
@@ -730,6 +733,75 @@ free. Root cause is a stack of false positives in `parseToc`'s access heuristics
 which is only meaningful once lock state is trustworthy). Pure `pageWatch.ts` change, test-first. *(Prod already
 corrected by hand: the affected series' 556 rows set FREE; hold off re-backfilling any block-theme source until this
 lands, or it re-locks — and could fire a "now free" storm.)*
+
+### WP-64 — Drop the four unused Prisma query engines from the function trace
+
+**Why (measured 2026-09-06):** `@prisma/client/runtime/` ships base64-inlined WASM **query engines** *and* **query
+compilers** for cockroachdb, mysql, sqlserver, sqlite **and** postgresql, each duplicated as `.js` and `.mjs`.
+Prisma selects the flavor by **computed require**, so Next's file tracer can't prune the unused ones and pulls the
+whole directory in. This project's datasource is `postgresql` only (`prisma/schema.prisma`).
+
+Critically, the tracing shows this lands in the **shared server chunk** — even DB-free routes such as
+`api/theme-asset/[name]` ship at 31.72 MB on Vercel despite tracing to 2.6 MB locally. So the saving applies to
+**all 52 lambdas**, not just the DB-touching ones (~9% of each deployment's ~166 MB), and it cuts cold-start
+unpacking too.
+
+**Measured against the real trace** (`.next/server/app/api/cron/poll/route.js.nft.json`, 74 Prisma files):
+
+| | files | size |
+|---|---|---|
+| Dropped (cockroachdb / mysql / sqlserver / sqlite) | 32 | **42.66 MB** |
+| Kept | 26 | 14.46 MB |
+
+All four postgresql variants survive — `query_engine_bg.postgresql.wasm-base64.{js,mjs}` (2.92 MB each) and
+`query_compiler_bg.postgresql.wasm-base64.{js,mjs}` (2.48 MB each) — so there is **no `.js` vs `.mjs` guesswork**:
+exclude by *flavor* only, keep both module formats of postgres.
+
+**Proposed config** — extend the existing block in [next.config.ts](next.config.ts) (which already carries
+`serverExternalPackages` + an `outputFileTracingIncludes` for the Chromium bin; no overlap with this):
+
+```ts
+outputFileTracingExcludes: {
+  '/**': [
+    './node_modules/@prisma/client/runtime/*cockroachdb*',
+    './node_modules/@prisma/client/runtime/*mysql*',
+    './node_modules/@prisma/client/runtime/*sqlserver*',
+    './node_modules/@prisma/client/runtime/*sqlite*',
+  ],
+},
+```
+
+**⚠ Route-key gotcha — verify, don't assume.** Per the installed Next docs
+(`node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/output.md`), keys are **route
+globs matched with picomatch** against the route path and values are **globs resolved from the project root**. The
+docs suggest `'/*'` as the "all routes" key, but picomatch's `*` does not cross `/` by default, so `'/*'` may not
+match `/api/series/[id]/backfill`. Start with `'/**'`, then **prove it by re-measuring the traces** (below); fall
+back to enumerating route keys if the global key silently no-ops.
+
+**Steps**
+- [ ] Record the baseline: `npm run build`, then sum the Prisma files in
+      `.next/server/app/api/cron/poll/route.js.nft.json` (expect ~77.9 MB).
+- [ ] Add the `outputFileTracingExcludes` block above to `next.config.ts`.
+- [ ] `npm run build` again and re-sum the same trace. **Expected: ~42.7 MB lower, and all four
+      `*postgresql*wasm-base64*` files still present.** If unchanged, the route key didn't match — fix the key
+      before going further.
+- [ ] `npm test` + `npm run typecheck` (project ritual — both must exit 0).
+- [ ] Deploy a **preview** and exercise every DB path against it: shelf, series detail, add, `/api/series`,
+      `/api/notification-prefs`, and a `/api/cron/poll` run. A missing engine surfaces as a **runtime** error
+      (`PrismaClientInitializationError` / a failed WASM load), **not** a build failure — the build will look fine.
+- [ ] Confirm with `vercel inspect <preview-url>` that lambda sizes dropped from ~31.7 MB.
+- [ ] Only then merge to `main`.
+
+**Rollback:** revert the `next.config.ts` change and redeploy — the exclusion is build-time only, so there is no
+data or migration risk.
+
+**Note:** the `@sparticuz/chromium` bundle is *not* addressable this way — it's already Brotli-compressed and
+genuinely required by `/api/render`. That's WP-63's problem, not this one.
+
+**Definition of Done:** the poll route's trace is ~42.7 MB lighter, all postgresql engine files are still traced,
+every DB route works on a preview deployment, and `vercel inspect` shows smaller lambdas.
+
+---
 
 ### WP-63 — Split `/api/render` into its own Vercel project
 

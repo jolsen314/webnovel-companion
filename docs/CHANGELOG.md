@@ -19,8 +19,11 @@ Append-only history, moved out of [PLAN.md](../PLAN.md). Newest first.
   `/api/render` into its own project — 40% of each deployment, plus an independent security win: the
   browser-driving route today shares a project environment with `DATABASE_URL` / `AUTH_SECRET` / VAPID keys) as
   low-priority and **explicitly gated on re-checking Functions Storage first**, since retention + WP-62 may already
-  clear the limit. A third lever — `outputFileTracingExcludes` for the four unused Prisma engines, worth ~9% per
-  deployment — is **noted but not yet filed**. Also installed the Vercel CLI (the diagnosis used `vercel ls` /
+  clear the limit. Filed **WP-64** (`outputFileTracingExcludes` for the four unused Prisma engines) separately
+  rather than folding it into WP-62: WP-62 is a dashboard setting with no code and no runtime risk, whereas WP-64
+  edits `next.config.ts` and can break production **at runtime while the build still succeeds** — different risk,
+  verification and rollback. Measured against the real trace: **32 files / 42.66 MB** droppable with all four
+  `postgresql` variants kept, so no `.js`/`.mjs` guesswork. Also installed the Vercel CLI (the diagnosis used `vercel ls` /
   `inspect` / `env ls`) and narrowed the `.gitignore` entry `vercel link` added. **No deployment was made.**
 
 - **2026-09-02** — **WP-54 shipped: API-source auto-probe + the human guide for the API switchover.** Three
