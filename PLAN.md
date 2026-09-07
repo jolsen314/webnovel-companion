@@ -240,9 +240,11 @@ still lists `public/themes/CREDITS.md`, and lists no root `.md`.
       worktree checked out at each commit, exactly as Vercel does. This catches quoting that doesn't survive the
       JSON→shell round trip, which the bare-command check could not. **8/8 as expected**, including this branch's
       own two commits: `844d399` (PLAN + docs only) → SKIP, `79ef650` (also touched `.gitignore`) → BUILD.
-- [ ] Push the branch → confirm the **preview** deployment behaves (this branch's tip is docs+config, so it
-      **builds**; the `vercel.json` change itself is not excluded).
+- [x] Push the branch → the tip touched `vercel.json`, so it **built**, as predicted *(preview `94p92xfdo`,
+      2026-09-07)*. Inspected it to confirm the `functions`-block deletion was behaviour-neutral: `api/render`
+      still `timeout=120s`, still its own lambda group, grouping shape unchanged at 28/1/20/2/2.
 - [ ] Push a **docs-only** commit → confirm the dashboard marks it skipped and no new bundles are stored.
+      *(In progress: this very checkbox update is the test — PLAN.md only.)*
 - [ ] Push a **code** commit → confirm it builds and deploys normally.
 - [ ] After a week, re-check **Usage → Deployment Storage → Functions Storage**; the *daily increment* should fall
       by roughly two-thirds. (The metric is a running GB-month sum — watch the slope, not the total.)
