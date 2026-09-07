@@ -46,7 +46,15 @@ uncommitted notes." Real names/URLs live only in those local notes and in scratc
 
 ## Current focus
 
-> **NEXT: WP-28e — Shelf delete affordance.** Replace the always-visible per-card delete trash on touch with two
+> **NEXT: WP-62 — Skip docs-only deployments.** The Hobby **Functions Storage** allowance was exhausted (27.2 GB vs
+> 230 MB of Deployment Storage — function bundles are 99.2% of it). 72 of the last 113 `main` commits (64%) are
+> markdown-only yet each banks a full ~166 MB bundle, so an Ignored Build Step is the cheapest remaining lever
+> (retention was already cut to ≤14 days on 2026-09-06). See the WP-62 detail. Two further storage levers are filed
+> low: **WP-64** (drop the four unused Prisma query engines from the trace — 42.66 MB, cuts *all* 52 lambdas;
+> promote it if storage is still tight after WP-62) and **WP-63** (render split), the latter **gated on
+> re-checking Functions Storage first**.
+>
+> **Then: WP-28e — Shelf delete affordance.** Replace the always-visible per-card delete trash on touch with two
 > better-hidden affordances (**both** wanted): an iOS-Mail-style **swipe-left-to-reveal-Delete** gesture, and an
 > **"Edit" mode toggle** on the shelf head (also the non-touch / keyboard / a11y path) — desktop keeps its existing
 > hover reveal. WP-28 was split into pickup-able children (2026-08-20) after its long-title readability facet
@@ -101,7 +109,8 @@ later-tier tables are reference only. `⭐` = load-bearing.
 
 | ID | Work package | Status | Depends on |
 |----|--------------|--------|------------|
-| WP-28e | Shelf delete affordance — hide the always-visible per-card delete (WP-51) by default and expose it two ways (**both** wanted): (1) an iOS-Mail-style **swipe-left-to-reveal-Delete** on touch, and (2) an **"Edit" mode toggle** on the shelf head that reveals the per-card delete buttons (also the non-touch / keyboard / a11y path). Keep the confirm + the tap-through guard on both | `NEXT` | WP-10, WP-51, WP-28a |
+| WP-62 | **Skip docs-only deployments** (Vercel Ignored Build Step) — Hobby **Functions Storage** hit **27.2 GB** (99.2% of deployment storage; 164 retained deployments × ~166 MB). **72 of the last 113 `main` commits (64%) touched only root markdown / `docs/`** yet each triggered a full production build. Pathspec verified against six real commits and scoped so `public/themes/CREDITS.md` (a *served* asset) still builds. Cheapest lever left after the ≤14-day retention cut | `NEXT` | — |
+| WP-28e | Shelf delete affordance — hide the always-visible per-card delete (WP-51) by default and expose it two ways (**both** wanted): (1) an iOS-Mail-style **swipe-left-to-reveal-Delete** on touch, and (2) an **"Edit" mode toggle** on the shelf head that reveals the per-card delete buttons (also the non-touch / keyboard / a11y path). Keep the confirm + the tap-through guard on both | `TODO` | WP-10, WP-51, WP-28a |
 | WP-28f | Bookshelf theme — gothic/Victorian palette + book-stack shelf layout | `TODO` | WP-28b, WP-28a, WP-28e |
 | WP-28j | No-flash shelf sort/filter — navigating to `/` with a saved sort/filter briefly shows the unsorted/unfiltered shelf before it snaps to the persisted view. The control state lives in `localStorage` and is applied client-side after mount; pre-apply it before paint (reuse WP-28b's no-flash pattern) or render the shelf from the persisted state | `TODO` | WP-28a, WP-28b |
 | WP-TAGS | Series tags (genre) — a detail-page tag editor (like notes/rating) + shelf-card display of the first tag(s) in the slot **WP-28c** frees (the dropped latest-chapter line) + a tag filter on the shelf; a feed use later. Filed by WP-28c. **UI-only — the `tags String[]` column already exists on `Series` (unused), so no migration / no WP-04 pause.** | `TODO` | WP-10, WP-28c, WP-28a |
@@ -133,6 +142,8 @@ later-tier tables are reference only. `⭐` = load-bearing.
 | WP-53 | *(low — convenience; the poll is generally sufficient)* Make backfill API-aware + re-enable its button on API sources — `backfillFromToc`/`backfillPorts` only page-watch `source.url`, so an **API source (WP-45) can't be backfilled** (CLI / route / `switchToPageWatch` seed no-op → `added 0`); only the **poll** populates it. Teach the backfill path the poll's `apiUrl ?? feedUrl ?? tocUrl ?? url` + `apiMap` + `fetchApiPages`/`parseApiChapters`, and un-hide the "Backfill from TOC" button for `type === 'API'` (gated off in `SeriesDetail.tsx` during WP-45) | `TODO` | WP-45, WP-33 |
 | WP-WORKID | *(low, future)* Map a source to a community novel-aggregator's canonical work ID (lists a work's alternative/translated titles) for automatic cross-translation identity — described generically here (no real aggregator name, anonymity rule) | `TODO` | WP-05, WP-17 |
 | WP-31 | Renderer per-host interaction descriptor — clicks Free/Premium **tabs** (+ tab-membership access), **client-side numbered pagination** ("Prev/Next" TOCs that replace ~50/page → click Next & union pages), **and (folded in 2026-08-25) endless-scroll + RSC load-to-completion** — scroll-to-load lists and Next.js RSC lists that render only a partial window need a scroll/settle loop until the count stops growing, then union. **Where a source exposes a chapter API, WP-45 supersedes this**; but the 2026-08-25 batch found **none** of these interaction sources exposes a usable plain API (all RSC / pagination / endless-scroll / auth-gated), so render interaction is the only path for them — a large missing-chapter cluster. **Drivers (local IDs):** B10 (6/1300, RSC), B11 (5/1364, paginate), B12 (47/1215, paginate), B13 (52/152, endless-scroll), B14 (100/~194, load-more incomplete), B05 (partial RSC). **⚠ Hydration prerequisite (WP-61):** *every* WP-31 mechanism (tab click, Next click, scroll, RSC load) only fires if the site's client JS **hydrates on the serverless renderer** — a click/scroll with no handler is a no-op. Unlike WP-45's API path (`renderJson` navigates + in-page-fetches, so the app never runs), WP-31 has **no hydration bypass**. So a non-hydrating driver (WP-61's failure mode) can't be fixed by WP-31 no matter how well it's built — it's a WP-61 (or residential-ingest WP-60) case. **Gate WP-31 per-driver on a hydration check** on the *deployed* renderer (does interaction fire an app request?) before committing; a >0 partial count can be pure SSR first-paint, not proof of hydration. **Probe pass (2026-09-03, WP-54 `probe-api`) bucketed the six drivers:** **B10 → left WP-31 for WP-45** (it exposes a *range-paginated* JSON chapter API — `/api/chapters/<id>?start=1&end=<big>` returns the whole list in one call, id = the URL novel id; wired, no adapter change). **B14 → confirmed hydrating** (the probe captured its own same-origin JSON on load) → WP-31-workable. **B11 + B12 (paginate) and B13 (endless-scroll)** render a server-side first page but their **hydration is untested** — the probe's nudge exercises neither "Next" nor scroll, so the per-driver hydration check is still owed. **B05 → reclassified to WP-61** (a pure client-rendered SPA — served HTML is a ~4KB shell with 0 chapters, so there is no SSR list for WP-31 to act on). Net: WP-31's live targets are the paginate/scroll cluster (B14 confirmed + B11/B12/B13 pending a hydration check); B10 escaped to the API path, B05 is a WP-61 case. | `TODO` | WP-17b, WP-20 |
+| WP-64 | *(low — mechanical, but **runtime-risky**: excluding a file Prisma needs fails at *runtime*, not build)* **Drop the four unused Prisma query engines from the function trace** — `@prisma/client/runtime/` ships base64-inlined WASM engines *and* compilers for cockroachdb / mysql / sqlserver / sqlite as well as postgresql, and Next's tracer can't prune them (Prisma picks the flavor by computed require). Measured: **32 files / 42.66 MB** droppable, with all four `postgresql` variants kept. Lands in the **shared** server chunk, so it cuts all 52 lambdas, not just the DB routes (~9% per deployment) — and shrinks cold starts. Cheaper than WP-63; promote it if storage is still tight after WP-62 | `TODO` | WP-04, WP-62 |
+| WP-63 | *(low — **gated: re-check Functions Storage before picking up**)* **Split `/api/render` into its own Vercel project** — Chromium is ~67 MB of each deployment's ~166 MB (~40%) and barely compresses, while render code changed in only **6 of the last 113 commits (5.3%)**; the `RENDER_URL` / `RENDER_SECRET` seam **already exists**, so this is config + a minimal deployable, not a refactor. **Independent security win:** the browser-driving route stops sharing a project environment with `DATABASE_URL` / `AUTH_SECRET` / VAPID keys. **Don't pick up on projections** — if the ≤14-day retention + WP-62 already cleared the limit, only the security argument remains | `TODO` | WP-17b, WP-62 |
 | WP-SIMPLIFY | *(low, ongoing — pick up opportunistically)* Behavior-preserving code simplification — the backlog of DRY/clarity/consistency refinements found by a read-only `code-simplifier` pass. **Details, ranked tiers, and the explicit "don't touch" list live in [SIMPLIFICATION-PLAN.md](SIMPLIFICATION-PLAN.md)** — not enumerated as WPs here. Both structural items landed (**A1** `backfill` pure-core extraction out of `services/index.ts`; **A2** Puppeteer out of `api/render/route.ts`) and the entire ranked backlog (Tiers B, C, D) is now worked through as of 2026-08-18 — the row stays open only to re-run the `code-simplifier` against future drift. Follow project rituals (TDD for `lib/`, `npm test` + `typecheck` before "done"). | `TODO` | — |
 
 ### ✅ Completed
@@ -176,6 +187,81 @@ WP-54 (API-source auto-probe [`urlTemplate` + render/XHR detector + `db:cleanup 
 > **Shipped WPs' detail lives in [docs/PLAN-archive.md](docs/PLAN-archive.md).** When a WP flips to `DONE`, move its
 > `### WP-NN` detail section there, leaving only its ✅ Completed-table one-liner here — keeps this tracker from
 > growing without bound.
+
+### WP-62 — Skip docs-only deployments (Vercel Ignored Build Step)
+
+**Why (measured 2026-09-06):** the Hobby **Functions Storage** allowance was exhausted at **27.2 GB**, against just
+**230 MB** of Deployment Storage — function bundles are **99.2%** of the total. Vercel meters *retained*
+deployments, and the project held **164** of them. Each banks ~166 MB: `vercel inspect` lists 52 lambdas summing
+1,713 MB, which the platform dedupes to ~166 MB of unique content per deployment.
+
+The cheapest lever is deploy **volume**: **72 of the last 113 commits on `main` (64%) touched only root-level
+markdown or `docs/`** — our own PLAN/changelog discipline — and every one triggered a full production build.
+
+**Goal:** stop building and banking a deployment for commits that cannot change the built output.
+
+**Implementation** — `ignoreCommand` in [vercel.json](vercel.json):
+
+```json
+"ignoreCommand": "git diff --quiet HEAD^ HEAD -- . ':(exclude,glob)*.md' ':(exclude)docs/'"
+```
+
+Exit **0 → build ignored**, exit **1 → build continues** (Vercel's documented semantics; `git diff --quiet` exits 0
+when there is no difference — i.e. when *only* excluded paths changed).
+
+> **Decision changed at pickup (2026-09-07).** This WP was filed preferring the dashboard **Ignored Build Step**
+> "so the config isn't itself a deployable file change" — weak reasoning, reversed after checking the docs:
+> (1) `ignoreCommand` in `vercel.json` **overrides** the dashboard setting, so they can't conflict;
+> (2) the Vercel CLI **cannot** write the dashboard setting (`vercel project` has no such subcommand; `vercel pull`
+> only reads), making that route a manual, repo-invisible click; (3) `vercel.json` is version-controlled and
+> reviewable — worth more in a public repo than avoiding one extra build; and (4) decisively, it **travels with the
+> branch**, so the ignore logic is testable on a feature branch before it affects project-wide settings.
+
+**Why this exact pathspec:** `public/themes/CREDITS.md` is a **served static asset** (WP-28h), so a blanket `*.md`
+exclude would wrongly skip deploys that change it — git pathspecs let `*` cross `/` by default. The `,glob` magic
+stops `*` at `/`, so `:(exclude,glob)*.md` excludes only **root-level** `.md` (CLAUDE / PLAN / README / CONTEXT /
+SIMPLIFICATION-PLAN) and leaves everything under `public/` in scope. Verified: `git ls-files` with this pathspec
+still lists `public/themes/CREDITS.md`, and lists no root `.md`.
+
+**Verified against real commits (2026-09-06), before filing:**
+
+| Commit | Kind | exit | Result |
+|---|---|---|---|
+| `ed03716` docs(plan): WP-31 ↔ WP-61 | docs-only | 0 | skip ✅ |
+| `5c19e17` docs: clarify PLAIN vs RENDER | docs-only | 0 | skip ✅ |
+| `6e7c752` docs: split PLAN.md changelog | docs-only | 0 | skip ✅ |
+| `c5450c2` WP-54: CF-challenge heuristic | code | 1 | build ✅ |
+| `b400148` WP-54: bound browser ops | code | 1 | build ✅ |
+| `deb10ce` WP-57: parseToc cards | code | 1 | build ✅ |
+
+**Steps**
+- [x] Add `ignoreCommand` to `vercel.json` *(2026-09-07)*.
+- [x] Verify the **stored** string end-to-end — extract it from the JSON and run it through a shell in a git
+      worktree checked out at each commit, exactly as Vercel does. This catches quoting that doesn't survive the
+      JSON→shell round trip, which the bare-command check could not. **8/8 as expected**, including this branch's
+      own two commits: `844d399` (PLAN + docs only) → SKIP, `79ef650` (also touched `.gitignore`) → BUILD.
+- [x] Push the branch → the tip touched `vercel.json`, so it **built**, as predicted *(preview `94p92xfdo`,
+      2026-09-07)*. Inspected it to confirm the `functions`-block deletion was behaviour-neutral: `api/render`
+      still `timeout=120s`, still its own lambda group, grouping shape unchanged at 28/1/20/2/2.
+- [x] Push a **docs-only** commit → **skipped, and stored nothing** *(commit `b603e14`, PLAN.md only, 2026-09-07)*.
+      Vercel reports a skipped build as **`CANCELED`**; `vercel inspect` on it shows **0 output items, 0 lambdas,
+      0.00 MB** — against 53 outputs / 1,713 MB for a built deployment. That zero is the whole WP in one number.
+- [x] Push a **code** commit → builds normally *(`1db8965` and `4e4e52b`, both `READY`)*.
+- [ ] After a week, re-check **Usage → Deployment Storage → Functions Storage**; the *daily increment* should fall
+      by roughly two-thirds. (The metric is a running GB-month sum — watch the slope, not the total.)
+
+**Gotchas**
+- Vercel clones shallowly. If `HEAD^` is ever unavailable the command errors and Vercel **builds** — fail-safe, the
+  right default. `VERCEL_GIT_PREVIOUS_SHA` is the documented fallback if it shows up.
+- A skipped commit leaves production on the previous SHA. Harmless here: the daily cron runs against current
+  production either way, and retention never reaps the deployment holding the production alias.
+- This affects **new** deployments only. Existing storage is released by the retention policy (cut to ≤14 days on
+  2026-09-06), which makes 110 of the 164 eligible — projected landing ~9 GB.
+
+**Definition of Done:** a docs-only push visibly skips, a code push visibly deploys, and the Functions Storage daily
+increment is measurably lower.
+
+---
 
 ### WP-02 — `lib/srs/sm2.ts` (pure, test-first) — ⬇ deprioritized to M3
 
@@ -663,6 +749,154 @@ free. Root cause is a stack of false positives in `parseToc`'s access heuristics
 which is only meaningful once lock state is trustworthy). Pure `pageWatch.ts` change, test-first. *(Prod already
 corrected by hand: the affected series' 556 rows set FREE; hold off re-backfilling any block-theme source until this
 lands, or it re-locks — and could fire a "now free" storm.)*
+
+### WP-64 — Drop the four unused Prisma query engines from the function trace
+
+**Why (measured 2026-09-06):** `@prisma/client/runtime/` ships base64-inlined WASM **query engines** *and* **query
+compilers** for cockroachdb, mysql, sqlserver, sqlite **and** postgresql, each duplicated as `.js` and `.mjs`.
+Prisma selects the flavor by **computed require**, so Next's file tracer can't prune the unused ones and pulls the
+whole directory in. This project's datasource is `postgresql` only (`prisma/schema.prisma`).
+
+Critically, the tracing shows this lands in the **shared server chunk** — even DB-free routes such as
+`api/theme-asset/[name]` ship at 31.72 MB on Vercel despite tracing to 2.6 MB locally.
+
+**What that means with Vercel's grouping (confirmed 2026-09-07):** the deployment's 53 output paths map to only
+**5 distinct AWS functions** — one bundle for the 28 page paths, one for the 20 API paths, one for cron/poll, one
+for render, one for middleware. So the saving isn't "52 lambdas × 42.66 MB"; it's the compressed delta on the
+**3 grouped bundles that carry the Prisma runtime** (pages, API, cron). That is still the whole point — those three
+are most of each deployment's ~166 MB — and the estimate of ~9% may well prove conservative, since base64-inlined
+WASM compresses well. Measure it, don't assume it. It cuts cold-start unpacking too.
+
+**Measured against the real trace** (`.next/server/app/api/cron/poll/route.js.nft.json`, 74 Prisma files):
+
+| | files | size |
+|---|---|---|
+| Dropped (cockroachdb / mysql / sqlserver / sqlite) | 32 | **42.66 MB** |
+| Kept | 26 | 14.46 MB |
+
+All four postgresql variants survive — `query_engine_bg.postgresql.wasm-base64.{js,mjs}` (2.92 MB each) and
+`query_compiler_bg.postgresql.wasm-base64.{js,mjs}` (2.48 MB each) — so there is **no `.js` vs `.mjs` guesswork**:
+exclude by *flavor* only, keep both module formats of postgres.
+
+**Proposed config** — extend the existing block in [next.config.ts](next.config.ts) (which already carries
+`serverExternalPackages` + an `outputFileTracingIncludes` for the Chromium bin; no overlap with this):
+
+```ts
+outputFileTracingExcludes: {
+  '/**': [
+    './node_modules/@prisma/client/runtime/*cockroachdb*',
+    './node_modules/@prisma/client/runtime/*mysql*',
+    './node_modules/@prisma/client/runtime/*sqlserver*',
+    './node_modules/@prisma/client/runtime/*sqlite*',
+  ],
+},
+```
+
+**⚠ Route-key gotcha — verify, don't assume.** Per the installed Next docs
+(`node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/output.md`), keys are **route
+globs matched with picomatch** against the route path and values are **globs resolved from the project root**. The
+docs suggest `'/*'` as the "all routes" key, but picomatch's `*` does not cross `/` by default, so `'/*'` may not
+match `/api/series/[id]/backfill`. Start with `'/**'`, then **prove it by re-measuring the traces** (below); fall
+back to enumerating route keys if the global key silently no-ops.
+
+**Steps**
+- [ ] Record the baseline: `npm run build`, then sum the Prisma files in
+      `.next/server/app/api/cron/poll/route.js.nft.json` (expect ~77.9 MB).
+- [ ] Add the `outputFileTracingExcludes` block above to `next.config.ts`.
+- [ ] `npm run build` again and re-sum the same trace. **Expected: ~42.7 MB lower, and all four
+      `*postgresql*wasm-base64*` files still present.** If unchanged, the route key didn't match — fix the key
+      before going further.
+- [ ] `npm test` + `npm run typecheck` (project ritual — both must exit 0).
+- [ ] Deploy a **preview** and exercise every DB path against it: shelf, series detail, add, `/api/series`,
+      `/api/notification-prefs`, and a `/api/cron/poll` run. A missing engine surfaces as a **runtime** error
+      (`PrismaClientInitializationError` / a failed WASM load), **not** a build failure — the build will look fine.
+- [ ] Confirm with `vercel inspect <preview-url>` that lambda sizes dropped from ~31.7 MB.
+- [ ] Only then merge to `main`.
+
+**Rollback:** revert the `next.config.ts` change and redeploy — the exclusion is build-time only, so there is no
+data or migration risk.
+
+**Note:** the `@sparticuz/chromium` bundle is *not* addressable this way — it's already Brotli-compressed and
+genuinely required by `/api/render`. That's WP-63's problem, not this one.
+
+**Definition of Done:** the poll route's trace is ~42.7 MB lighter, all postgresql engine files are still traced,
+every DB route works on a preview deployment, and `vercel inspect` shows smaller lambdas.
+
+---
+
+### WP-63 — Split `/api/render` into its own Vercel project
+
+> **⚠ GATE — re-check Functions Storage before picking this up.** Filed as the *third* lever on the 2026-09-06
+> deployment-storage problem, behind the ≤14-day retention cut (done) and **WP-62** (docs-only build skip). Open
+> **Usage → Deployment Storage → Functions Storage** first. If retention + WP-62 already put the project
+> comfortably under the Hobby allowance (projection: 27.2 GB → ~9 GB → ~3.3 GB), the **storage argument for this WP
+> is spent** — what remains is the security win below, which is real but must be weighed on its own merits rather
+> than smuggled in as a storage fix. Do **not** pick this up on the projections alone.
+
+**Storage rationale (measured 2026-09-06):** `api/render` is **~67 MB of the ~166 MB** each deployment banks
+(~40%), almost entirely `@sparticuz/chromium` — and it barely compresses, since `chromium.br` is already Brotli
+(66.4 MB on disk → 67.44 MB deployed). Meanwhile the render code is nearly static: **6 of the last 113 commits
+(5.3%)** touched `src/server/render/**`, `src/app/api/render/**`, or the chromium/puppeteer deps. Splitting stores
+Chromium once per *render* deploy instead of once per *app* deploy; the app project drops ~166 → ~99 MB per
+deployment.
+
+**Security rationale (independent of storage):** Vercel environment variables are **project-wide**, so today
+`/api/render` — the one route that drives a headless browser against arbitrary remote pages, and by a distance our
+highest-risk surface — executes in an environment holding `DATABASE_URL`, `AUTH_SECRET`, `AUTH_PASSWORD_HASH` and
+the VAPID keys. A separate project needs **none** of them. That blast-radius reduction is the durable argument.
+
+**The seam already exists** — config plus a minimal deployable, not a refactor:
+- `renderPort()` (`src/server/services/index.ts`) reads `RENDER_URL` and returns an HTTP `FetchImpl`, or
+  `undefined` when unset (renderer simply disabled).
+- `.env.example` already documents `RENDER_URL` as an **external** host (`https://renderer.example/render`).
+- `RENDER_SECRET` bearer auth is already enforced and **fails closed** (503 when unset) in the route.
+- The SSRF guard (`assertPublicUrl`) lives in the route and travels with it.
+- `scripts/cleanup-series.ts` (`backfill --render`, `probe-api`) already talks to `RENDER_URL` — no change needed.
+- WP-SIMPLIFY A2 already extracted `renderPage` out of the route handler.
+
+**Steps**
+- [ ] Create a minimal deployable exposing `POST /render` = `assertPublicUrl` → `renderPage`, carrying the
+      `serverExternalPackages` + `outputFileTracingIncludes` for `@sparticuz/chromium/bin/**` from
+      [next.config.ts](next.config.ts) and the route's `maxDuration = 120` (**as a route segment export** — see the
+      duration note below; do **not** try to express it in `vercel.json`).
+- [ ] Deploy as a second Vercel project; set `RENDER_SECRET` there to the app's existing value.
+- [ ] Repoint the app's `RENDER_URL` (Production + Preview). Keep it a **Secret** env var — the repo is public, so
+      the endpoint must never be committed.
+- [ ] Set a retention policy on the new project to match the app's.
+- [ ] Verify a render-backed poll still fills chapters, and `db:cleanup probe-api` still works against the new URL.
+- [ ] Confirm `vercel inspect` on the app project no longer lists an `api/render` lambda.
+
+**Gotchas**
+- **Do not enable Vercel Deployment Protection** on the render project — the app's calls would receive an auth
+  interstitial instead of JSON. `RENDER_SECRET` is the gate.
+- Preview deployments of the render project without `RENDER_SECRET` return 503 — fail-closed, as designed.
+- `RENDER_SECRET` now lives in two projects and must stay in sync on rotation.
+
+**⚠ Duration & memory — where the render config actually lives (measured 2026-09-07).** `vercel.json`'s `functions`
+block was **inert**: it asked for `maxDuration: 60` / `memory: 1024` on `src/app/api/render/route.ts`, but the live
+lambda deployed at **timeout 120s / memorySize 2048MB**. The 120 is decisive — it is neither the `vercel.json`
+value (60) nor the platform default (300), so it can only have come from the route segment export at
+[route.ts:18](src/app/api/render/route.ts). Memory is the independent second proof: nothing in `src/` exports a
+memory setting, so 2048 is Fluid Compute's **Standard** default (1 vCPU / 2 GB) and the requested 1024 never
+applied. The `functions` key `"src/app/api/render/route.ts"` simply matches nothing — Next compiles route segment
+config into its build output and Vercel honours *that*. Consequences for this WP:
+> - The new project must set duration via `export const maxDuration` in the route, **not** `vercel.json`.
+> - **1024 MB is not achievable** anyway: Fluid Compute offers Standard (2 GB) and Performance (4 GB), and the old
+>   Basic instance was removed — so don't reinstate the intent, it no longer exists as an option.
+> - WP-54's 120s fix **is** live in production; nothing was broken by this.
+> - The inert block was deleted from `vercel.json` on 2026-09-07 (a behaviour-neutral cleanup — both keys were
+>   already being ignored). **Watch for one second-order effect:** Vercel groups routes into shared lambdas by
+>   resolved config, and `api/render` currently gets its own bundle. That separation is driven by its
+>   `maxDuration = 120` differing from the default, not by the deleted block — but confirm on the next preview that
+>   render still has its own function name, or Chromium could land in the shared API bundle and make storage worse.
+
+**Trade-off to accept:** the `{ status, finalUrl, html }` response contract stops being deployed atomically with its
+caller, so the two projects can drift. A modest but permanent tax on a single-user project.
+
+**Definition of Done:** the app project deploys with no Chromium lambda, the renderer still serves the poll and
+`probe-api`, and no database or auth secret is present in the render project's environment.
+
+---
 
 ## Backlog / open questions
 

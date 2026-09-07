@@ -2,6 +2,50 @@
 
 Append-only history, moved out of [PLAN.md](../PLAN.md). Newest first.
 
+- **2026-09-07** — **WP-62 implemented (`vercel.json` `ignoreCommand`); `vercel.json`'s inert `functions` block
+  deleted.** Docs-only commits no longer deploy:
+  `"ignoreCommand": "git diff --quiet HEAD^ HEAD -- . ':(exclude,glob)*.md' ':(exclude)docs/'"` (Vercel: exit 0
+  ignores the build, exit 1 continues). The `,glob` magic is load-bearing — git pathspecs let `*` cross `/`, so a
+  plain `*.md` would also exclude the **served** `public/themes/CREDITS.md`. Verified by extracting the stored
+  string back out of the JSON and running it through a shell in a worktree at each of 8 commits (3 docs-only →
+  skip, 3 code → build, plus this branch's own two). Chose `vercel.json` over the dashboard Ignored Build Step,
+  reversing the preference recorded at filing: `ignoreCommand` overrides the dashboard setting, the CLI can't write
+  the dashboard setting at all, the file is version-controlled, and it travels with the branch so the logic is
+  testable on a preview. **Separately — `vercel.json`'s `functions` block was proven inert and removed.** It asked
+  for `maxDuration: 60` / `memory: 1024` on `src/app/api/render/route.ts`; the live lambda runs at **120s / 2048MB**.
+  The 120 can only come from the route segment export (it's neither 60 nor the 300 default), and 2048 is Fluid
+  Compute's Standard default since nothing exports a memory setting — two independent proofs that the key matched
+  nothing. **WP-54's 120s render fix is live**; 1024 MB isn't even offered any more (Fluid: Standard 2 GB /
+  Performance 4 GB, Basic removed). Recorded on **WP-63**. Also confirmed, closing an open question from the
+  storage diagnosis: Vercel **groups** routes into shared lambdas — 53 output paths map to just **5** AWS functions
+  (28 pages / 20 API / cron / render / middleware), and their bundles sum to ~162 MB against the ~166 MB per
+  deployment implied by 27.2 GB ÷ 164. **WP-64**'s wording corrected accordingly (the Prisma saving lands on the 3
+  grouped bundles that carry the runtime, not on 52 separate lambdas).
+
+- **2026-09-06** — **Filed WP-62 + WP-63 after diagnosing the Hobby Functions Storage exhaustion.** The free-tier
+  **Functions Storage** allowance was used up at **27.2 GB**, against only **230 MB** of Deployment Storage —
+  function bundles are **99.2%** of the total. Vercel meters *retained* deployments and the project held **164**;
+  `vercel inspect` shows 52 lambdas summing **1,713 MB** per deployment, which the platform dedupes to ~166 MB of
+  unique content. Two dominant drivers: **Chromium** (`@sparticuz/chromium`, ~67 MB — 40% of each deployment, and
+  barely compressible since `chromium.br` is already Brotli), and the **Prisma client runtime** (~78 MB traced into
+  every DB-touching route, of which **42.7 MB is query engines for cockroachdb / mysql / sqlserver / sqlite** that a
+  Postgres-only app never loads — Next's file tracer can't prune them because Prisma selects the flavor by computed
+  require, and the tracing shows it lands in the *shared* server chunk, so even DB-free routes weigh ~31 MB).
+  **Deployment retention was cut to ≤14 days**, making 110 of the 164 eligible (projected ~9 GB) — but Vercel keeps
+  ~40 deployments regardless (last-10-created / last-20-production / last-20-non-production), so retention has a
+  hard floor and **bundle size is the binding constraint**. Filed **WP-62** (docs-only Ignored Build Step — 64% of
+  `main` commits are markdown-only; pathspec verified against six real commits and scoped so the served
+  `public/themes/CREDITS.md` still builds) as `NEXT`, displacing WP-28e to second. Filed **WP-63** (split
+  `/api/render` into its own project — 40% of each deployment, plus an independent security win: the
+  browser-driving route today shares a project environment with `DATABASE_URL` / `AUTH_SECRET` / VAPID keys) as
+  low-priority and **explicitly gated on re-checking Functions Storage first**, since retention + WP-62 may already
+  clear the limit. Filed **WP-64** (`outputFileTracingExcludes` for the four unused Prisma engines) separately
+  rather than folding it into WP-62: WP-62 is a dashboard setting with no code and no runtime risk, whereas WP-64
+  edits `next.config.ts` and can break production **at runtime while the build still succeeds** — different risk,
+  verification and rollback. Measured against the real trace: **32 files / 42.66 MB** droppable with all four
+  `postgresql` variants kept, so no `.js`/`.mjs` guesswork. Also installed the Vercel CLI (the diagnosis used `vercel ls` /
+  `inspect` / `env ls`) and narrowed the `.gitignore` entry `vercel link` added. **No deployment was made.**
+
 - **2026-09-02** — **WP-54 shipped: API-source auto-probe + the human guide for the API switchover.** Three
   deliverables on one branch, plus the blocking `urlTemplate` prerequisite. (1) **`ApiDescriptor.urlTemplate`** —
   builds a reader URL from a bare slug/id when the API carries no full permalink: `{fieldPath}` placeholders resolve
