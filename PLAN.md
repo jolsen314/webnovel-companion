@@ -243,9 +243,10 @@ still lists `public/themes/CREDITS.md`, and lists no root `.md`.
 - [x] Push the branch → the tip touched `vercel.json`, so it **built**, as predicted *(preview `94p92xfdo`,
       2026-09-07)*. Inspected it to confirm the `functions`-block deletion was behaviour-neutral: `api/render`
       still `timeout=120s`, still its own lambda group, grouping shape unchanged at 28/1/20/2/2.
-- [ ] Push a **docs-only** commit → confirm the dashboard marks it skipped and no new bundles are stored.
-      *(In progress: this very checkbox update is the test — PLAN.md only.)*
-- [ ] Push a **code** commit → confirm it builds and deploys normally.
+- [x] Push a **docs-only** commit → **skipped, and stored nothing** *(commit `b603e14`, PLAN.md only, 2026-09-07)*.
+      Vercel reports a skipped build as **`CANCELED`**; `vercel inspect` on it shows **0 output items, 0 lambdas,
+      0.00 MB** — against 53 outputs / 1,713 MB for a built deployment. That zero is the whole WP in one number.
+- [x] Push a **code** commit → builds normally *(`1db8965` and `4e4e52b`, both `READY`)*.
 - [ ] After a week, re-check **Usage → Deployment Storage → Functions Storage**; the *daily increment* should fall
       by roughly two-thirds. (The metric is a running GB-month sum — watch the slope, not the total.)
 
