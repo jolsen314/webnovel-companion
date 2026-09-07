@@ -200,14 +200,22 @@ markdown or `docs/`** — our own PLAN/changelog discipline — and every one tr
 
 **Goal:** stop building and banking a deployment for commits that cannot change the built output.
 
-**Implementation** — project → Settings → Git → **Ignored Build Step**:
+**Implementation** — `ignoreCommand` in [vercel.json](vercel.json):
 
-```bash
-git diff --quiet HEAD^ HEAD -- . ':(exclude,glob)*.md' ':(exclude)docs/'
+```json
+"ignoreCommand": "git diff --quiet HEAD^ HEAD -- . ':(exclude,glob)*.md' ':(exclude)docs/'"
 ```
 
-Exit **0 → skip the build**, exit **1 → build**. (`git diff --quiet` exits 0 when there is no difference — i.e.
-when *only* excluded paths changed.)
+Exit **0 → build ignored**, exit **1 → build continues** (Vercel's documented semantics; `git diff --quiet` exits 0
+when there is no difference — i.e. when *only* excluded paths changed).
+
+> **Decision changed at pickup (2026-09-07).** This WP was filed preferring the dashboard **Ignored Build Step**
+> "so the config isn't itself a deployable file change" — weak reasoning, reversed after checking the docs:
+> (1) `ignoreCommand` in `vercel.json` **overrides** the dashboard setting, so they can't conflict;
+> (2) the Vercel CLI **cannot** write the dashboard setting (`vercel project` has no such subcommand; `vercel pull`
+> only reads), making that route a manual, repo-invisible click; (3) `vercel.json` is version-controlled and
+> reviewable — worth more in a public repo than avoiding one extra build; and (4) decisively, it **travels with the
+> branch**, so the ignore logic is testable on a feature branch before it affects project-wide settings.
 
 **Why this exact pathspec:** `public/themes/CREDITS.md` is a **served static asset** (WP-28h), so a blanket `*.md`
 exclude would wrongly skip deploys that change it — git pathspecs let `*` cross `/` by default. The `,glob` magic
@@ -227,8 +235,13 @@ still lists `public/themes/CREDITS.md`, and lists no root `.md`.
 | `deb10ce` WP-57: parseToc cards | code | 1 | build ✅ |
 
 **Steps**
-- [ ] Set the Ignored Build Step in project settings (prefer the setting over `vercel.json`'s `ignoreCommand`, so
-      the config isn't itself a deployable file change).
+- [x] Add `ignoreCommand` to `vercel.json` *(2026-09-07)*.
+- [x] Verify the **stored** string end-to-end — extract it from the JSON and run it through a shell in a git
+      worktree checked out at each commit, exactly as Vercel does. This catches quoting that doesn't survive the
+      JSON→shell round trip, which the bare-command check could not. **8/8 as expected**, including this branch's
+      own two commits: `844d399` (PLAN + docs only) → SKIP, `79ef650` (also touched `.gitignore`) → BUILD.
+- [ ] Push the branch → confirm the **preview** deployment behaves (this branch's tip is docs+config, so it
+      **builds**; the `vercel.json` change itself is not excluded).
 - [ ] Push a **docs-only** commit → confirm the dashboard marks it skipped and no new bundles are stored.
 - [ ] Push a **code** commit → confirm it builds and deploys normally.
 - [ ] After a week, re-check **Usage → Deployment Storage → Functions Storage**; the *daily increment* should fall
