@@ -8,10 +8,14 @@ Append-only history, moved out of [PLAN.md](../PLAN.md). Newest first.
   ("Canceled by Ignored Build Step"), so it never blocks a merge. WP-62's detail moved to
   [docs/PLAN-archive.md](PLAN-archive.md); only its ✅ Completed one-liner remains in PLAN.md. **Open follow-ups:**
   **WP-64** (Prisma engine excludes) and **WP-63** (render split, gated on re-checking Functions Storage) stay filed
-  low. Deployment retention is at **1 day** — worth raising back to ~14–30 days once the reap lands, because the
-  ~42-deployment exception floor (last-10-created / last-20-production-Ready / last-20-non-production-Ready) makes
-  1-day and 14-day retention produce the *same* stored total at the post-WP-62 deploy rate, while the longer window
-  preserves rollback depth at no cost. **Still unresolved:** whether deployments inside the 30-day recovery window
+  low. **Retention (corrected same day — an earlier line here wrongly said "1 day" across the board): Canceled 1d ·
+  Preview 7d · Production 14d**, which is already the right shape. Measured rates are 2.74 production and 3.39
+  preview deploys/day; post-WP-62 those fall ~64%, so retention alone would keep only ~23 and the **~42-deployment
+  exception floor** (last-10-created / last-20-production-Ready / last-20-non-production-Ready) becomes the binding
+  constraint — landing ~42 × ~166 MB ≈ **7 GB** regardless of the periods. Consequence worth knowing: Production
+  has free headroom to **~30 days at zero storage cost**, since the floor still dominates there; only beyond ~30d
+  does lengthening start to cost. And Canceled-at-1d saves **no** storage — a skipped build stores 0 bytes, proven
+  above — though it's good hygiene now that ~64% of commits produce a canceled entry. **Still unresolved:** whether deployments inside the 30-day recovery window
   keep counting toward Functions Storage — undocumented either way, and it decides whether relief shows up in days
   or in a month. Watch the deployment count in `vercel ls` (168 → ~42 expected), not the GB-month running sum.
 

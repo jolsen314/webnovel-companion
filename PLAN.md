@@ -51,9 +51,13 @@ uncommitted notes." Real names/URLs live only in those local notes and in scratc
 > 64% of `main` commits are markdown-only and each was banking a ~166 MB function bundle. Two further
 > **deployment-storage** levers stay filed low: **WP-64** (drop the four unused Prisma query engines from the
 > trace — 42.66 MB off the grouped bundles; promote it if storage is still tight) and **WP-63** (render split),
-> the latter **gated on re-checking Functions Storage first**. Retention is currently at **1 day** — worth raising
-> back to ~14–30 days once the reap visibly lands, since the ~42-deployment exception floor makes the two settings
-> equivalent at the post-WP-62 deploy rate, and the longer window preserves rollback history for free.
+> the latter **gated on re-checking Functions Storage first**. **Retention (2026-09-07): Canceled 1d · Preview 7d ·
+> Production 14d** — these are already right, no change wanted. Post-WP-62 the **~42-deployment exception floor**
+> (last-10-created / last-20-production-Ready / last-20-non-production-Ready) becomes the binding constraint —
+> retention alone would keep only ~23 — so storage lands at ~42 × ~166 MB ≈ **7 GB** whatever the periods say.
+> That leaves free headroom: Production could go to **~30 days at zero storage cost** (the floor still dominates);
+> only past ~30d does a longer window start costing. Canceled at 1d saves **no** storage — a skipped build stores
+> 0 bytes — but it's worth keeping as hygiene, since WP-62 now produces a canceled entry for ~64% of commits.
 >
 > **NEXT: WP-28e — Shelf delete affordance.** Replace the always-visible per-card delete trash on touch with two
 > better-hidden affordances (**both** wanted): an iOS-Mail-style **swipe-left-to-reveal-Delete** gesture, and an
