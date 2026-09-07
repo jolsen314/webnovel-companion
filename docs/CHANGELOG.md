@@ -2,6 +2,19 @@
 
 Append-only history, moved out of [PLAN.md](../PLAN.md). Newest first.
 
+- **2026-09-07** — **WP-62 shipped ([#39](https://github.com/jolsen314/webnovel-companion/pull/39)); detail archived;
+  NEXT back to WP-28e.** Docs-only commits no longer deploy. Confirmed on `main`'s own history: the skipped build
+  reports as `CANCELED` with **0 output items / 0 lambdas / 0.00 MB**, and GitHub shows that check as **pass**
+  ("Canceled by Ignored Build Step"), so it never blocks a merge. WP-62's detail moved to
+  [docs/PLAN-archive.md](PLAN-archive.md); only its ✅ Completed one-liner remains in PLAN.md. **Open follow-ups:**
+  **WP-64** (Prisma engine excludes) and **WP-63** (render split, gated on re-checking Functions Storage) stay filed
+  low. Deployment retention is at **1 day** — worth raising back to ~14–30 days once the reap lands, because the
+  ~42-deployment exception floor (last-10-created / last-20-production-Ready / last-20-non-production-Ready) makes
+  1-day and 14-day retention produce the *same* stored total at the post-WP-62 deploy rate, while the longer window
+  preserves rollback depth at no cost. **Still unresolved:** whether deployments inside the 30-day recovery window
+  keep counting toward Functions Storage — undocumented either way, and it decides whether relief shows up in days
+  or in a month. Watch the deployment count in `vercel ls` (168 → ~42 expected), not the GB-month running sum.
+
 - **2026-09-07** — **WP-62 implemented (`vercel.json` `ignoreCommand`); `vercel.json`'s inert `functions` block
   deleted.** Docs-only commits no longer deploy:
   `"ignoreCommand": "git diff --quiet HEAD^ HEAD -- . ':(exclude,glob)*.md' ':(exclude)docs/'"` (Vercel: exit 0

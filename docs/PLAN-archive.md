@@ -7,6 +7,90 @@ index lives in PLAN.md's ✅ Completed table.
 
 ---
 
+### WP-62 — Skip docs-only deployments (Vercel Ignored Build Step) (DONE 2026-09-07)
+
+**DONE (2026-09-07, [#39](https://github.com/jolsen314/webnovel-companion/pull/39)).** Shipped as one line of
+`vercel.json`, after the Hobby **Functions Storage** allowance was exhausted at 27.2 GB (99.2% of deployment
+storage; 164 retained deployments × ~166 MB). Verified live: a docs-only commit deploys as `CANCELED` and stores
+**0 output items / 0 lambdas / 0.00 MB** (`"output": []`), against 53 outputs / 1,713 MB for a built one — and
+GitHub reports that check as **pass** ("Canceled by Ignored Build Step"), so it never blocks a merge. The same
+branch also deleted `vercel.json`'s **inert** `functions` block (see WP-63 for the duration finding) and filed
+WP-63 + WP-64. Detail as filed, with the pickup-time decisions, below.
+
+
+**Why (measured 2026-09-06):** the Hobby **Functions Storage** allowance was exhausted at **27.2 GB**, against just
+**230 MB** of Deployment Storage — function bundles are **99.2%** of the total. Vercel meters *retained*
+deployments, and the project held **164** of them. Each banks ~166 MB: `vercel inspect` lists 52 lambdas summing
+1,713 MB, which the platform dedupes to ~166 MB of unique content per deployment.
+
+The cheapest lever is deploy **volume**: **72 of the last 113 commits on `main` (64%) touched only root-level
+markdown or `docs/`** — our own PLAN/changelog discipline — and every one triggered a full production build.
+
+**Goal:** stop building and banking a deployment for commits that cannot change the built output.
+
+**Implementation** — `ignoreCommand` in [vercel.json](vercel.json):
+
+```json
+"ignoreCommand": "git diff --quiet HEAD^ HEAD -- . ':(exclude,glob)*.md' ':(exclude)docs/'"
+```
+
+Exit **0 → build ignored**, exit **1 → build continues** (Vercel's documented semantics; `git diff --quiet` exits 0
+when there is no difference — i.e. when *only* excluded paths changed).
+
+> **Decision changed at pickup (2026-09-07).** This WP was filed preferring the dashboard **Ignored Build Step**
+> "so the config isn't itself a deployable file change" — weak reasoning, reversed after checking the docs:
+> (1) `ignoreCommand` in `vercel.json` **overrides** the dashboard setting, so they can't conflict;
+> (2) the Vercel CLI **cannot** write the dashboard setting (`vercel project` has no such subcommand; `vercel pull`
+> only reads), making that route a manual, repo-invisible click; (3) `vercel.json` is version-controlled and
+> reviewable — worth more in a public repo than avoiding one extra build; and (4) decisively, it **travels with the
+> branch**, so the ignore logic is testable on a feature branch before it affects project-wide settings.
+
+**Why this exact pathspec:** `public/themes/CREDITS.md` is a **served static asset** (WP-28h), so a blanket `*.md`
+exclude would wrongly skip deploys that change it — git pathspecs let `*` cross `/` by default. The `,glob` magic
+stops `*` at `/`, so `:(exclude,glob)*.md` excludes only **root-level** `.md` (CLAUDE / PLAN / README / CONTEXT /
+SIMPLIFICATION-PLAN) and leaves everything under `public/` in scope. Verified: `git ls-files` with this pathspec
+still lists `public/themes/CREDITS.md`, and lists no root `.md`.
+
+**Verified against real commits (2026-09-06), before filing:**
+
+| Commit | Kind | exit | Result |
+|---|---|---|---|
+| `ed03716` docs(plan): WP-31 ↔ WP-61 | docs-only | 0 | skip ✅ |
+| `5c19e17` docs: clarify PLAIN vs RENDER | docs-only | 0 | skip ✅ |
+| `6e7c752` docs: split PLAN.md changelog | docs-only | 0 | skip ✅ |
+| `c5450c2` WP-54: CF-challenge heuristic | code | 1 | build ✅ |
+| `b400148` WP-54: bound browser ops | code | 1 | build ✅ |
+| `deb10ce` WP-57: parseToc cards | code | 1 | build ✅ |
+
+**Steps**
+- [x] Add `ignoreCommand` to `vercel.json` *(2026-09-07)*.
+- [x] Verify the **stored** string end-to-end — extract it from the JSON and run it through a shell in a git
+      worktree checked out at each commit, exactly as Vercel does. This catches quoting that doesn't survive the
+      JSON→shell round trip, which the bare-command check could not. **8/8 as expected**, including this branch's
+      own two commits: `844d399` (PLAN + docs only) → SKIP, `79ef650` (also touched `.gitignore`) → BUILD.
+- [x] Push the branch → the tip touched `vercel.json`, so it **built**, as predicted *(preview `94p92xfdo`,
+      2026-09-07)*. Inspected it to confirm the `functions`-block deletion was behaviour-neutral: `api/render`
+      still `timeout=120s`, still its own lambda group, grouping shape unchanged at 28/1/20/2/2.
+- [x] Push a **docs-only** commit → **skipped, and stored nothing** *(commit `b603e14`, PLAN.md only, 2026-09-07)*.
+      Vercel reports a skipped build as **`CANCELED`**; `vercel inspect` on it shows **0 output items, 0 lambdas,
+      0.00 MB** — against 53 outputs / 1,713 MB for a built deployment. That zero is the whole WP in one number.
+- [x] Push a **code** commit → builds normally *(`1db8965` and `4e4e52b`, both `READY`)*.
+- [ ] After a week, re-check **Usage → Deployment Storage → Functions Storage**; the *daily increment* should fall
+      by roughly two-thirds. (The metric is a running GB-month sum — watch the slope, not the total.)
+
+**Gotchas**
+- Vercel clones shallowly. If `HEAD^` is ever unavailable the command errors and Vercel **builds** — fail-safe, the
+  right default. `VERCEL_GIT_PREVIOUS_SHA` is the documented fallback if it shows up.
+- A skipped commit leaves production on the previous SHA. Harmless here: the daily cron runs against current
+  production either way, and retention never reaps the deployment holding the production alias.
+- This affects **new** deployments only. Existing storage is released by the retention policy (cut to ≤14 days on
+  2026-09-06), which makes 110 of the 164 eligible — projected landing ~9 GB.
+
+**Definition of Done:** a docs-only push visibly skips, a code push visibly deploys, and the Functions Storage daily
+increment is measurably lower.
+
+---
+
 ### WP-54 — API-source auto-probe + human docs for the API switchover (DONE 2026-09-02)
 
 **DONE (2026-09-02).** Shipped three deliverables + the `urlTemplate` prerequisite on one branch:
