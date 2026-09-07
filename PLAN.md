@@ -755,9 +755,14 @@ Prisma selects the flavor by **computed require**, so Next's file tracer can't p
 whole directory in. This project's datasource is `postgresql` only (`prisma/schema.prisma`).
 
 Critically, the tracing shows this lands in the **shared server chunk** — even DB-free routes such as
-`api/theme-asset/[name]` ship at 31.72 MB on Vercel despite tracing to 2.6 MB locally. So the saving applies to
-**all 52 lambdas**, not just the DB-touching ones (~9% of each deployment's ~166 MB), and it cuts cold-start
-unpacking too.
+`api/theme-asset/[name]` ship at 31.72 MB on Vercel despite tracing to 2.6 MB locally.
+
+**What that means with Vercel's grouping (confirmed 2026-09-07):** the deployment's 53 output paths map to only
+**5 distinct AWS functions** — one bundle for the 28 page paths, one for the 20 API paths, one for cron/poll, one
+for render, one for middleware. So the saving isn't "52 lambdas × 42.66 MB"; it's the compressed delta on the
+**3 grouped bundles that carry the Prisma runtime** (pages, API, cron). That is still the whole point — those three
+are most of each deployment's ~166 MB — and the estimate of ~9% may well prove conservative, since base64-inlined
+WASM compresses well. Measure it, don't assume it. It cuts cold-start unpacking too.
 
 **Measured against the real trace** (`.next/server/app/api/cron/poll/route.js.nft.json`, 74 Prisma files):
 
@@ -849,7 +854,8 @@ the VAPID keys. A separate project needs **none** of them. That blast-radius red
 **Steps**
 - [ ] Create a minimal deployable exposing `POST /render` = `assertPublicUrl` → `renderPage`, carrying the
       `serverExternalPackages` + `outputFileTracingIncludes` for `@sparticuz/chromium/bin/**` from
-      [next.config.ts](next.config.ts) and the route's `maxDuration = 120` / 1024 MB config.
+      [next.config.ts](next.config.ts) and the route's `maxDuration = 120` (**as a route segment export** — see the
+      duration note below; do **not** try to express it in `vercel.json`).
 - [ ] Deploy as a second Vercel project; set `RENDER_SECRET` there to the app's existing value.
 - [ ] Repoint the app's `RENDER_URL` (Production + Preview). Keep it a **Secret** env var — the repo is public, so
       the endpoint must never be committed.
@@ -862,6 +868,24 @@ the VAPID keys. A separate project needs **none** of them. That blast-radius red
   interstitial instead of JSON. `RENDER_SECRET` is the gate.
 - Preview deployments of the render project without `RENDER_SECRET` return 503 — fail-closed, as designed.
 - `RENDER_SECRET` now lives in two projects and must stay in sync on rotation.
+
+**⚠ Duration & memory — where the render config actually lives (measured 2026-09-07).** `vercel.json`'s `functions`
+block was **inert**: it asked for `maxDuration: 60` / `memory: 1024` on `src/app/api/render/route.ts`, but the live
+lambda deployed at **timeout 120s / memorySize 2048MB**. The 120 is decisive — it is neither the `vercel.json`
+value (60) nor the platform default (300), so it can only have come from the route segment export at
+[route.ts:18](src/app/api/render/route.ts). Memory is the independent second proof: nothing in `src/` exports a
+memory setting, so 2048 is Fluid Compute's **Standard** default (1 vCPU / 2 GB) and the requested 1024 never
+applied. The `functions` key `"src/app/api/render/route.ts"` simply matches nothing — Next compiles route segment
+config into its build output and Vercel honours *that*. Consequences for this WP:
+> - The new project must set duration via `export const maxDuration` in the route, **not** `vercel.json`.
+> - **1024 MB is not achievable** anyway: Fluid Compute offers Standard (2 GB) and Performance (4 GB), and the old
+>   Basic instance was removed — so don't reinstate the intent, it no longer exists as an option.
+> - WP-54's 120s fix **is** live in production; nothing was broken by this.
+> - The inert block was deleted from `vercel.json` on 2026-09-07 (a behaviour-neutral cleanup — both keys were
+>   already being ignored). **Watch for one second-order effect:** Vercel groups routes into shared lambdas by
+>   resolved config, and `api/render` currently gets its own bundle. That separation is driven by its
+>   `maxDuration = 120` differing from the default, not by the deleted block — but confirm on the next preview that
+>   render still has its own function name, or Chromium could land in the shared API bundle and make storage worse.
 
 **Trade-off to accept:** the `{ status, finalUrl, html }` response contract stops being deployed atomically with its
 caller, so the two projects can drift. A modest but permanent tax on a single-user project.

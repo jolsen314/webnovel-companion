@@ -2,6 +2,26 @@
 
 Append-only history, moved out of [PLAN.md](../PLAN.md). Newest first.
 
+- **2026-09-07** — **WP-62 implemented (`vercel.json` `ignoreCommand`); `vercel.json`'s inert `functions` block
+  deleted.** Docs-only commits no longer deploy:
+  `"ignoreCommand": "git diff --quiet HEAD^ HEAD -- . ':(exclude,glob)*.md' ':(exclude)docs/'"` (Vercel: exit 0
+  ignores the build, exit 1 continues). The `,glob` magic is load-bearing — git pathspecs let `*` cross `/`, so a
+  plain `*.md` would also exclude the **served** `public/themes/CREDITS.md`. Verified by extracting the stored
+  string back out of the JSON and running it through a shell in a worktree at each of 8 commits (3 docs-only →
+  skip, 3 code → build, plus this branch's own two). Chose `vercel.json` over the dashboard Ignored Build Step,
+  reversing the preference recorded at filing: `ignoreCommand` overrides the dashboard setting, the CLI can't write
+  the dashboard setting at all, the file is version-controlled, and it travels with the branch so the logic is
+  testable on a preview. **Separately — `vercel.json`'s `functions` block was proven inert and removed.** It asked
+  for `maxDuration: 60` / `memory: 1024` on `src/app/api/render/route.ts`; the live lambda runs at **120s / 2048MB**.
+  The 120 can only come from the route segment export (it's neither 60 nor the 300 default), and 2048 is Fluid
+  Compute's Standard default since nothing exports a memory setting — two independent proofs that the key matched
+  nothing. **WP-54's 120s render fix is live**; 1024 MB isn't even offered any more (Fluid: Standard 2 GB /
+  Performance 4 GB, Basic removed). Recorded on **WP-63**. Also confirmed, closing an open question from the
+  storage diagnosis: Vercel **groups** routes into shared lambdas — 53 output paths map to just **5** AWS functions
+  (28 pages / 20 API / cron / render / middleware), and their bundles sum to ~162 MB against the ~166 MB per
+  deployment implied by 27.2 GB ÷ 164. **WP-64**'s wording corrected accordingly (the Prisma saving lands on the 3
+  grouped bundles that carry the runtime, not on 52 separate lambdas).
+
 - **2026-09-06** — **Filed WP-62 + WP-63 after diagnosing the Hobby Functions Storage exhaustion.** The free-tier
   **Functions Storage** allowance was used up at **27.2 GB**, against only **230 MB** of Deployment Storage —
   function bundles are **99.2%** of the total. Vercel meters *retained* deployments and the project held **164**;
